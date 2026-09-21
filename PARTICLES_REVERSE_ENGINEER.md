@@ -136,16 +136,52 @@ microcode as it was uploaded, so its cache holds the values the XMB used.
 | `_LightPack` column 1 | (4.16, 2.63, -7.6, 35.2904) | `spot pos x/y/z`, `specular power` |
 | `_LightPack` column 2 | (1, 0, 0, 0) | `spot attn x/y/z` |
 | `_LightPack` column 3 | (8, 74.74, 0.0390458, 1) | `lambert coeff`, `specular coeff`, `exposure`, then 1 |
-| `_LightPack` column 0 | (0, 0, 2, 1) | unknown |
+| `_LightPack` column 0 | (0, 0, 2, 1) | the eye position (inferred, see below) |
 | `_NearControl` | (13.19, 3.79, 0.722, 0) | `size align`, `near fuzziness`, `near align` |
 | `_Glare` | (0.201367, 5.44386, 0.99, 4.44) | `glare`, `glare scale`, `glare p1`, `glare p2` |
 | `_IridescentExp` | 1 | `iridescent exp` |
 | `_Color` | (1, 1, 1) | |
 | `_Gamma` | 1 | |
 
-Vertex uniforms live in constant registers and are not in the cache. Their mapping (for
-example `_ParticleSize` to `size near/middle/far`, `_Focus` to the focus parameters) is
-still inferred and needs the decompiled vertex shader or an RSX capture.
+Vertex uniforms live in constant registers and are not in the cache. Their values need an
+RSX capture; their meaning comes from the decompiled vertex shader, below.
+
+### Decompiled shaders
+
+**Verified.** With `Log shader programs` enabled, RPCS3 decompiles every cached program
+to GLSL when the XMB boots, into `shaderlog/`. They are identified by their inputs:
+
+| Program | Log file (ids can change between runs) | How it was identified |
+|---|---|---|
+| `particles_quads.vpo` | `VertexProgram34` | Only two programs read attribute 11 (`IN.rot`); this is the shorter |
+| `particles_second.vpo` | `VertexProgram38` | The other one |
+| `particles_quads.fpo` | `FragmentProgram53` | Reads exactly TEXCOORD 0, 2, 3, 4, 5, 7 |
+| `particles_second.fpo` | `FragmentProgram55` | Same without TEXCOORD2, matching its attribute mask |
+
+RPCS3 renumbers the vertex constants a program uses into a compact list,
+`_fetch_constant(0..23)`. **Verified** from how each index is used (factor 2 in the
+quaternion-to-matrix conversion is `c[456].x`, `w = 1` is `c[458].x`, and each uniform
+only touches the components its type has):
+
+| Compact | Register | Uniform |
+|---|---|---|
+| 0–3 | c[256–259] | `_ModelviewProjection` |
+| 4–7 | c[260–263] | `_Modelview` |
+| 8–10 | c[264–266] | `_LightPack[0–2]` (row 3 is unused here) |
+| 11–14 | c[455–458] | compiler constants |
+| 15–23 | c[459–467] | `_Darkness`, `_LifeBoundsMax`, `_LifeBoundsMin`, `_NearControl`, `_FrontFacingQuaternion`, `_FocusCurves`, `_Focus`, `_Transparency`, `_ParticleSize` |
+
+First readings of `particles_quads.vpo`:
+
+- **Orientation:** `IN.rot` is normalised and expanded with the usual quaternion-to-matrix
+  factor of 2, so every particle carries its own rotation.
+- **Eye position, inferred:** the vertex shader subtracts `_LightPack` column 0 (0, 0, 2)
+  from the particle position and normalises the result as a view vector, so that column
+  is the eye.
+- **Life bounds:** `_LifeBoundsMin/Max` form a box, and a particle's opacity is
+  `saturate(5 × distance to the nearest wall)`, so particles fade out near its walls.
+- **Size by depth:** `_ParticleSize` is interpolated piecewise between its three
+  components, which match `size near`, `size middle` and `size far` (inferred).
 
 ## Corrections to `SPLINE_REVERSE_ENGINEER.md`
 
@@ -161,6 +197,7 @@ Found while validating the disassembler against `spline.elf`:
 
 - The simulation itself: emission, aging, integration, and the output vertex layout.
 - How `.mnu` values reach the task (the parameter block the PPU sends it).
-- The vertex shader's uniform values, and the unknown `_LightPack` column.
+- The vertex shader's uniform values, which need an RSX capture.
+- A full reading of the four decompiled shaders.
 - Where Sixaxis, D-pad and icon input are processed: in the task, or in `qglbase.sprx`.
 - The function that generates `proc_iridescent`, so it can be rebuilt in code.
