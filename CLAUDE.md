@@ -67,6 +67,10 @@ Consequences when adding a knob:
 
 `particles.js` rebuilds its seed buffer whenever `settings.count` changes; its motion is entirely procedural from three per-particle random seeds, with no CPU-side simulation state.
 
+### `tools/re/` — reverse-engineering tooling
+
+Standard-library Python tools that read the user's own PS3 firmware (for example an RPCS3 install): a `.qrc` extractor, an SPU disassembler, a matcher that uses RPCS3's SPU cache to show which code actually ran, and a Cg binary (`.vpo`/`.fpo`) inspector that recovers uniform values from RPCS3's shader cache. `tools/re/README.md` has the workflow. They write into `re-work/`, which is gitignored — **firmware files (ELFs, `.qrc` contents, textures, decompiled shaders) must never be committed**. `PARTICLES_REVERSE_ENGINEER.md` is the particle system's counterpart of the spline notes, in progress on the `particles-reeng` branch.
+
 ### `dds/` — gradient extraction tool
 
 Standalone browser tool (ES modules) used to produce the month presets. `dds-reader.js` parses DDS (DXT1/3/5 and masked uncompressed formats) in pure JS; `gradient-fit.js` brute-forces the gradient angle and runs per-channel linear regression to fit a 2D linear gradient, reporting RMSE; `export-code.js` emits JS preset source. The exported record shape (`width`/`height`/`rmse` included) does not match what `background-gradients-*.js` actually stores (`angleDeg`, `colorStart`, `colorEnd`), so exported output is trimmed by hand when pasted in. The `.dds` source files are firmware assets and are not in the repo.

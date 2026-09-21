@@ -67,4 +67,11 @@ logs
 
 # Temporary files
 tmp/
-temp/ 
+temp/
+
+# Python bytecode from tools/re/
+__pycache__/
+
+# Reverse-engineering workspace: firmware files and dumps extracted by tools/re/.
+# Firmware assets must never be committed.
+re-work/
