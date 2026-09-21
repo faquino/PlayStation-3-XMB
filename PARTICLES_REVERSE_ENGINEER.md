@@ -256,6 +256,85 @@ data, in one of two ways:
 
 The task's parameter block will tell which.
 
+## The update task
+
+**Verified** from the disassembly of `particles.elf` (`tools/re/spu_disasm.py`). The
+parameter offsets are verified; which `.mnu` value fills each one is inferred.
+
+### What it does and does not do
+
+`particles.elf` only updates live particles. It integrates their motion, ages them, spins
+them, kills them, and writes the vertex records the shaders read. **It never creates a
+particle.** Several things point that way:
+
+- its only random number generator feeds a per-frame noise force;
+- no code writes a new particle into a free slot;
+- `main` hands the batch machinery a single callback, the update at `0x6ed0`.
+
+Emission, the flow grid and the input-driven rotation are prepared by whoever fills its
+parameter block. That is most likely the PPU, `qgl_gaia_app.prx`.
+
+### Main loop (`main` at `0x80e8`)
+
+For each 56-byte record in a list handed over by the PPU (one per particle system):
+
+- GET 2304 bytes from the address at `+32` into `0xb200`: the parameter block, **P** below;
+- GET 16 bytes from `+20` into `0xb000`, and PUT them back at the end: persistent state;
+- process the pool in chunks of 512 particles (24576 bytes), 64 particles per update call;
+- PUT 128 bytes from `0xb100` to `+28`, and 1024 bytes to `+44`;
+- PUTF a 4-byte completion flag to `+36`.
+
+A pool record is 48 bytes: position xyz plus life in w (0 to 1), velocity xyz plus aging
+rate in w, and a rotation quaternion. **A free slot has position.w = -666.**
+
+### Per live particle (`0x6ed0`)
+
+1. **Flow grid.**
+   - `g = M1 · (pos, 1)`, with M1 at P+1856.
+   - Sample the grid of vectors at P+128 bilinearly at g (`FUN_000068e0`, `FUN_00003cb0`).
+   - Bring the result back to world space: `flow = M2 · (sample, 0)`, with M2 at P+1792.
+2. **Noise:** `n = r · P[2212] + P[2192]`, where r is a random vector.
+   - Its three components come from three generators, one per axis:
+     `s = s · 16807 mod 2³²`, value `asfloat(0x40000000 | s >> 9) − 3`, uniform in [−1, 1).
+   - The seeds are reset every frame to 0x98756161, 0x21324889 and 0x82181158
+     (`FUN_00004978`). So the k-th live particle processed gets the same vector every
+     frame: a near-constant drift per particle rather than Brownian motion. It only
+     changes when particles ahead of it in the pool die or are born.
+3. **Force:** `F = P[0].xyz + n + flow · P[2208]`.
+4. **Field rotation.**
+   - `vel += (c + R · (pos − c) − pos) / dt`.
+   - c is the point at P+2096.
+   - R is the matrix at P+2112, rebuilt every frame from the quaternion at P+2176
+     (`FUN_000048b8`).
+5. **Integration:** `vel += (F − P[16] ⊙ vel) · dt`, then `pos += vel · dt`, with
+   `dt = P[2224]`. These are vec4 operations, so life (pos.w) advances by the aging rate
+   (vel.w).
+6. **Spin.**
+   - `ω = (sin(2π·0.37·life), cos(2π·0.17·life), cos(2π·0.31·life))`.
+   - Then `q += ½ (ω ⊗ q) · P[2220]/60`, and q is renormalised.
+   - Sine and cosine are the SPU SIMD math library's `sinf`/`cosf`. The two differ only by
+     the cosine's quadrant offset.
+7. **Death:** life ≥ 0.99999, or the position leaves the box [P+2048, P+2064], which is
+   `_LifeBounds` in the shader. The slot becomes free.
+8. **Output** (32 bytes):
+   - `(pos.xyz, alpha)`, with `alpha = min(life, 0.02) · 50 · (1 − max(life − 0.94, 0) · 16.6667)`;
+   - then q as four halves;
+   - then the unused old position.
+
+Cross-check with the captures: alpha is exactly 1 for life in [0.02, 0.94], 92% of a life,
+and exactly 92% of the captured particles have w = 1.
+
+Likely `.mnu` sources for P (inferred from names and use, to be confirmed on the PPU side):
+
+| P offset | Use | Likely parameter |
+|---|---|---|
+| P[0].xyz | constant force | `gravity` and/or `wind` |
+| P[16] | drag | `friction` |
+| P[2192], P[2212] | noise offset and scale | `wind dir`, `brownian scale` |
+| P[2208] | flow strength | |
+| P[2220] | spin rate | `spin time scale` |
+| P[2224] | time step | `delta time` |
+
 ## Corrections to `SPLINE_REVERSE_ENGINEER.md`
 
 Found while validating the disassembler against `spline.elf`:
@@ -268,8 +347,11 @@ Found while validating the disassembler against `spline.elf`:
 
 ## Still missing
 
-- The simulation itself: emission from the wave, aging, integration.
-- How `.mnu` values and controller input reach the task (its parameter block).
+- Emission: where new particles are written into free slots, with which position,
+  velocity, aging rate and rotation (on the PPU side, most likely).
+- How the parameter block is filled each frame: the flow grid, the field rotation
+  quaternion, and which `.mnu` values go where.
+- How controller input changes that block.
 - `_FocusCurves.z` (0.925025).
 - A full reading of the four decompiled shaders.
 - The function that generates `proc_iridescent`, so it can be rebuilt in code.
