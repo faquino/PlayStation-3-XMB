@@ -10,6 +10,7 @@ repository root, which is gitignored. Extracted firmware assets must never be co
 | `spu_disasm.py` | Disassembles SPU ELF files (the SPURS tasks inside `lines.qrc`), with Ghidra-style `FUN_`/`LAB_` labels, the quadwords that `lqr`/`lqa` read, and the constants built by `ilhu`/`iohl`. |
 | `spu_cache.py` | Matches RPCS3's SPU program cache (`spu-*.dat`) against an ELF: which of its code actually ran, and with `--since`, which code ran for the first time. |
 | `cgbin.py` | Reads compiled RSX Cg programs (`.vpo`/`.fpo`): parameter tables, register assignments, and the uniform values the XMB set at run time, read from RPCS3's shader cache. |
+| `rrc.py` | Reads RPCS3 RSX frame captures (`captures/*.rrc.gz`, Alt+C in the emulator): the draw calls of one frame, the vertex constants at each draw, and each draw's vertex buffers, decoded to CSV. |
 
 ## Typical workflow
 
@@ -30,6 +31,13 @@ python tools/re/cgbin.py re-work/lines/lib/particles/particles_quads.fpo --runti
 ```
 
 `<raw dir>` is `<rpcs3>/cache/vsh/ppu-*-vsh.self/shaders_cache/raw`.
+
+```bash
+# 5. A frame capture: find the particle draw, then read its constants and buffers
+python tools/re/rrc.py draws <capture.rrc.gz> --vpo re-work/lines/lib/particles/particles_quads.vpo
+python tools/re/rrc.py consts <capture.rrc.gz> <draw> 455 13
+python tools/re/rrc.py buffer <capture.rrc.gz> <draw> -o re-work/particles.csv
+```
 
 The cache only grows, which makes it a coverage recorder. To find the code behind a
 behaviour, copy `spu-safe-v1-tane.dat`, trigger the behaviour in RPCS3 (shake the

@@ -143,8 +143,8 @@ microcode as it was uploaded, so its cache holds the values the XMB used.
 | `_Color` | (1, 1, 1) | |
 | `_Gamma` | 1 | |
 
-Vertex uniforms live in constant registers and are not in the cache. Their values need an
-RSX capture; their meaning comes from the decompiled vertex shader, below.
+Vertex uniforms live in constant registers and are not in the cache. Their values come
+from the RSX frame captures below; their meaning from the decompiled vertex shader.
 
 ### Decompiled shaders
 
@@ -183,6 +183,79 @@ First readings of `particles_quads.vpo`:
 - **Size by depth:** `_ParticleSize` is interpolated piecewise between its three
   components, which match `size near`, `size middle` and `size far` (inferred).
 
+## Frame captures
+
+**Verified** from two RPCS3 RSX frame captures (`tools/re/rrc.py`), taken on 21 September
+at 20:18 and 20:19 with the September theme, during and after a controller session. The
+particles are draw 35 (`particles_quads`) and draw 36 (`particles_second`) of each frame.
+
+### Camera
+
+- `_Modelview` is a translation by (0, 0, -2): the eye sits at (0, 0, 2) looking down -z,
+  unrotated. This is the `_LightPack` column that was unexplained.
+- `_ModelviewProjection` rows (1.1282, 0, 0, 0), (0, 2.00569, 0, 0),
+  (0, 0, -1.0002, 1.80038), (0, 0, -1, 2) give a perspective projection with a 53.0°
+  vertical field of view, aspect 16:9, near plane 0.1 and far plane 1000.
+
+### Vertex uniforms at the particle draw
+
+| Uniform | Value | Parameters |
+|---|---|---|
+| `_Darkness` | (6.24028, 13.9) | `near darkness`, `far darkness` |
+| `_LifeBoundsMin` / `_LifeBoundsMax` | (-10, -10, -12) / (10, 10, 7) | none; not in any `.mnu` |
+| `_NearControl` | (13.19, 3.79, 0.722) | `size align`, `near fuzziness`, `near align` |
+| `_FrontFacingQuaternion` | (0, 0, 0, 1) | identity |
+| `_FocusCurves` | (2.47206, 1.83324, 0.925025) | `near focus_pow`, `far focus_pow`, then unknown |
+| `_Focus` | (6.12435, 7.44365, 12.7237, 16.7686) | `near focus`, `near focus` + `near focus_dist`, `far focus`, `far focus` + `far focus_dist` |
+| `_Transparency` | (1.33319, 1) | `fresnel`, `global alpha` |
+| `_ParticleSize` | (0.0482832, 0.0772033, 0.874062) | `size middle`, `size near`, `size far` |
+
+### Themes blend over hours
+
+`size middle` 0.0482832 and `far focus` 12.7237 appear in no `.mnu` file. Both are the
+`higure` (dusk) and `night` sets mixed at the same t ≈ 0.2525, and `far focus_dist` mixed
+the same way reproduces `_Focus.w`. The second capture, 58 s later, gives t ≈ 0.258. At
+that rate, the dusk-to-night blend would take about three hours (inferred).
+
+### The particle buffer
+
+- The SPU writes one 32-byte record per particle into main memory. The RSX reads it with
+  a vertex frequency divider of 4, so each record drives the four corners of a quad
+  (primitive: quads). `uv0` is a separate static buffer of the four corners, repeated
+  modulo 4.
+- Record layout:
+  - `+0x00`: position x, y, z and a fourth value w (4 × f32);
+  - `+0x10`: rotation quaternion (4 × f16), unit length in every record;
+  - `+0x18`: old position (4 × f16), zero in every record.
+- 2028 particles in the first capture, 2041 in the second.
+- In the first capture positions span x [-10, 10], y [-2.7, 4.3], z [-9.6, -2.4]. In
+  both, w is exactly 1 for 92% of the
+  particles and lower for the rest (5th percentile 0.60–0.67). It behaves like an opacity
+  that drops at the end of a life (inferred).
+
+### The wave
+
+- `lines1.vpo` draws the wave from a 16384-vertex buffer in main memory, written by
+  `spline.elf`. Positions are already in clip space: w is the view depth. A second vec4 is
+  probably a normal (inferred), and uv is static.
+- The particles fill the same depth slab as the wave: view z [-11.6, -4.4] against
+  [-10.8, -4.5]. Projected to the screen, they cluster tightly around the wave and thin
+  out with distance from it. So particles are emitted from the wave surface (inferred
+  from the distribution; the emission code is still to be traced).
+
+### Controller input
+
+During the session, a DualSense was pad 0; it was shaken, tilted, and used on the D-pad
+across icons. In that time RPCS3 compiled no new SPU code for `particles.elf` or
+`spline.elf`, and no vertex constant depends on input. So input reaches the particles as
+data, in one of two ways:
+
+- the task receives raw sensor values and handles them in code it always runs (SPU code
+  is largely branch-free);
+- or the PPU (`qglbase.sprx`) turns them into impulses first.
+
+The task's parameter block will tell which.
+
 ## Corrections to `SPLINE_REVERSE_ENGINEER.md`
 
 Found while validating the disassembler against `spline.elf`:
@@ -195,9 +268,8 @@ Found while validating the disassembler against `spline.elf`:
 
 ## Still missing
 
-- The simulation itself: emission, aging, integration, and the output vertex layout.
-- How `.mnu` values reach the task (the parameter block the PPU sends it).
-- The vertex shader's uniform values, which need an RSX capture.
+- The simulation itself: emission from the wave, aging, integration.
+- How `.mnu` values and controller input reach the task (its parameter block).
+- `_FocusCurves.z` (0.925025).
 - A full reading of the four decompiled shaders.
-- Where Sixaxis, D-pad and icon input are processed: in the task, or in `qglbase.sprx`.
 - The function that generates `proc_iridescent`, so it can be rebuilt in code.

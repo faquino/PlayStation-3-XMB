@@ -69,7 +69,7 @@ Consequences when adding a knob:
 
 ### `tools/re/` — reverse-engineering tooling
 
-Standard-library Python tools that read the user's own PS3 firmware (for example an RPCS3 install): a `.qrc` extractor, an SPU disassembler, a matcher that uses RPCS3's SPU cache to show which code actually ran, and a Cg binary (`.vpo`/`.fpo`) inspector that recovers uniform values from RPCS3's shader cache. `tools/re/README.md` has the workflow. They write into `re-work/`, which is gitignored — **firmware files (ELFs, `.qrc` contents, textures, decompiled shaders) must never be committed**. `PARTICLES_REVERSE_ENGINEER.md` is the particle system's counterpart of the spline notes, in progress on the `particles-reeng` branch.
+Standard-library Python tools that read the user's own PS3 firmware (for example an RPCS3 install): a `.qrc` extractor, an SPU disassembler, a matcher that uses RPCS3's SPU cache to show which code actually ran, and a Cg binary (`.vpo`/`.fpo`) inspector that recovers uniform values from RPCS3's shader cache, and a reader for RPCS3 RSX frame captures (vertex constants and vertex buffers per draw call). `tools/re/README.md` has the workflow. They write into `re-work/`, which is gitignored — **firmware files (ELFs, `.qrc` contents, textures, decompiled shaders) must never be committed**. `PARTICLES_REVERSE_ENGINEER.md` is the particle system's counterpart of the spline notes, in progress on the `particles-reeng` branch.
 
 ### `dds/` — gradient extraction tool
 
