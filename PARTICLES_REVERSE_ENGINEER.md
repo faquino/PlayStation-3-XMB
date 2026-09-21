@@ -335,6 +335,40 @@ Likely `.mnu` sources for P (inferred from names and use, to be confirmed on the
 | P[2220] | spin rate | `spin time scale` |
 | P[2224] | time step | `delta time` |
 
+## The PPU side (in progress)
+
+Decrypted with RPCS3 (*Utilities → Decrypt PS3 Binaries*) and read with
+`tools/re/ppu_prx.py`. Imports are named with `tools/re/nids.py`. The NID formula
+(SHA-1 of name + suffix, first four bytes little-endian) is **verified** on the VSH's own
+imports.
+
+| Module | Role |
+|---|---|
+| `vsh.elf` (`vsh.self`) | Creates SPURS instances: imports only `_cellSpursAttributeInitialize`, `cellSpursAttributeSetNamePrefix`, `cellSpursAttributeSetMemoryContainerForSpuThread`, `cellSpursInitializeWithAttribute`, `cellSpursFinalize`. |
+| `qglbase.prx` | The QGL engine: resource banks, the `.mnu` parser, a small script language (`$FRAME_COUNT`, `goto`, `repeat … until`), the debug GUI, RSX setup through the VSH's `sdk` library. |
+| `qgl_gaia_app.prx` | The Earth scene, plus a generic per-scene SPURS task manager: prefix `"SceQgl"` + scene name, tasksets, tasks, event flags (28 named `cellSpurs` imports). |
+| `qgl_canyon_app.prx` | The canyon theme. |
+
+Findings so far:
+
+- **Verified from the SPU side: emission goes through a free-slot list.** The 16-byte
+  state block holds the main-memory address of a list of free slots and its length. The
+  task:
+  - brings the list into local store;
+  - appends every slot it frees during the update;
+  - writes the list and the state back.
+  So the PPU writes new particles straight into slots taken from that list, and never
+  needs the -666 marker. No module contains -666.0f, as a float or as an integer
+  immediate.
+- **The emitter itself has not been located yet.** No module contains particle parameter
+  names, which fits parameters being read by position. The scene code is reached through
+  C++ virtual calls.
+- The lines scene seems split between modules (inferred from the RPCS3 log). Right before
+  the `SceQglLines` SPURS instance is created, `qglbase` allocates memory and the RSX I/O
+  mappings of the wave (`io 0x500000`) and particle (`io 0x600000`) buffers are set up.
+- `qgl_gaia_app` contains a Park–Miller "minimal standard" generator (Schrage's method,
+  seeded with `seed ^ 0xDEADBEEF`). Its callers are not identified yet.
+
 ## Corrections to `SPLINE_REVERSE_ENGINEER.md`
 
 Found while validating the disassembler against `spline.elf`:

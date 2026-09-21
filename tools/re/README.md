@@ -11,6 +11,8 @@ repository root, which is gitignored. Extracted firmware assets must never be co
 | `spu_cache.py` | Matches RPCS3's SPU program cache (`spu-*.dat`) against an ELF: which of its code actually ran, and with `--since`, which code ran for the first time. |
 | `cgbin.py` | Reads compiled RSX Cg programs (`.vpo`/`.fpo`): parameter tables, register assignments, and the uniform values the XMB set at run time, read from RPCS3's shader cache. |
 | `rrc.py` | Reads RPCS3 RSX frame captures (`captures/*.rrc.gz`, Alt+C in the emulator): the draw calls of one frame, the vertex constants at each draw, and each draw's vertex buffers, decoded to CSV. |
+| `ppu_prx.py` | Loads decrypted PPU modules (PRX or executable), applies PRX relocations, finds the TOC, and disassembles with capstone. Also finds immediates, the code that reaches an address, and the callers of each named import. Needs `pip install capstone`. |
+| `nids.py` | Computes PS3 function NIDs from names and names a module's imports. |
 
 ## Typical workflow
 
