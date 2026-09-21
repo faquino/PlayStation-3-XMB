@@ -60,6 +60,29 @@ def fp_float(word):
     return struct.unpack('>f', struct.pack('>I', swapped))[0]
 
 
+def fp_constant_slots(ucode):
+    """Byte offsets of the 16-byte constants embedded in fragment microcode, in order.
+
+    Each instruction is four words (destination, then three sources) with their halves
+    swapped. A source whose register type (bits 0-1) is 2 reads the constant stored in
+    the 16 bytes right after the instruction. RPCS3's decompiler numbers these slots in
+    this order, as _fetch_constant(0), (1), ...
+    """
+    slots = []
+    pos = 0
+    while pos + 16 <= len(ucode):
+        words = [((w & 0xffff) << 16) | (w >> 16) for w in struct.unpack('>4I', ucode[pos:pos + 16])]
+        end = words[0] & 1
+        if any(w & 3 == 2 for w in words[1:]):
+            slots.append(pos + 16)
+            pos += 32
+        else:
+            pos += 16
+        if end:
+            break
+    return slots
+
+
 class CgProgram:
     def __init__(self, raw):
         self.raw = raw
@@ -139,6 +162,8 @@ def main(argv=None):
     ap.add_argument('--all', action='store_true', help='include unreferenced parameters')
     ap.add_argument('--runtime', type=Path, help='cached fragment microcode to read uniforms from')
     ap.add_argument('--find-in', type=Path, help="directory of RPCS3's cached raw programs")
+    ap.add_argument('--fc-table', type=Path, metavar='CACHED_FP',
+                    help='map _fetch_constant(n) of the decompiled program to uniforms and values')
     args = ap.parse_args(argv)
 
     prog = CgProgram(args.program.read_bytes())
@@ -151,6 +176,15 @@ def main(argv=None):
         return 0
 
     print('%s, %s' % (PROFILES[prog.profile], prog.header_summary()))
+
+    if args.fc_table:
+        live = args.fc_table.read_bytes()
+        owner = {slot: p['name'] for p in prog.params for slot in p['slots']}
+        for n, slot in enumerate(fp_constant_slots(prog.ucode)):
+            words = struct.unpack('>4I', live[slot:slot + 16])
+            value = tuple(fp_float(w) for w in words)
+            print('fc[%2d]  @0x%03x  %-16s %s' % (n, slot, owner.get(slot, 'literal'), fmt_vec(value)))
+        return 0
 
     if args.runtime:
         if not prog.is_fragment:

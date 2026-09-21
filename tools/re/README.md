@@ -1,15 +1,16 @@
 # Reverse-engineering tools
 
-Python 3, standard library only. They read firmware files from **your own** PS3 firmware
-(for example an RPCS3 install) and write everything they extract into `re-work/` at the
-repository root, which is gitignored. Extracted firmware assets must never be committed.
+Python 3, standard library only, except `ppu_prx.py`, which needs capstone. They read
+firmware files from **your own** PS3 firmware (for example an RPCS3 install) and write
+everything they extract into `re-work/` at the repository root, which is gitignored.
+Extracted firmware assets must never be committed.
 
 | Tool | What it does |
 |---|---|
 | `qrc.py` | Lists and extracts Sony `.qrc` resource containers (`dev_flash/vsh/resource/qgl/*.qrc`). `--mnu-json` also converts the `.mnu` parameter files to JSON. |
 | `spu_disasm.py` | Disassembles SPU ELF files (the SPURS tasks inside `lines.qrc`), with Ghidra-style `FUN_`/`LAB_` labels, the quadwords that `lqr`/`lqa` read, and the constants built by `ilhu`/`iohl`. |
 | `spu_cache.py` | Matches RPCS3's SPU program cache (`spu-*.dat`) against an ELF: which of its code actually ran, and with `--since`, which code ran for the first time. |
-| `cgbin.py` | Reads compiled RSX Cg programs (`.vpo`/`.fpo`): parameter tables, register assignments, and the uniform values the XMB set at run time, read from RPCS3's shader cache. |
+| `cgbin.py` | Reads compiled RSX Cg programs (`.vpo`/`.fpo`): parameter tables, register assignments, and the uniform values the XMB set at run time, read from RPCS3's shader cache. `--fc-table` maps the `_fetch_constant(n)` of RPCS3's decompiled fragment programs to those uniforms and literals. |
 | `rrc.py` | Reads RPCS3 RSX frame captures (`captures/*.rrc.gz`, Alt+C in the emulator): the draw calls of one frame, the vertex constants at each draw, and each draw's vertex buffers, decoded to CSV. |
 | `ppu_prx.py` | Loads decrypted PPU modules (PRX or executable), applies PRX relocations, finds the TOC, and disassembles with capstone. Also finds immediates, the code that reaches an address, and the callers of each named import. Needs `pip install capstone`. |
 | `nids.py` | Computes PS3 function NIDs from names and names a module's imports. |
@@ -30,6 +31,7 @@ python tools/re/spu_cache.py match <rpcs3>/cache/vsh/ppu-*-vsh.self/spu-safe-v1-
 # 4. Shader interfaces, and the values the XMB fed them
 python tools/re/cgbin.py re-work/lines/lib/particles/particles_quads.fpo --find-in <raw dir>
 python tools/re/cgbin.py re-work/lines/lib/particles/particles_quads.fpo --runtime <raw dir>/<hash>.fp
+python tools/re/cgbin.py re-work/lines/lib/particles/particles_quads.fpo --fc-table <raw dir>/<hash>.fp
 ```
 
 `<raw dir>` is `<rpcs3>/cache/vsh/ppu-*-vsh.self/shaders_cache/raw`.

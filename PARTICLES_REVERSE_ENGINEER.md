@@ -6,6 +6,7 @@ of the XMB sparkles, including how they react to the Sixaxis and to icon navigat
 Everything here comes from firmware 4.93 as installed in RPCS3, analysed with the tools in
 [`tools/re/`](tools/re/README.md). **Verified** means checked against the firmware files or
 against what RPCS3 recorded while running the XMB; anything else is marked as inferred.
+**Modelled** marks what the implementation in `ps3xmbwave/` supplies until the code is found.
 
 ## Where the particle system lives
 
@@ -171,17 +172,102 @@ only touches the components its type has):
 | 11–14 | c[455–458] | compiler constants |
 | 15–23 | c[459–467] | `_Darkness`, `_LifeBoundsMax`, `_LifeBoundsMin`, `_NearControl`, `_FrontFacingQuaternion`, `_FocusCurves`, `_Focus`, `_Transparency`, `_ParticleSize` |
 
-First readings of `particles_quads.vpo`:
+For the fragment programs, `tools/re/cgbin.py --fc-table` maps each `_fetch_constant(n)`
+to the uniform or literal behind it, from the embedded constant slots.
 
-- **Orientation:** `IN.rot` is normalised and expanded with the usual quaternion-to-matrix
-  factor of 2, so every particle carries its own rotation.
-- **Eye position, inferred:** the vertex shader subtracts `_LightPack` column 0 (0, 0, 2)
-  from the particle position and normalises the result as a view vector, so that column
-  is the eye.
-- **Life bounds:** `_LifeBoundsMin/Max` form a box, and a particle's opacity is
-  `saturate(5 × distance to the nearest wall)`, so particles fade out near its walls.
-- **Size by depth:** `_ParticleSize` is interpolated piecewise between its three
-  components, which match `size near`, `size middle` and `size far` (inferred).
+### How the two passes work
+
+**Verified** from the four decompiled programs, read with the constant maps above.
+`ps3xmbwave/particles.js` re-authors both passes from this reading.
+
+Both vertex programs start from the same terms. Let d be the distance from the particle
+to the eye (`_LightPack` column 0), `_Focus` = (nf, ne, ff, fe), and ramp(x, a, b) =
+saturate((x − a) / (b − a)).
+
+- **Blur.** Near blur is 1 − ramp(d, nf, ne) and far blur is ramp(d, ff, fe). The curves
+  are the blurs raised to the two `_FocusCurves` exponents.
+- **Size.** size = mix(mix(`size middle`, `size near`, near curve), `size far`, far curve),
+  in world units.
+- **Apparent size.** a = 2 atan(size / d) / fovy. This is what the Cg library's `atan2`
+  coefficients among the compiler constants are for. `_FocusCurves.z` (0.925025) is the
+  vertical field of view, 53.0°.
+- **Fade band.** band = 1 + ramp(d, ff − 0.2, ff) − ramp(d, ff − 0.6, ff − 0.4). Opacity
+  falls to 0 for d between ff − 0.4 and ff − 0.2, then comes back.
+- **Opacity.** The product of:
+  - facing: 1 − (1 − |V·n|)^`fresnel`, with n the quad's normal;
+  - `global alpha`;
+  - the record's alpha;
+  - the band;
+  - 1 − saturate(far blur · a · `far darkness`);
+  - 1 − saturate(near blur · a · `near darkness`);
+  - a wall fade, smoothstep(saturate(5 × distance to the nearest `_LifeBounds` wall)).
+
+**`particles_quads`, the flake.**
+
+- **Turning to the camera.** The quad turns towards `_FrontFacingQuaternion` by
+  align = saturate(a · `size align` + near curve · `near align` + ramp(d, ff − 0.4, ff − 0.2)),
+  as q' = normalize(q + align · (front − q)).
+  - Big and near-blurred particles face the camera.
+  - The last term makes every particle past the far focus face it too. The fade band
+    hides the turn.
+- **Geometry.** The quad spans size × size along q′'s x and y axes. The lighting normal n
+  stays that of q, the flake's own orientation.
+- **Colour.** c = `_IridescentTex`(n_view.xy × 0.5 + 0.5)^`iridescent exp`, a matcap-like
+  lookup by the normal in view space.
+- **Lighting.** L, V and H are per fragment, from the corner's world position. With dL the
+  distance to the spot:
+  - I = (|n·L| · `lambert coeff` + |n·H|^`specular power` · `specular coeff` · c) /
+    (attn.x + attn.y · dL + attn.z · dL²);
+  - output = (1 − e^(−`exposure` · I)) · shape · opacity · `_Color` · `_Gamma`.
+  - The diffuse part is white. Only the specular carries the iridescent colour.
+- **Shape.** ρ is the distance from the quad's centre (1 at the middle of each edge).
+  - b = saturate(near curve + far curve);
+  - e = saturate((ρ − (0.45 − 0.6345 b)) / (0.1 + 1.269 b));
+  - disc = 1 − smoothstep(e);
+  - fuzz = mix(0.85, `near fuzziness`, near curve);
+  - shape = disc + b · (1 − disc − e^(−disc · fuzz)).
+  - In focus, this is a disc of radius about 0.5 with a thin edge. Blurred, it is a soft
+    bokeh blob.
+
+**`particles_second`, the glare.**
+
+- **Geometry.** A camera-facing sprite, along the axes of `_FrontFacingQuaternion`, of size
+  size · `glare scale` · |n·H|^`specular power`, with H at the particle's centre. It only
+  has area while the flake mirrors the spot into the eye.
+- **Opacity.** As above, with the front-facing normal.
+- **Output.** (1 − e^(−`exposure` · `specular coeff` · |n·H|^`specular power` · c / atten))
+  · opacity · `_Color` · `glare` · e^(−`glare p2` · ρ^`glare p1`) · `_Gamma`. There is no
+  diffuse term, and the falloff from the centre is sharp.
+
+`_LightPack`, as the programs read it:
+
+| Column | Holds |
+|---|---|
+| 0 | the eye, (0, 0, 2, 1) |
+| 1 | spot position, and `specular power` |
+| 2 | the spot's constant, linear and quadratic attenuation |
+| 3 | `lambert coeff`, `specular coeff`, `exposure`, then 1 |
+
+**Blend state, verified from the captures.** Both particle draws and the wave's draw blend
+additively (`ONE / ONE`), with depth test and depth writes off. The particle draws also
+enable the alpha test. `ps3xmbwave/spline.js` still draws its wave with
+`SRC_ALPHA / ONE_MINUS_SRC_ALPHA`.
+
+### The iridescent texture
+
+**Inferred, by fitting.** `proc_iridescent.tga` depends only on a spiral phase around its
+centre:
+
+- t = (θ − 0.025 r − 0.00006 r²) / 2π, where r is the distance in texels from (63.5, 63.5)
+  and θ the angle, with y pointing down the image;
+- averaging the colour by phase leaves no radial trend;
+- a periodic Catmull-Rom curve through 16 colours reproduces it with an RMS error of 13/255
+  (11/255 with 32);
+- the colours run like thin-film interference: white, yellow, orange, magenta, violet,
+  blue, lavender, pink, olive, and back to white.
+
+`particles.js` builds the texture from those 16 colours at start-up. It never reads the
+firmware texture.
 
 ## Frame captures
 
@@ -205,7 +291,7 @@ particles are draw 35 (`particles_quads`) and draw 36 (`particles_second`) of ea
 | `_LifeBoundsMin` / `_LifeBoundsMax` | (-10, -10, -12) / (10, 10, 7) | none; not in any `.mnu` |
 | `_NearControl` | (13.19, 3.79, 0.722) | `size align`, `near fuzziness`, `near align` |
 | `_FrontFacingQuaternion` | (0, 0, 0, 1) | identity |
-| `_FocusCurves` | (2.47206, 1.83324, 0.925025) | `near focus_pow`, `far focus_pow`, then unknown |
+| `_FocusCurves` | (2.47206, 1.83324, 0.925025) | `near focus_pow`, `far focus_pow`, then the vertical field of view in radians |
 | `_Focus` | (6.12435, 7.44365, 12.7237, 16.7686) | `near focus`, `near focus` + `near focus_dist`, `far focus`, `far focus` + `far focus_dist` |
 | `_Transparency` | (1.33319, 1) | `fresnel`, `global alpha` |
 | `_ParticleSize` | (0.0482832, 0.0772033, 0.874062) | `size middle`, `size near`, `size far` |
@@ -335,6 +421,46 @@ Likely `.mnu` sources for P (inferred from names and use, to be confirmed on the
 | P[2220] | spin rate | `spin time scale` |
 | P[2224] | time step | `delta time` |
 
+## Emission, as the captures show it
+
+**Inferred** from the two RSX captures. The emitter's code is still to be found.
+
+- **Particles are shared evenly among the wave's vertices.** Binned by world x, the share
+  of particles matches the share of wave vertices to within 1 to 2 points, in both
+  captures. Capture 1:
+
+  | World x | Wave vertices | Particles |
+  |---|---|---|
+  | −10 to −8 | 20.5% | 18.0% |
+  | −8 to −6 | 14.7% | 14.8% |
+  | −6 to −4 | 11.9% | 11.3% |
+  | −4 to −2 | 11.0% | 11.4% |
+  | −2 to 0 | 9.0% | 10.1% |
+  | 0 to 2 | 8.1% | 9.7% |
+  | 2 to 4 | 7.5% | 7.9% |
+  | 4 to 6 | 7.2% | 8.0% |
+  | 6 to 8 | 5.7% | 5.2% |
+  | 8 to 10 | 4.4% | 3.5% |
+
+- **The wave runs past the screen.** Its NDC x spans −2.6 to 1.7, so 29% of the
+  particles are off screen. 14% of its vertices lie outside the life box, so particles
+  born there die on their first update.
+- **That accounts for the particle count.**
+  - 16.6539 × 0.479115 = 7.98 emissions per frame (`emit per frame` × `emit prob`).
+  - 86% of them land inside the box.
+  - With aging rates uniform between 1 and 1 + `aging variance` times `aging speed`, a
+    life lasts ln(1.493) / 0.493 / 0.00285 ≈ 285 frames on average.
+  - 7.98 × 0.86 × 285 ≈ 1950, against 2028 and 2041 captured.
+  - This needs life to advance by the aging rate once per frame, so the w component of
+    the time step is 1.
+- **Particles stay at the depth where they were born.** In every NDC x bin, the median
+  particle depth is within about 0.2 of the wave's. They barely move in z, which fits
+  `emit vel zscale` 0.
+- **How far they stray.**
+  - 75% of the on-screen particles lie inside the wave's vertical band, measured per x.
+  - Outside it, the 90th percentile of the distance is 0.10 to 0.11 NDC and the 99th is
+    0.38 to 0.39.
+
 ## The PPU side (in progress)
 
 Decrypted with RPCS3 (*Utilities → Decrypt PS3 Binaries*) and read with
@@ -369,6 +495,81 @@ Findings so far:
 - `qgl_gaia_app` contains a Park–Miller "minimal standard" generator (Schrage's method,
   seeded with `seed ^ 0xDEADBEEF`). Its callers are not identified yet.
 
+## The implementation in `ps3xmbwave/`
+
+The PPU side is not traced yet, so the implementation ports what is verified as it is.
+It models the rest, marked as modelled in the code, until the PPU code replaces it.
+
+| File | Verified | Modelled |
+|---|---|---|
+| `particles-reverse.js` | The update task, steps 1 to 8. The pool layout, free marker, life bounds and camera. | The parameter block (which `.mnu` value goes where), the emitter, the flow grid's content, and the response to input. |
+| `particles.js` | Both passes, re-authored from the decompiled programs, fed with the `.mnu` values the tables above map. | `_Color` = `color_control` × (1, 1, 1) and `_Gamma` = 1. The iridescent texture comes from the fit. |
+| `wave-surface-cpu.js` | | A CPU copy of the spline layer's wave vertex shader, so particles are born on the wave that is drawn. |
+| `xmb-input.js` | | All of it: the mouse and keyboard stand in for the controller. |
+
+### Modelled choices
+
+- **Where the wave is.** The spline layer draws in clip space with no camera.
+  - A wave point goes on the camera ray through its screen position, at a depth from 6.8
+    to 10.6 set by its row. That is the 5th to 95th percentile of the captured wave's
+    depth on screen.
+  - Emission reaches 1.55 times past the screen edges. 14.7% of emissions then land
+    outside the life box and 25% off screen, against 14% and 28 to 30% in the captures.
+- **Emission.** Each frame makes `emit per frame` attempts, carrying the fraction over.
+  Each attempt is kept with probability `emit prob`, at a random point of the wave.
+  - Velocity: `emit vel mul` times the wave's own velocity there. On top of that, a
+    random direction in a cone of `emit cone angle` around the surface normal, flipped
+    with probability `emit neg prob`, at `emit vel min` + `emit vel var` × U(0, 1). Its z
+    is scaled by `emit vel zscale`.
+  - Aging rate: `aging speed` × (1 + `aging variance` × U(0, 1)).
+  - Orientation: uniformly random.
+  - The random numbers come from the Park–Miller generator in qgl_gaia_app.
+- **Parameter block.**
+  - Force: `gravity`, plus `wind dir` × (`wind scale` + 10 × `wind scale 10`), plus the
+    icon wind.
+  - Drag: `friction`. Time step: (`delta time` × 3, 1). Spin rate: `spin time scale`.
+  - Noise scale: `brownian scale` × (1 + `brownian` × `rshake brw` × shake level).
+- **Flow grid.** The grid lies in the screen-parallel plane, with x over the life box and
+  y from −5 to 7.
+  - Each node holds the wave's nearby velocity, with Gaussian weights of radius 1.5, and
+    fades where the wave is far.
+  - The flow strength defaults to `friction`, so the wave drags nearby particles at the
+    rate friction slows them.
+- **Input.**
+  - Icon steps are D-pad presses. A horizontal one yaws the field about its centre, at up
+    to `dpad rot max` per frame, scaled by `dpad scale x`. A vertical one pitches it,
+    scaled by `dpad scale y` (0). The rate decays by 0.85 per frame.
+  - The icons' scroll velocity pushes particles along y, as `icon wind` × `icon wind scl y`.
+  - The accelerometer is tested as hypot(`dshake x coeff` × a_x, `dshake g coeff` × a_y)
+    against `dshake thresh`. Above it, two things happen:
+    - the field is stirred around the view axis, at up to `dshake rot max` per frame, in
+      the direction of the swing that started the shake;
+    - the shake level rises by `dshake brw imp`.
+
+### Against the captures
+
+From three 30-second runs of the simulation on the spline layer's wave, headless:
+
+| | Simulation | Capture 1 | Capture 2 |
+|---|---|---|---|
+| Particles alive | 1881 to 1933 | 2028 | 2041 |
+| On screen | 1439 to 1493 | 1437 | 1417 |
+| Opacity exactly 1 | 91.6 to 92.2% | 92% | 92% |
+| View depth, median | 8.72 to 8.82 | 8.92 | 8.49 |
+| Distance outside the wave band, 90th percentile (NDC) | 0.077 to 0.085 | 0.096 | 0.114 |
+| Same, 99th percentile | 0.17 to 0.20 | 0.38 | 0.39 |
+
+Known differences:
+
+- **The spline layer's wave is flatter on screen.** Its band is 0.25 NDC tall (5th to 95th
+  percentile), against 0.57 captured. Relative to the band, the particles look more spread
+  out.
+- **Fewer particles stray far from the wave.** The 99th percentile is about half the
+  captured one. The extra speed in the original may come from a faster wave, since the
+  wave's velocity feeds emission, or from a longer tail in the emission speeds.
+- **The captured particles are denser on the left.** The captured wave runs further left
+  than right, while the spline layer's wave is centred.
+
 ## Corrections to `SPLINE_REVERSE_ENGINEER.md`
 
 Found while validating the disassembler against `spline.elf`:
@@ -381,11 +582,17 @@ Found while validating the disassembler against `spline.elf`:
 
 ## Still missing
 
+The implementation models the first three:
+
 - Emission: where new particles are written into free slots, with which position,
   velocity, aging rate and rotation (on the PPU side, most likely).
 - How the parameter block is filled each frame: the flow grid, the field rotation
   quaternion, and which `.mnu` values go where.
 - How controller input changes that block.
-- `_FocusCurves.z` (0.925025).
-- A full reading of the four decompiled shaders.
-- The function that generates `proc_iridescent`, so it can be rebuilt in code.
+
+Also missing:
+
+- The code that generates `proc_iridescent`. The implementation uses the fit above.
+- How the theme sets in `override/` are chosen and blended over the day. They are not
+  wired into `ps3xmbwave/` yet.
+- What `PARTICLES_SPE.mnu` is for.

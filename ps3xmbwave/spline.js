@@ -1,6 +1,6 @@
 'use strict';
 // Spline layer renderer: builds background/wave WebGL programs and draws the main XMB wave mesh each frame.
-// Consumes `SPLINE_SETTINGS` + `PS3SplineReverse` (from `spline-settings.js` and `spline-reverse.js`) and is called by `index.html`.
+// Consumes `SPLINE_SETTINGS` + `PS3SplineReverse`; called by `index.html`, which hands its `surface` to `particles.js`.
 
 (function () {
   function compile(gl, src, type) {
@@ -371,6 +371,10 @@
       gl.bindVertexArray(null);
     }
 
-    return { render };
+    // The displacement texture is rewritten in place every frame, so this view always matches what was drawn.
+    return {
+      render,
+      surface: { settings, data: splineData, width: STEX_W, height: STEX_H },
+    };
   };
 })();

@@ -15,6 +15,9 @@
   <script src="particles-settings.js"></script>
   <script src="settings-panels.js"></script>
   <script src="spline-reverse.js"></script>
+  <script src="wave-surface-cpu.js"></script>
+  <script src="particles-reverse.js"></script>
+  <script src="xmb-input.js"></script>
   <script src="spline.js"></script>
   <script src="particles.js"></script>
   <script>
@@ -65,21 +68,21 @@
       });
 
       const splineLayer = window.createSplineLayer(gl, canvas);
-      const particlesLayer = window.createParticlesLayer(gl, canvas);
+      const input = window.createXmbInput(canvas, window.PARTICLE_SETTINGS);
+      const particlesLayer = window.createParticlesLayer(gl, canvas, { surface: splineLayer.surface, input });
 
       let prevFrameMs = performance.now();
       let splineTimeSec = 0;
-      let particlesTimeSec = Math.random() * 1000;
 
       function frame(nowMs) {
         const dtSec = Math.max(0, (nowMs - prevFrameMs) / 1000);
         prevFrameMs = nowMs;
 
         splineTimeSec += dtSec;
-        particlesTimeSec += dtSec;
 
         splineLayer.render(splineTimeSec);
-        particlesLayer.render(particlesTimeSec);
+        // The particles are emitted from the wave just drawn, so they share its clock.
+        particlesLayer.render(splineTimeSec, dtSec);
         requestAnimationFrame(frame);
       }
 
