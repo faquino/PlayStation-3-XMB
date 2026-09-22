@@ -50,8 +50,8 @@
     return f32[0] - 3;
   }
 
-  // Park-Miller "minimal standard" generator, which qgl_gaia_app carries (seed ^ 0xDEADBEEF). Its callers are not
-  // identified, so using it for emission is part of the model.
+  // Park-Miller "minimal standard" generator. qgl_gaia_app carries the same arithmetic, but as a hash that picks a
+  // random element of a list, so the emitter drawing from it here is part of the model.
   function createParkMiller(seed) {
     let s = ((seed ^ 0xdeadbeef) >>> 0) % 2147483647 || 1;
     return function next() {

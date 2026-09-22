@@ -499,8 +499,39 @@ Findings so far:
 - The lines scene seems split between modules (inferred from the RPCS3 log). Right before
   the `SceQglLines` SPURS instance is created, `qglbase` allocates memory and the RSX I/O
   mappings of the wave (`io 0x500000`) and particle (`io 0x600000`) buffers are set up.
-- `qgl_gaia_app` contains a Park–Miller "minimal standard" generator (Schrage's method,
-  seeded with `seed ^ 0xDEADBEEF`). Its callers are not identified yet.
+
+### Every SPU task comes from `qgl_gaia_app`
+
+**Verified.** `qglbase.prx` and `qgl_canyon_app.prx` import no `cellSpurs` function at
+all, so the task manager in `qgl_gaia_app` runs the tasks of every scene, the lines one
+included. It holds a single `cellSpursCreateTask` call, at `0x468a4`, inside the function
+at `0x46590`, and passes the task an argument whose second word is `object + 0x200`: the
+address of the list of 56-byte records the task walks. The same object holds event flags
+at `+0x80` and `+0x100`, a three-word descriptor at `+0x180`, the local-store pattern at
+`+0x318` (from a table at `0xa32c8`) and the pointer to the SPU ELF at `+0x328`.
+
+`0x46590` has no callers: it is reached by a tail call from `0x48ce8`, whose class has its
+vtable at `0xa4190` (virtuals at `0x44ae0`, `0x450c4`, `0x44f74`, `0x4520c`, `0x45ac0`,
+`0x46558`, `0x46c08`, `0x49594` and others, through the OPDs at `0xa5ef4`-`0xa5f8c`). The
+vtable is installed from `0x44f80`, `0x44f90`, `0x450d0`, `0x450e0`, `0x4548c` and
+`0x45498`. **The next step is to read that constructor**: the record list, and with it the
+parameter block each record points at, belongs to this class.
+
+### Ruled out
+
+- The `+0x830` and `+0x890` pairs in `qgl_gaia_app`, which match the parameter block's
+  field centre and noise offset, are members of an array of 96-byte objects destroyed in a
+  loop. They are not the parameter block.
+- The Park–Miller generator at `0x3aa38` is a **hash**, not a sequence: it reads a seed
+  through a pointer, mixes it with `0xDEADBEEF` and never writes it back. Its only two
+  callers, at `0x3aab8` and `0x3b0bc`, use it to pick a random element of a linked list.
+  It is not the emitter's generator.
+- `_LifeBounds`, (-10, -10, -12) and (10, 10, 7), appears as a float triple in no module
+  and in no file of the scene, so it is built at run time.
+- No code in any of the modules or in `vsh.elf` fills a record with scalar stores at the
+  offsets the task reads (`+20`, `+28`, `+32`, `+36`, `+44`); the only match is a static
+  constructor in `qglbase` zeroing unrelated objects. The records must be written with
+  vector stores, or copied from a template.
 
 ## The implementation in `ps3xmbwave/`
 
@@ -535,7 +566,8 @@ the pool and emission waits for a slot. The original's pool size is unknown.
     is scaled by `emit vel zscale`.
   - Aging rate: `aging speed` × (1 + `aging variance` × U(0, 1)).
   - Orientation: uniformly random.
-  - The random numbers come from the Park–Miller generator in qgl_gaia_app.
+  - The random numbers come from a Park–Miller generator, the arithmetic qgl_gaia_app
+    carries, though it uses it as a hash rather than a sequence.
 - **Parameter block.**
   - Force: `gravity`, plus `wind dir` × (`wind scale` + 10 × `wind scale 10`), plus the
     icon wind.
