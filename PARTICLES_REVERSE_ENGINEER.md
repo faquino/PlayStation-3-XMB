@@ -468,6 +468,31 @@ points at the matrices rather than at an array, and why `size middle` sits next 
 spin rate. The head of the 2304-byte transfer is recycled heap, still holding strings from
 whatever used the memory before, so the task reads nothing there.
 
+### The pool, and what it says about emission
+
+**Verified.** The task's record, 32 bytes before the pointer to its parameters, leads to
+the pool, and searching the savestate for -666 as a float finds its free slots directly:
+they land on a 48-byte grid, as the record size says they should. Every record reads as
+the disassembly describes it, down to the rotation being a unit quaternion.
+
+- **The pool holds 2049 particles**, and 2034 of them were alive: the XMB runs it full,
+  with emission waiting on a free slot. `ps3xmbwave/` uses the same size, and runs the
+  same way.
+- **The aging rate is `aging speed` × (1 + `aging variance` × U(-1, 1)).** The rates in
+  the pool run from 0.001521 to 0.004256, against the 0.001445 and 0.004262 that symmetric
+  draw gives. A one-sided draw would have started at 0.00285. A life therefore lasts
+  between 235 and 692 frames, a median of 410, rather than the 285 assumed before.
+- **Emission velocity, from the particles younger than 3% of a life:** speed median 0.276,
+  5th to 95th percentile 0.115 to 0.348, against the 0.1506 to 0.433 that
+  `emit vel min` + `emit vel var` × U(0, 1) gives, median 0.29.
+- **Their z velocity is zero**: |vz| / |v| has a median of 0.005 at birth. `emit vel
+  zscale` being 0 flattens emission into the screen plane.
+- **The direction is the cone around the vertical**: |vy| / |v| has a median of 0.838,
+  where a cone of `emit cone angle` 51.87° around y gives 0.809.
+- **The noise builds up over a life:** |vz| / |v| climbs to 0.05, 0.20 and 0.34 at a
+  tenth, a half and nine tenths of a life, and the median speed grows from 0.276 to 0.324
+  while the 95th percentile goes from 0.348 to 0.633. Nothing else pushes a particle in z.
+
 ## Emission, as the captures show it
 
 **Inferred** from the two RSX captures. The emitter's code is still to be found.
@@ -586,9 +611,9 @@ It models the rest, marked as modelled in the code, until the PPU code replaces 
 | `wave-surface-cpu.js` | | A CPU copy of the spline layer's wave vertex shader, so particles are born on the wave that is drawn. |
 | `xmb-input.js` | | All of it: the mouse and keyboard stand in for the controller. |
 
-The pool holds 4096 particles, which is enough for every set but `welcome`: its 70.6
-emissions per frame and lives three times longer would need some 24000 slots, so it fills
-the pool and emission waits for a slot. The original's pool size is unknown.
+The pool holds 2049 particles, the size read out of the savestate. Like the original it
+runs full, so emission waits on a free slot; the `welcome` set, which asks for 70.6
+emissions a frame, simply keeps it that way.
 
 ### Modelled choices
 
@@ -604,7 +629,7 @@ the pool and emission waits for a slot. The original's pool size is unknown.
     random direction in a cone of `emit cone angle` around the surface normal, flipped
     with probability `emit neg prob`, at `emit vel min` + `emit vel var` × U(0, 1). Its z
     is scaled by `emit vel zscale`.
-  - Aging rate: `aging speed` × (1 + `aging variance` × U(0, 1)).
+  - Aging rate: `aging speed` × (1 + `aging variance` × U(-1, 1)), as the pool shows.
   - Orientation: uniformly random.
   - The random numbers come from a Park–Miller generator, the arithmetic qgl_gaia_app
     carries, though it uses it as a hash rather than a sequence.

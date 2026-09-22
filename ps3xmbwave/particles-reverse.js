@@ -469,7 +469,9 @@
       const o = slot * STRIDE;
       pool[o] = wA[0]; pool[o + 1] = wA[1]; pool[o + 2] = wA[2]; pool[o + 3] = 0;
       pool[o + 4] = vx; pool[o + 5] = vy; pool[o + 6] = vz;
-      pool[o + 7] = S.agingSpeed * (1 + S.agingVariance * rng());
+      // Verified from the pool in the savestate: the rates there run from `aging speed` x (1 - `aging variance`)
+      // to x (1 + `aging variance`), so the draw is symmetric.
+      pool[o + 7] = S.agingSpeed * (1 + S.agingVariance * (rng() * 2 - 1));
       pool[o + 8] = a * Math.sin(u2); pool[o + 9] = a * Math.cos(u2);
       pool[o + 10] = b * Math.sin(u3); pool[o + 11] = b * Math.cos(u3);
       stats.emitted++;

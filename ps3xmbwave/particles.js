@@ -316,7 +316,8 @@
     const input = (options && options.input) || null;
 
     const RE = window.PS3ParticlesReverse;
-    const system = RE.createSystem({ capacity: 4096 });
+    // The XMB's own pool, read out of a savestate, holds 2049 particles and runs with only a handful free.
+    const system = RE.createSystem({ capacity: 2049 });
     const passes = [
       { program: link(gl, VS_QUADS, FS_QUADS) },
       { program: link(gl, VS_GLARE, FS_GLARE) },
