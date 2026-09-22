@@ -12,8 +12,12 @@
   const LIFE_END = 0.99999;
   const NOISE_SEEDS = [0x98756161, 0x21324889, 0x82181158]; // reset every frame by FUN_00004978
   const SPIN_FREQS = [0.37, 0.17, 0.31];
-  const GRID_W = 13; // flow grid at P+128: 13 x 8 vec4
-  const GRID_H = 8;
+  const GRID_W = 32; // flow grid, from the parameter block read out of an RPCS3 savestate
+  const GRID_H = 16;
+  // Its two matrices, also from the block. Grid coordinates are normalised, and the rectangle they cover is what
+  // the camera sees at a depth of 9, the median depth of the captured particles.
+  const GRID_SCALE = [15.9546, 8.97447, 1];
+  const GRID_ORIGIN = [-7.9773, -4.48723, -7];
   const LIFE_MIN = [-10, -10, -12]; // _LifeBounds, also the task's kill box at P+2048 / P+2064
   const LIFE_MAX = [10, 10, 7];
   const CAMERA = { eye: [0, 0, 2], fovy: 0.925025, near: 0.1, far: 1000 }; // _Modelview, _ModelviewProjection
@@ -21,17 +25,13 @@
   // -----------------------------------------------------------------------------------------------------------------
   // Modelled PPU side: emitter, flow grid content and input response live in qgl_gaia_app / qglbase, not traced yet.
   // -----------------------------------------------------------------------------------------------------------------
-  // Height and depth of the captured particle cloud's centre. Its x (-2.3) follows the captured wave, which runs
-  // further left than right; the spline layer's wave is centred.
-  const FIELD_CENTRE = [0, 0.4, -6.5];
+  const FIELD_CENTRE = [0, 0, 0]; // the origin, as the savestate shows
   // The spline layer has no camera, so the wave gets the depths the captured one has on screen (5th-95th percentile).
   const WAVE_DEPTH_NEAR = 6.8;
   const WAVE_DEPTH_FAR = 10.6;
   // The captured wave runs past the screen edges, and particles are shared among its vertices evenly. Emitting this
   // far past the edges gives the captured shares: 14% of emissions fall outside the life box, 25% land off screen.
   const EMIT_EXTENT = 1.55;
-  const GRID_X = [-10, 10]; // flow grid in the screen-parallel plane: x over the life box, y over the particle band
-  const GRID_Y = [-5, 7];
   const FLOW_SAMPLES_X = 24;
   const FLOW_SAMPLES_Z = [-0.75, -0.25, 0.25, 0.75];
   const FLOW_RADIUS = 1.5;
@@ -60,22 +60,25 @@
     };
   }
 
+  // The task's parameter structure, 768 bytes, read whole out of an RPCS3 savestate: the offsets and the values at
+  // them are verified. The task DMAs three of these and works on the last, which is why the traced offsets of the
+  // force and the drag sit 1536 bytes below the rest.
   function createParams() {
     return {
-      force: new Float32Array(4), // P+0
-      drag: new Float32Array(4), // P+16
-      grid: new Float32Array(GRID_W * GRID_H * 4), // P+128
-      fromGrid: new Float32Array(16), // P+1792, M2: grid vector -> world
-      toGrid: new Float32Array(16), // P+1856, M1: world -> grid coordinates
-      boundsMin: new Float32Array(LIFE_MIN), // P+2048
-      boundsMax: new Float32Array(LIFE_MAX), // P+2064
-      fieldCentre: new Float32Array(FIELD_CENTRE), // P+2096
-      fieldQuat: new Float32Array([0, 0, 0, 1]), // P+2176, turned into the matrix at P+2112 by the task
-      noiseOffset: new Float32Array(4), // P+2192
-      flowStrength: 0, // P+2208
-      noiseScale: 0, // P+2212
-      spinRate: 0, // P+2220
-      dt: new Float32Array(4), // P+2224
+      force: new Float32Array(4), // +0, in the savestate (0, gravity, 0, 1)
+      drag: new Float32Array(4), // +16, (friction, friction, friction, 0)
+      fromGrid: new Float32Array(16), // +256, M2: grid vector -> world
+      toGrid: new Float32Array(16), // +320, M1: world -> normalised grid coordinates
+      grid: new Float32Array(GRID_W * GRID_H * 4), // described at +384: 32 x 16, data elsewhere (see the notes)
+      boundsMin: new Float32Array(LIFE_MIN), // +512
+      boundsMax: new Float32Array(LIFE_MAX), // +528
+      fieldCentre: new Float32Array(FIELD_CENTRE), // +560
+      fieldQuat: new Float32Array([0, 0, 0, 1]), // +640, turned into the matrix at +576 by the task
+      noiseOffset: new Float32Array(4), // +656
+      flowStrength: 0, // +672, 1 in the savestate
+      noiseScale: 0, // +676, `brownian scale` unchanged
+      spinRate: 0, // +684, `spin time scale`
+      dt: new Float32Array(4), // +688, (delta time x 3, 1)
     };
   }
 
@@ -87,10 +90,11 @@
     m[6] = 2 * (x * z - w * y); m[7] = 2 * (y * z + w * x); m[8] = 1 - 2 * (x * x + y * y);
   }
 
-  // Bilinear sample of the flow grid at grid coordinates (gx, gy), clamped to its edges.
-  function sampleGrid(grid, gx, gy, out) {
-    const x = Math.min(Math.max(gx, 0), GRID_W - 1);
-    const y = Math.min(Math.max(gy, 0), GRID_H - 1);
+  // Bilinear sample of the flow grid at normalised grid coordinates, clamped to its edges. The block carries the
+  // grid's size both as 32, 16 and as 31, 15, which is what the coordinates scale by.
+  function sampleGrid(grid, gnx, gny, out) {
+    const x = Math.min(Math.max(gnx * (GRID_W - 1), 0), GRID_W - 1);
+    const y = Math.min(Math.max(gny * (GRID_H - 1), 0), GRID_H - 1);
     const x0 = Math.min(Math.floor(x), GRID_W - 2);
     const y0 = Math.min(Math.floor(y), GRID_H - 2);
     const fx = x - x0;
@@ -285,17 +289,25 @@
       return out;
     }
 
-    // --- Modelled: flow grid, the wave's own velocity spread over the grid and fading away from the wave --------
+    // --- Flow grid: the two matrices are verified, what the grid holds is modelled ------------------------------
+    // The grid covers what the camera sees at a depth of 9, in normalised coordinates. The wave's own velocity
+    // goes into it, scaled into grid space so that M2 brings it back to world units, with Gaussian weights that
+    // fade the flow away from the wave.
     function buildFlowGrid(S) {
+      // Both matrices are diagonal with a translation. Memory keeps the translation in the last row; here it goes
+      // in the last column, which is the way the task applies them above.
       const M1 = P.toGrid;
-      const sx = (GRID_W - 1) / (GRID_X[1] - GRID_X[0]);
-      const sy = (GRID_H - 1) / (GRID_Y[1] - GRID_Y[0]);
+      const M2 = P.fromGrid;
+      M2.fill(0);
       M1.fill(0);
-      M1[0] = sx; M1[3] = -GRID_X[0] * sx;
-      M1[5] = sy; M1[7] = -GRID_Y[0] * sy;
+      for (let a = 0; a < 3; a++) {
+        M2[a * 5] = GRID_SCALE[a];
+        M2[3 + a * 4] = GRID_ORIGIN[a];
+        M1[a * 5] = 1 / GRID_SCALE[a];
+        M1[3 + a * 4] = -GRID_ORIGIN[a] / GRID_SCALE[a];
+      }
+      M2[15] = 1;
       M1[15] = 1;
-      P.fromGrid.fill(0);
-      P.fromGrid[0] = P.fromGrid[5] = P.fromGrid[10] = P.fromGrid[15] = 1;
 
       let m = 0;
       for (let j = 0; j < FLOW_SAMPLES_Z.length; j++) {
@@ -314,10 +326,11 @@
       }
 
       const inv = 1 / (FLOW_RADIUS * FLOW_RADIUS);
+      const gain = S.flowGridGain;
       for (let gy = 0; gy < GRID_H; gy++) {
-        const y = GRID_Y[0] + gy / sy;
+        const y = GRID_ORIGIN[1] + (gy / (GRID_H - 1)) * GRID_SCALE[1];
         for (let gx = 0; gx < GRID_W; gx++) {
-          const x = GRID_X[0] + gx / sx;
+          const x = GRID_ORIGIN[0] + (gx / (GRID_W - 1)) * GRID_SCALE[0];
           let wsum = 0, ax = 0, ay = 0, az = 0;
           for (let k = 0; k < m; k++) {
             const dx = x - flowPos[k * 2];
@@ -329,10 +342,12 @@
             az += flowVel[k * 3 + 2] * w;
           }
           const g = (gy * GRID_W + gx) * 4;
-          const norm = 1 / (wsum + 1); // the +1 lets the flow fade where the wave is far
-          P.grid[g] = ax * norm;
-          P.grid[g + 1] = ay * norm;
-          P.grid[g + 2] = az * norm;
+          // The +1 lets the flow fade where the wave is far; dividing by the grid's scale is what makes M2 hand
+          // the task back the wave's own velocity.
+          const norm = gain / (wsum + 1);
+          P.grid[g] = ax * norm / GRID_SCALE[0];
+          P.grid[g + 1] = ay * norm / GRID_SCALE[1];
+          P.grid[g + 2] = az * norm / GRID_SCALE[2];
           P.grid[g + 3] = 0;
         }
       }

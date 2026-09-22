@@ -43,6 +43,16 @@ python tools/re/rrc.py consts <capture.rrc.gz> <draw> 455 13
 python tools/re/rrc.py buffer <capture.rrc.gz> <draw> -o re-work/particles.csv
 ```
 
+## Savestates
+
+RPCS3 can save the emulated machine's state while the XMB runs (*File → Create
+savestate*), into `savestates/vsh.self/*.SAVESTAT.zst`. The file is a zstd stream around
+`RPCS3SAV`, which Python 3.14 opens with `compression.zstd`, and it holds main memory and
+every SPU's local store. Searching the decompressed image for values you already know —
+a parameter as a float, a vector as a triple — finds the structure that holds them, which
+beats tracing the code that fills it. That is how the particle parameter block in
+`PARTICLES_REVERSE_ENGINEER.md` was read.
+
 The cache only grows, which makes it a coverage recorder. To find the code behind a
 behaviour, copy `spu-safe-v1-tane.dat`, trigger the behaviour in RPCS3 (shake the
 controller, move across icons), then run `spu_cache.py match ... --since <the copy>`.

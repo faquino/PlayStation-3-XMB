@@ -417,16 +417,56 @@ rate in w, and a rotation quaternion. **A free slot has position.w = -666.**
 Cross-check with the captures: alpha is exactly 1 for life in [0.02, 0.94], 92% of a life,
 and exactly 92% of the captured particles have w = 1.
 
-Likely `.mnu` sources for P (inferred from names and use, to be confirmed on the PPU side):
+The next section reads the parameter block out of memory, which settles what fills it.
 
-| P offset | Use | Likely parameter |
-|---|---|---|
-| P[0].xyz | constant force | `gravity` and/or `wind` |
-| P[16] | drag | `friction` |
-| P[2192], P[2212] | noise offset and scale | `wind dir`, `brownian scale` |
-| P[2208] | flow strength | |
-| P[2220] | spin rate | `spin time scale` |
-| P[2224] | time step | `delta time` |
+## The parameter block, read out of a savestate
+
+**Verified.** An RPCS3 savestate (*File → Create savestate*, 0.0.42) holds the emulated
+PS3's memory. The file is zstd-compressed around a `RPCS3SAV` stream, so Python's
+`compression.zstd` opens it. Searching the 55 MB for `_LifeBounds` as a float triple, and
+for the time step as three equal floats followed by 1, finds the block four times: twice
+in main memory, at `0x200de600` and 768 bytes later, and twice inside the local store of
+an SPU thread, where the task keeps it at `0xab80`.
+
+**The structure is 768 bytes, and the task DMAs three of them.** That is what the two
+bases in the disassembly meant: the force and the drag are at `+0` and `+16` of the third
+structure, which sits 1536 bytes after the start of the transfer, and every other offset
+traced earlier is that same structure's.
+
+| Offset | Field | In the savestate | Source |
+|---|---|---|---|
+| 0 | constant force | (0, -6.8e-05, 0, 1) | `gravity`; the wind is off, `wind scale` being 0 |
+| 16 | drag | (0.030551, 0.030551, 0.030551, 0) | `friction` |
+| 256 | M2, grid vector to world | diag(15.9546, 8.97447, 1), translation (-7.9773, -4.48723, -7) | |
+| 320 | M1, world to grid | its exact inverse | |
+| 384 | flow grid descriptor | pointer to the matrices at 256, then 32 and 16 | |
+| 400, 448 | the same size as floats, then 32, 16, 31, 15 | | |
+| 512, 528 | `_LifeBoundsMin` / `Max` | (-10, -10, -12) / (10, 10, 7) | not in any `.mnu` |
+| 560 | field centre | the origin | |
+| 576 | field rotation | the identity matrix | |
+| 640 | field quaternion | zero at rest | |
+| 656 | noise offset | zero | |
+| 672 | flow strength, noise scale, ?, spin rate | (1, 0.225311, 0.0536233, 2.74) | `brownian scale` unchanged, then `size middle`, then `spin time scale` |
+| 688 | time step | (0.0088883, 0.0088883, 0.0088883, 1) | `delta time`, and the 1 that ages a particle once per frame |
+
+Reading that block settles several things:
+
+- **The time step's w is 1**, so life advances by the aging rate once per frame. The
+  particle count already implied it; now it is read from memory.
+- **The noise scale is `brownian scale` itself**, not scaled by the `brownian` of
+  `PARTICLES_UI.mnu`.
+- **The flow strength is 1**, not something small.
+- **The field turns about the origin**, and at rest its quaternion is zero and its matrix
+  the identity.
+- **The flow grid is 32 x 16** over normalised coordinates, and the rectangle its matrices
+  describe, 15.95 by 8.97, is exactly what the camera sees at a depth of 9 with a 53°
+  field of view. That is the median depth of the captured particles: the grid is the
+  screen, at the particles' own distance.
+
+Two things the block does not answer: where the grid's data lives, since the descriptor
+points at the matrices rather than at an array, and why `size middle` sits next to the
+spin rate. The head of the 2304-byte transfer is recycled heap, still holding strings from
+whatever used the memory before, so the task reads nothing there.
 
 ## Emission, as the captures show it
 
@@ -540,7 +580,7 @@ It models the rest, marked as modelled in the code, until the PPU code replaces 
 
 | File | Verified | Modelled |
 |---|---|---|
-| `particles-reverse.js` | The update task, steps 1 to 8. The pool layout, free marker, life bounds and camera. | The parameter block (which `.mnu` value goes where), the emitter, the flow grid's content, and the response to input. |
+| `particles-reverse.js` | The update task, steps 1 to 8. The pool layout, free marker, life bounds and camera. The parameter block: its layout, and the values at every offset. | What the flow grid holds, the emitter, and the response to input. |
 | `particles.js` | Both passes, re-authored from the decompiled programs, fed with the `.mnu` values the tables above map. | `_Color` = `color_control` × (1, 1, 1) and `_Gamma` = 1. The iridescent texture comes from the fit. |
 | `particles-themes.js` | The nine distinct theme sets, as their differences from the base. | Which set applies when: the day cycle above, with a four-hour smoothstep between neighbours. |
 | `wave-surface-cpu.js` | | A CPU copy of the spline layer's wave vertex shader, so particles are born on the wave that is drawn. |
@@ -568,17 +608,19 @@ the pool and emission waits for a slot. The original's pool size is unknown.
   - Orientation: uniformly random.
   - The random numbers come from a Park–Miller generator, the arithmetic qgl_gaia_app
     carries, though it uses it as a hash rather than a sequence.
-- **Parameter block.**
-  - Force: `gravity`, plus `wind dir` × (`wind scale` + 10 × `wind scale 10`), plus the
-    icon wind.
-  - Drag: `friction`. Time step: (`delta time` × 3, 1). Spin rate: `spin time scale`.
-  - Noise scale: `brownian scale` × (1 + `brownian` × `rshake brw` × shake level).
-- **Flow grid.** The grid lies in the screen-parallel plane, with x over the life box and
-  y from −5 to 7.
-  - Each node holds the wave's nearby velocity, with Gaussian weights of radius 1.5, and
-    fades where the wave is far.
-  - The flow strength defaults to `friction`, so the wave drags nearby particles at the
-    rate friction slows them.
+- **Parameter block.** Everything the savestate shows is used as it is: the force is
+  `gravity` alone, the drag `friction`, the time step (`delta time` × 3, 1), the spin rate
+  `spin time scale`, the noise scale `brownian scale`, the flow strength 1, and the field
+  turns about the origin. What the implementation adds on top is the icon wind, in the
+  force, and the shake, which multiplies the noise scale by
+  (1 + `brownian` × `rshake brw` × shake level).
+- **Flow grid.** Its 32 × 16 size and its two matrices are the firmware's; what the nodes
+  hold is not, since the block only points at the matrices.
+  - Each node takes the wave's nearby velocity, with Gaussian weights of radius 1.5, so
+    the flow fades where the wave is far, and is divided by the grid's own scale so that
+    M2 hands the task back a world velocity.
+  - `flowGridGain` scales that velocity on its way in. It is the modelled half of the
+    flow: the flow strength beside it is the firmware's 1.
 - **Input.**
   - Icon steps are D-pad presses. A horizontal one yaws the field about its centre, at up
     to `dpad rot max` per frame, scaled by `dpad scale x`. A vertical one pitches it,
@@ -626,8 +668,9 @@ The implementation models the first three:
 
 - Emission: where new particles are written into free slots, with which position,
   velocity, aging rate and rotation (on the PPU side, most likely).
-- How the parameter block is filled each frame: the flow grid, the field rotation
-  quaternion, and which `.mnu` values go where.
+- What the flow grid holds, and the code that fills the parameter block each frame. The
+  block's own layout and its values at rest are now read from memory; what is missing is
+  the grid's data and how the field's quaternion moves.
 - How controller input changes that block.
 
 Also missing:

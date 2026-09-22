@@ -78,7 +78,8 @@ window.PARTICLE_SETTINGS = {
   iconWindSclY: 1,
 
   // --- Modelled PPU side and mouse adapter (not from the firmware) ----------------------------
-  flowStrength: 0.030551,
+  flowStrength: 1, // this one is the value read out of a savestate; what the flow grid holds is the modelled part
+  flowGridGain: 0.030551,
   rotationDecay: 0.85,
   shakeDecay: 0.97,
   iconWindGain: 0.02,
@@ -155,6 +156,7 @@ window.PARTICLE_SETTINGS_META = {
   iconWindSclX: { min: 0, max: 2, step: 0.01 },
   iconWindSclY: { min: 0, max: 2, step: 0.01 },
   flowStrength: { min: 0, max: 2, step: 0.0005 },
+  flowGridGain: { min: 0, max: 0.5, step: 0.0005 },
   rotationDecay: { min: 0, max: 0.999, step: 0.001 },
   shakeDecay: { min: 0, max: 0.999, step: 0.001 },
   iconWindGain: { min: 0, max: 0.5, step: 0.001 },
