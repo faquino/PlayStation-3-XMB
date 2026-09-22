@@ -570,15 +570,11 @@ Known differences:
 - **The captured particles are denser on the left.** The captured wave runs further left
   than right, while the spline layer's wave is centred.
 
-## Corrections to `SPLINE_REVERSE_ENGINEER.md`
+## A note on the spline document
 
-Found while validating the disassembler against `spline.elf`:
-
-- The 1/6 constant built in `FUN_00005fd8` is `0x3e2aaaaa` (`ilhu r5,0x3e2a` at `0x6018`,
-  `iohl r5,0xaaaa` at `0x6030`), not `0x3E2A5556`. `.rodata` also holds the cubic B-spline
-  basis `[0, 1/6, 2/3, 1/6]` at `0x08a10`.
-- The kernel's per-iteration stride is `a r90,r90,r2` at `0x4bb4`, with `r2` reloaded from
-  the stack at `0x481c`, rather than a literal `ai r90,r90,0x400`.
+Validating the disassembler against `spline.elf` turned up two errors in
+`SPLINE_REVERSE_ENGINEER.md`: the 1/6 constant and the kernel's per-iteration stride. Both
+are corrected there.
 
 ## Still missing
 

@@ -50,7 +50,7 @@ So: we are not totally guessing anymore, but we are still missing runtime-fed da
 - Function: `FUN_000045c0`
 - Real loop: `LAB_00004830`, backedge at `00004bcc`
 - Loop count: `8` iterations (`ceqi r121,r105,0x8`)
-- Output stride per iter: `r90 += 0x400` (`ai r90,r90,0x400`)
+- Output stride per iter: `a r90,r90,r2` at `00004bb4`, with `r2` reloaded from the stack at `0000481c` (the stride is a runtime value, not the literal `0x400` written here before)
 
 Stores per `0x400` block:
 
@@ -145,7 +145,8 @@ So index scheme here is constant-driven in this traced path, not obviously runti
 
 From `FUN_00005fd8` constant setup:
 
-- `r5 = 0x3E2A5556` (float about `1/6`)
+- `r5 = 0x3e2aaaaa` (float `1/6`), built by `ilhu r5,0x3e2a` at `00006018` and `iohl r5,0xaaaa` at `00006030`
+- `.rodata` also holds the cubic B-spline basis `[0, 1/6, 2/3, 1/6]` at `00008a10`
 - `LAB_00003390` builds 4 vectors from `DAT_000089c0/89d0/89e0/89f0` times `r5`
 - Mapping:
   - `r85 -> 0x0`
