@@ -1,6 +1,7 @@
 'use strict';
 // Lightweight DOM control-panel factory that introspects settings objects into sliders/select/reset controls.
-// Shared by spline + particle configs (`spline-settings.js`, `particles-settings.js`) and initialized from `index.html`.
+// Shared by spline + particle configs (`spline-settings.js`, `particles-settings.js`) and initialized from
+// `index.html`, which calls the returned `refresh()` when a theme rewrites the settings.
 
 (function () {
   function decimalsFromStep(step) {
@@ -48,7 +49,8 @@
     if (!id || !title || !settings || typeof settings !== 'object') return;
     if (document.getElementById(id)) return;
 
-    const originalSettings = Object.assign({}, settings);
+    let originalSettings = Object.assign({}, settings);
+    const syncControls = [];
 
     const panel = document.createElement('div');
     panel.id = id;
@@ -137,6 +139,7 @@
           select.value = String(original);
         });
 
+        syncControls.push(function () { select.value = String(settings[key]); });
         controls.appendChild(select);
       } else {
         const numMeta = metaMap[key] || inferMeta(value);
@@ -169,6 +172,10 @@
           valueEl.textContent = formatValue();
         });
 
+        syncControls.push(function () {
+          slider.value = String(settings[key]);
+          valueEl.textContent = formatValue();
+        });
         controls.appendChild(slider);
         controls.appendChild(valueEl);
       }
@@ -193,5 +200,14 @@
     host.appendChild(panel);
     host.appendChild(showBtn);
     root.appendChild(host);
+
+    return {
+      // Call after something other than the panel writes into the settings, such as a theme change: the controls
+      // catch up, and the values they land on become what Reset returns to.
+      refresh: function refresh() {
+        syncControls.forEach(function (sync) { sync(); });
+        originalSettings = Object.assign({}, settings);
+      },
+    };
   };
 })();

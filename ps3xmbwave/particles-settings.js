@@ -1,8 +1,12 @@
 'use strict';
 // Particle parameters: firmware defaults from PARTICLES.mnu and PARTICLES_UI.mnu, plus the knobs of the modelled PPU
 // side. Consumed by `particles.js`, `particles-reverse.js` and `xmb-input.js`; sliders from `settings-panels.js`.
+// Reads `PARTICLE_THEME_OPTIONS` (`particles-themes.js`) at load time for the theme dropdown.
 
 window.PARTICLE_SETTINGS = {
+  // Theme parameter set from `particles-themes.js`; 'base' is the firmware's own PARTICLES.mnu below.
+  theme: 'base',
+
   // --- PARTICLES.mnu (firmware 4.93 defaults) -------------------------------------------------
   emitVelMin: 0.15064,
   emitVelMul: 0.19,
@@ -82,6 +86,8 @@ window.PARTICLE_SETTINGS = {
 };
 
 window.PARTICLE_SETTINGS_META = {
+  theme: { type: 'select', options: window.PARTICLE_THEME_OPTIONS },
+
   emitVelMin: { min: 0, max: 2, step: 0.001 },
   emitVelMul: { min: 0, max: 5, step: 0.01 },
   emitVelVar: { min: 0, max: 2, step: 0.001 },

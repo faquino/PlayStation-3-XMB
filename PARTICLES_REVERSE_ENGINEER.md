@@ -300,8 +300,15 @@ particles are draw 35 (`particles_quads`) and draw 36 (`particles_second`) of ea
 
 `size middle` 0.0482832 and `far focus` 12.7237 appear in no `.mnu` file. Both are the
 `higure` (dusk) and `night` sets mixed at the same t ≈ 0.2525, and `far focus_dist` mixed
-the same way reproduces `_Focus.w`. The second capture, 58 s later, gives t ≈ 0.258. At
-that rate, the dusk-to-night blend would take about three hours (inferred).
+the same way reproduces `_Focus.w`. The second capture, 58 s later, gives t ≈ 0.258.
+
+Two samples 58 s apart cannot tell the shape of the curve apart from its length, but the
+captures were taken at 20:18 and 20:19, and a smoothstep over four hours from 19:00 to
+23:00 lands on t = 0.248 at 20:18. Reading the two sets at that t gives `size middle`
+0.04825 against 0.0482832 captured, and `far focus` 12.7231 against 12.7237. A straight
+line would instead take about three hours, from 19:34 to 22:30. `ps3xmbwave/` uses the
+smoothstep, and models the rest of the day the same way: this is the only transition the
+captures caught.
 
 ### The particle buffer
 
@@ -504,8 +511,13 @@ It models the rest, marked as modelled in the code, until the PPU code replaces 
 |---|---|---|
 | `particles-reverse.js` | The update task, steps 1 to 8. The pool layout, free marker, life bounds and camera. | The parameter block (which `.mnu` value goes where), the emitter, the flow grid's content, and the response to input. |
 | `particles.js` | Both passes, re-authored from the decompiled programs, fed with the `.mnu` values the tables above map. | `_Color` = `color_control` × (1, 1, 1) and `_Gamma` = 1. The iridescent texture comes from the fit. |
+| `particles-themes.js` | The nine distinct theme sets, as their differences from the base. | Which set applies when: the day cycle above, with a four-hour smoothstep between neighbours. |
 | `wave-surface-cpu.js` | | A CPU copy of the spline layer's wave vertex shader, so particles are born on the wave that is drawn. |
 | `xmb-input.js` | | All of it: the mouse and keyboard stand in for the controller. |
+
+The pool holds 4096 particles, which is enough for every set but `welcome`: its 70.6
+emissions per frame and lives three times longer would need some 24000 slots, so it fills
+the pool and emission waits for a slot. The original's pool size is unknown.
 
 ### Modelled choices
 
@@ -589,6 +601,7 @@ The implementation models the first three:
 Also missing:
 
 - The code that generates `proc_iridescent`. The implementation uses the fit above.
-- How the theme sets in `override/` are chosen and blended over the day. They are not
-  wired into `ps3xmbwave/` yet.
+- Which theme set applies at each hour, and what drives the ones outside the day cycle
+  (`black`, `music_1`, `coldboot`, `gameboot`, `welcome`). Only the dusk-to-night
+  transition was captured; `ps3xmbwave/` models the rest.
 - What `PARTICLES_SPE.mnu` is for.

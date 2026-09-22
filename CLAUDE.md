@@ -29,9 +29,10 @@ Each of the three folders also has its own `docker-compose.yml` (nginx, read-onl
 
 1. `background-gradients-night.js`, then `background-gradients-day.js` — the day file's trailing IIFE **merges both** month tables into `window.BG_GRADIENT_PRESETS` and `window.BG_GRADIENT_PRESET_OPTIONS` (keys `MM_day` / `MM_night`, plus a `default` legacy entry).
 2. `spline-settings.js` — reads `BG_GRADIENT_PRESET_OPTIONS` **at load time** to build the preset dropdown, so it must come after both gradient files.
-3. `particles-settings.js`, `settings-panels.js`, `spline-reverse.js`, `wave-surface-cpu.js`, `particles-reverse.js`, `xmb-input.js`, then `spline.js` / `particles.js`.
+3. `particles-themes.js`, then `particles-settings.js` — same pattern: the settings file reads `PARTICLE_THEME_OPTIONS` at load time for its theme dropdown.
+4. `settings-panels.js`, `spline-reverse.js`, `wave-surface-cpu.js`, `particles-reverse.js`, `xmb-input.js`, then `spline.js` / `particles.js`.
 
-The global contract: `SPLINE_SETTINGS` + `SPLINE_SETTINGS_META`, `PARTICLE_SETTINGS` + `PARTICLE_SETTINGS_META`, `createSettingsPanel`, `PS3SplineReverse`, `WaveSurfaceCPU`, `PS3ParticlesReverse`, `createXmbInput`, `createSplineLayer`, `createParticlesLayer`. `dds/` is the exception — it uses real ES modules (`<script type="module">`).
+The global contract: `SPLINE_SETTINGS` + `SPLINE_SETTINGS_META`, `PARTICLE_SETTINGS` + `PARTICLE_SETTINGS_META`, `PARTICLE_THEMES` + `PARTICLE_THEME_OPTIONS` + `applyParticleTheme`, `createSettingsPanel`, `PS3SplineReverse`, `WaveSurfaceCPU`, `PS3ParticlesReverse`, `createXmbInput`, `createSplineLayer`, `createParticlesLayer`. `dds/` is the exception — it uses real ES modules (`<script type="module">`).
 
 ### Frame loop and layering
 
@@ -88,6 +89,8 @@ Consequences when adding a knob:
 - Pipeline-only knobs (the `re*` family, `band*`, `travel*`) need no shader change — they are read inside `spline-reverse.js`.
 
 `PARTICLE_SETTINGS` keys are the `.mnu` parameter names in camelCase (`PARTICLES.mnu`, then `PARTICLES_UI.mnu`), with the firmware values as defaults — keep that mapping so the settings can be checked against the firmware. Knobs of the modelled side and the mouse adapter go in the last group.
+
+`particles-themes.js` holds the firmware's per-theme parameter sets as differences from those defaults, and `applyParticleTheme(settings, theme)` writes one of them (or, on `'auto'`, the day's blend of two) into the live settings. It is idempotent: it writes only when the theme or the blend moves, so edits made by hand survive. `index.html` calls it every frame and, when it reports a write, calls `refresh()` on the panel that `createSettingsPanel` returns — the controls catch up with the settings, and the values they land on become what Reset returns to. Anything else that writes settings from outside the panel has to do the same.
 
 ### `tools/re/` — reverse-engineering tooling
 

@@ -12,6 +12,7 @@
   <script src="background-gradients-night.js"></script>
   <script src="background-gradients-day.js"></script>
   <script src="spline-settings.js"></script>
+  <script src="particles-themes.js"></script>
   <script src="particles-settings.js"></script>
   <script src="settings-panels.js"></script>
   <script src="spline-reverse.js"></script>
@@ -58,7 +59,7 @@
         showPosition: { top: '12px', right: '12px' },
       });
 
-      window.createSettingsPanel({
+      const particlesPanel = window.createSettingsPanel({
         id: 'particles-panel',
         title: 'Particles Controls',
         settings: window.PARTICLE_SETTINGS,
@@ -66,6 +67,14 @@
         position: { top: '12px', left: '12px' },
         showPosition: { top: '12px', left: '12px' },
       });
+
+      // The theme writes the firmware's own parameter set into the settings; on 'auto' it keeps up with the clock.
+      function syncParticleTheme() {
+        const wrote = window.applyParticleTheme(window.PARTICLE_SETTINGS, window.PARTICLE_SETTINGS.theme);
+        if (wrote && particlesPanel) particlesPanel.refresh();
+      }
+
+      syncParticleTheme();
 
       const splineLayer = window.createSplineLayer(gl, canvas);
       const input = window.createXmbInput(canvas, window.PARTICLE_SETTINGS);
@@ -80,6 +89,7 @@
 
         splineTimeSec += dtSec;
 
+        syncParticleTheme();
         splineLayer.render(splineTimeSec);
         // The particles are emitted from the wave just drawn, so they share its clock.
         particlesLayer.render(splineTimeSec, dtSec);
