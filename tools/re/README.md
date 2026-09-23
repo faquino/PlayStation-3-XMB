@@ -50,8 +50,10 @@ savestate*), into `savestates/vsh.self/*.SAVESTAT.zst`. The file is a zstd strea
 `RPCS3SAV`, which Python 3.14 opens with `compression.zstd`, and it holds main memory and
 every SPU's local store. Searching the decompressed image for values you already know —
 a parameter as a float, a vector as a triple — finds the structure that holds them, which
-beats tracing the code that fills it. That is how the particle parameter block in
-`PARTICLES_REVERSE_ENGINEER.md` was read.
+beats tracing the code that fills it. That is how the particle parameter block and the
+particle pool in `PARTICLES_REVERSE_ENGINEER.md` were read. Live fragment-shader uniforms
+are in there too: the microcode keeps them inline, with each float's halves swapped, so
+searching for the constants beside them finds their current values.
 
 The cache only grows, which makes it a coverage recorder. To find the code behind a
 behaviour, copy `spu-safe-v1-tane.dat`, trigger the behaviour in RPCS3 (shake the

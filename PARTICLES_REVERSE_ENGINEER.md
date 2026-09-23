@@ -311,12 +311,21 @@ line would instead take about three hours, from 19:34 to 22:30.
 **The morning transition is the same shape, twelve hours earlier.** The parameter block
 carries `size middle`, so the two savestates taken at 07:52 and 08:07 measure it again:
 they sit 0.124 and 0.1915 of the way towards the set with `size middle` 0.0464771. A
-four-hour smoothstep from 07:00 to 11:00 gives 0.1205 and 0.1903. It also says which set
-the morning runs to: `yoake` keeps `size middle` where night has it, so the morning goes
-from night straight to `day`.
+four-hour smoothstep from 07:00 to 11:00 gives 0.1205 and 0.1903.
 
-`ps3xmbwave/` uses those two windows and models the third, day into dusk, between 15:00
-and 19:00. Against all three measured moments its `size middle` lands within 0.07%.
+**A second parameter, `glare`, says where the morning starts.** The fragment programs
+carry their uniforms inside the microcode, and the microcode the XMB uploaded is in
+memory: searching a savestate for `glare scale`, `glare p1` and `glare p2`, which no theme
+changes, with their float halves swapped as the microcode keeps them, finds the live
+`glare` right before them. It reads 0.159705 at 23:03, exactly the night value, so the
+evening transition is over by 23:00; and 0.183120 and 0.184526 in the two morning
+savestates. Blending night into day at the mix above would give 0.1647. Blending `yoake`
+into day gives 0.18304 and 0.18450. So the morning runs **from dawn into day**, and
+`size middle` could not tell, since `yoake` keeps it where night has it.
+
+`ps3xmbwave/` uses those two windows and models the two that are left, night into dawn
+before 07:00 and day into dusk between 15:00 and 19:00. Against the four measured moments
+it lands within 0.07% on `size middle`, 0.05% on `glare` and 0.005% on `far focus`.
 
 ### The particle buffer
 
@@ -738,7 +747,7 @@ Also missing:
 
 - The code that generates `proc_iridescent`. The implementation uses the fit above.
 - What drives the theme sets outside the day cycle (`black`, `music_1`, `coldboot`,
-  `gameboot`, `welcome`), and when `yoake` is used, since the morning skips it. Of the day
-  cycle itself, the night-to-day and dusk-to-night transitions are measured and the third
-  is modelled.
+  `gameboot`, `welcome`). Of the day cycle itself, dawn into day and dusk into night are
+  measured; night into dawn and day into dusk are modelled, and one savestate taken
+  between 15:00 and 19:00 would settle the second of them.
 - What `PARTICLES_SPE.mnu` is for.

@@ -46,12 +46,13 @@ window.PARTICLE_THEME_OPTIONS = [
 ];
 
 (function () {
-  // Two of these transitions are measured, and both are a four-hour smoothstep, twelve hours apart. Dusk into
-  // night from 19:00, from two frame captures 58 s apart, and night straight into day from 07:00, from two
-  // savestates 15 minutes apart, which is also how we know the morning skips `yoake`. Day into dusk is modelled;
-  // between transitions a single set holds.
+  // Two of these are measured, and both are a four-hour smoothstep, twelve hours apart. Dusk into night from
+  // 19:00, from two frame captures 58 s apart, and dawn into day from 07:00, from two savestates 15 minutes
+  // apart: their `size middle` gives the timing and the live `glare` in the shader's own microcode names `yoake`
+  // as where the morning starts. The other two windows are modelled, and between transitions a single set holds.
   const CYCLE = [
-    { from: 'night', to: 'day', start: 7, end: 11 },
+    { from: 'night', to: 'yoake', start: 3, end: 7 },
+    { from: 'yoake', to: 'day', start: 7, end: 11 },
     { from: 'day', to: 'higure', start: 15, end: 19 },
     { from: 'higure', to: 'night', start: 19, end: 23 },
   ];
@@ -80,7 +81,7 @@ window.PARTICLE_THEME_OPTIONS = [
         return { from: c.from, to: c.to, mix: smoothstep((hour - c.start) / (c.end - c.start)) };
       }
     }
-    const held = hour >= 11 && hour < 15 ? 'day' : 'night';
+    const held = hour >= 11 && hour < 15 ? 'day' : 'night'; // 23:00 to 03:00 keeps night, 11:00 to 15:00 day
     return { from: held, to: held, mix: 0 };
   }
 
