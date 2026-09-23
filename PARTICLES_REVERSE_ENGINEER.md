@@ -101,6 +101,12 @@ Each `override/<theme>/PARTICLES.mnu` is a complete parameter set. Differences f
 **Verified: overrides apply at run time.** The glare value the XMB fed `particles_second`
 was 0.201367, an override value rather than the base 0.159705.
 
+**Measured: resting on the Music column is not what applies `music_1`.** Two savestates taken
+with the cursor on that column, at 20:02 and 20:11, hold neither of the set's markers: `far
+focus` 12.0064 occurs nowhere in either image, nor does `glare` 0.201367, while values inside
+the band the running dusk-into-night blend was passing through occur in the hundreds. Music
+actually playing is the obvious next candidate.
+
 ## Shaders
 
 **Verified** from the Cg binaries' parameter tables (`tools/re/cgbin.py`).
@@ -762,6 +768,6 @@ Also missing:
 
 - The code that generates `proc_iridescent`. The implementation uses the fit above.
 - What drives the theme sets outside the day cycle (`black`, `music_1`, `coldboot`,
-  `gameboot`, `welcome`). The day cycle itself is measured but for its night-into-dawn
-  window, which follows the pattern of the other three.
+  `gameboot`, `welcome`), beyond the one negative above. The day cycle itself is measured
+  but for its night-into-dawn window, which follows the pattern of the other three.
 - What `PARTICLES_SPE.mnu` is for.
