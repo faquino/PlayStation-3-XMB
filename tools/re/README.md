@@ -55,6 +55,14 @@ particle pool in `PARTICLES_REVERSE_ENGINEER.md` were read. Live fragment-shader
 are in there too: the microcode keeps them inline, with each float's halves swapped, so
 searching for the constants beside them finds their current values.
 
+**A frame capture carries the same uniforms, and does not hang the emulator.** Creating a
+savestate of the running XMB tends to leave RPCS3 stuck and needing to be killed, while
+Alt+C writes its capture and carries on. The capture holds the fragment microcode with the
+same patched slots, so the reader above works on it unchanged - the particles' live `glare`
+and the backdrop's `_MonthTime` both came back out of one - and `rrc.py` reads the vertex
+constants beside it. Reach for a savestate only when main memory itself is what you need:
+the particle pool, the 768-byte parameter block, anything `readblock.py` walks.
+
 The cache only grows, which makes it a coverage recorder. To find the code behind a
 behaviour, copy `spu-safe-v1-tane.dat`, trigger the behaviour in RPCS3 (shake the
 controller, move across icons), then run `spu_cache.py match ... --since <the copy>`.

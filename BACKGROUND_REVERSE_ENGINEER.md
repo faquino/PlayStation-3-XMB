@@ -61,10 +61,12 @@ Read live out of the savestates, with the fragment microcode found in main memor
 constant slots decoded (halves swapped, as always in fragment microcode):
 
 Console clock, not host clock: the last row was taken with RPCS3's *Console time offset* moved
-forward a month.
+forward a month. Every row but the first is a savestate; the first is an RSX frame capture, which
+carries the same patched microcode and is far less trouble to take.
 
 | When | `_MonthTime` | `_NightDayBlend` | `_DayTime` | `_NightTime` |
 |---|---|---|---|---|
+| 21 Sep 20:18 (frame capture) | 20 | 0.500186 | 1668.16 | 831.39 |
 | 22 Sep 22:55 | 21 | 0.500053 | 2136.53 | 1093.00 |
 | 22 Sep 23:03 | 21 | 0.500053 | 2165.29 | 1105.64 |
 | 23 Sep 07:52 | 22 | 1 | 1093.38 | 1988.06 |

@@ -123,6 +123,11 @@ four files, and all four differ from the base:
 | `HDR.mnu` | 10 of 17: `EXPOSURE` 1.05 to 1.51, `GLARE LEVEL` 1.10245 to 2.46, `GLARE THRESH` 0.738857 to 0.260814, wider Gaussian radii - the whole image blooms harder, which is why the wave reads as lit more strongly |
 | `BACKGROUND.mnu` | all 14: the four corner colours go dark and magenta (corner 2 to black, corner 4 to 0.5, 0, 0.5), `FOVY` 71.846 to 83.2002, and `COLOUR SHADER` 0 to 1 |
 
+`ps3xmbwave/` applies only the particle column of that table. The rest - the wave's place and
+tilt, the tone mapper, the backdrop without a month in it - waits for the wave's own pass,
+where an override mechanism for `LINE1.mnu`, `HDR.mnu` and `BACKGROUND.mnu` would carry all
+the hidden sets at once, not just this one.
+
 ## Shaders
 
 **Verified** from the Cg binaries' parameter tables (`tools/re/cgbin.py`).
