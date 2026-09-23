@@ -130,7 +130,9 @@
   function resolveBackgroundGradient(settings) {
     const presets = window.BG_GRADIENT_PRESETS || {};
     const selectedKey = String(settings.gradientPreset || 'default');
-    const selected = presets[selectedKey];
+    const selected = selectedKey === 'auto' && window.bgGradientForDate
+      ? window.bgGradientForDate(new Date())
+      : presets[selectedKey];
 
     if (selected && !selected.legacy && selected.colorStart && selected.colorEnd) {
       const dir = angleToDirYDown(selected.angleDeg || 0);

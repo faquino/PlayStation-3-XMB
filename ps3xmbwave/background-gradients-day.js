@@ -97,6 +97,82 @@ window.BG_GRADIENT_PRESETS_DAY = {
     }
   });
 
+  // The XMB never switches month in one step. Its background shader, `lib/moyou/back_colours0.fpo`,
+  // takes four of these textures at once - `_MonthlyTex1Day`, `_MonthlyTex2Day`, `_MonthlyTex1Night`
+  // and `_MonthlyTex2Night` - and a frame capture has exactly the running month and the next one
+  // resident, so it walks from one month's colour to the next across the month. Its `_MonthTime`
+  // uniform reads the day of the month minus one and `_NightDayBlend` mixes the day pair with the
+  // night pair; both were read live out of RPCS3 savestates. BACKGROUND_REVERSE_ENGINEER.md records
+  // the measurements and what stays modelled here: the shape of both walks.
+  merged.auto = { label: 'Auto (date and time)', auto: true };
+  options.splice(1, 0, { value: 'auto', label: 'Auto (date and time)' });
+
+  const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  const DUSK_START = 17.25;
+  const DUSK_END = 20.25;
+
+  function daysInMonth(month, year) {
+    if (month !== 1) return MONTH_DAYS[month];
+    return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 29 : 28;
+  }
+
+  // 1 in full daylight, 0 at night. Measured on 23 September: 1 at 16:54, 0.069 at 20:02, 0.018 at
+  // 20:11 and 0 by 22:55, a straight line into night that ends around 20:15. The dawn ramp is that
+  // one mirrored about noon, which is only known to be over by 07:52, where a savestate reads 1.
+  function dayness(date) {
+    const hour = date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600;
+    if (hour >= DUSK_END || hour <= 24 - DUSK_END) return 0;
+    if (hour >= 24 - DUSK_START && hour <= DUSK_START) return 1;
+    if (hour < 12) return (hour - (24 - DUSK_END)) / (DUSK_END - DUSK_START);
+    return (DUSK_END - hour) / (DUSK_END - DUSK_START);
+  }
+
+  function mix(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  function mixAngle(a, b, t) {
+    return a + (((b - a + 540) % 360) - 180) * t;
+  }
+
+  function mixColor(a, b, t) {
+    return [
+      Math.round(mix(a[0], b[0], t)),
+      Math.round(mix(a[1], b[1], t)),
+      Math.round(mix(a[2], b[2], t)),
+      Math.round(mix(a[3] === undefined ? 255 : a[3], b[3] === undefined ? 255 : b[3], t)),
+    ];
+  }
+
+  function walkMonth(table, thisMonth, nextMonth, t) {
+    const a = table[thisMonth];
+    const b = table[nextMonth];
+    if (!a || !b) return a || b || null;
+    return {
+      angleDeg: mixAngle(a.angleDeg, b.angleDeg, t),
+      colorStart: mixColor(a.colorStart, b.colorStart, t),
+      colorEnd: mixColor(a.colorEnd, b.colorEnd, t),
+    };
+  }
+
+  // The gradient the XMB would be showing at `date`: this month walked towards the next, in the day
+  // tables and in the night ones, and those two mixed by the time of day.
+  window.bgGradientForDate = function bgGradientForDate(date) {
+    const when = date || new Date();
+    const thisMonth = monthKeys[when.getMonth()];
+    const nextMonth = monthKeys[(when.getMonth() + 1) % 12];
+    const walked = (when.getDate() - 1) / daysInMonth(when.getMonth(), when.getFullYear());
+    const lit = walkMonth(day, thisMonth, nextMonth, walked);
+    const dark = walkMonth(night, thisMonth, nextMonth, walked);
+    if (!lit || !dark) return lit || dark;
+    const k = dayness(when);
+    return {
+      angleDeg: mixAngle(dark.angleDeg, lit.angleDeg, k),
+      colorStart: mixColor(dark.colorStart, lit.colorStart, k),
+      colorEnd: mixColor(dark.colorEnd, lit.colorEnd, k),
+    };
+  };
+
   window.BG_GRADIENT_PRESETS = merged;
   window.BG_GRADIENT_PRESET_OPTIONS = options;
 })();

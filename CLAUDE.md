@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-WebGL2 recreation of the PlayStation 3 XMB background wave ("spline") and sparkle particles. The active implementation in `ps3xmbwave/` is driven by CPU-side pipelines reverse-engineered from the PS3's SPU tasks: `spline.elf` for the wave and `particles.elf` for the particles. `SPLINE_REVERSE_ENGINEER.md` and `PARTICLES_REVERSE_ENGINEER.md` are the sources of truth for that reverse engineering and document what is traced vs. still synthetic.
+WebGL2 recreation of the PlayStation 3 XMB background wave ("spline") and sparkle particles. The active implementation in `ps3xmbwave/` is driven by CPU-side pipelines reverse-engineered from the PS3's SPU tasks: `spline.elf` for the wave and `particles.elf` for the particles. `SPLINE_REVERSE_ENGINEER.md`, `PARTICLES_REVERSE_ENGINEER.md` and `BACKGROUND_REVERSE_ENGINEER.md` are the sources of truth for that reverse engineering and document what is traced vs. still synthetic.
 
 ## Commands
 
@@ -27,12 +27,12 @@ Each of the three folders also has its own `docker-compose.yml` (nginx, read-onl
 
 `ps3xmbwave/` uses no bundler and no ES modules. Everything communicates through `window`: the data files (`*-settings.js`, `background-gradients-*.js`) are plain top-level `window.X = {...}` assignments, and every other file is an IIFE that exports onto it. `index.html` loads them with plain `<script>` tags in an order that matters:
 
-1. `background-gradients-night.js`, then `background-gradients-day.js` — the day file's trailing IIFE **merges both** month tables into `window.BG_GRADIENT_PRESETS` and `window.BG_GRADIENT_PRESET_OPTIONS` (keys `MM_day` / `MM_night`, plus a `default` legacy entry).
+1. `background-gradients-night.js`, then `background-gradients-day.js` — the day file's trailing IIFE **merges both** month tables into `window.BG_GRADIENT_PRESETS` and `window.BG_GRADIENT_PRESET_OPTIONS` (keys `MM_day` / `MM_night`, plus a `default` legacy entry and an `auto` one), and exports `window.bgGradientForDate`, which `spline.js` calls each frame under `auto`. The XMB walks from one month's texture to the next across the month rather than switching on the 1st, which is what that function reproduces; `BACKGROUND_REVERSE_ENGINEER.md` has the measurements.
 2. `spline-settings.js` — reads `BG_GRADIENT_PRESET_OPTIONS` **at load time** to build the preset dropdown, so it must come after both gradient files.
 3. `particles-themes.js`, then `particles-settings.js` — same pattern: the settings file reads `PARTICLE_THEME_OPTIONS` at load time for its theme dropdown.
 4. `settings-panels.js`, `spline-reverse.js`, `wave-surface-cpu.js`, `particles-reverse.js`, `xmb-input.js`, then `spline.js` / `particles.js`.
 
-The global contract: `SPLINE_SETTINGS` + `SPLINE_SETTINGS_META`, `PARTICLE_SETTINGS` + `PARTICLE_SETTINGS_META`, `PARTICLE_THEMES` + `PARTICLE_THEME_OPTIONS` + `applyParticleTheme`, `createSettingsPanel`, `PS3SplineReverse`, `WaveSurfaceCPU`, `PS3ParticlesReverse`, `createXmbInput`, `createSplineLayer`, `createParticlesLayer`. `dds/` is the exception — it uses real ES modules (`<script type="module">`).
+The global contract: `SPLINE_SETTINGS` + `SPLINE_SETTINGS_META`, `BG_GRADIENT_PRESETS` + `BG_GRADIENT_PRESET_OPTIONS` + `bgGradientForDate`, `PARTICLE_SETTINGS` + `PARTICLE_SETTINGS_META`, `PARTICLE_THEMES` + `PARTICLE_THEME_OPTIONS` + `applyParticleTheme`, `createSettingsPanel`, `PS3SplineReverse`, `WaveSurfaceCPU`, `PS3ParticlesReverse`, `createXmbInput`, `createSplineLayer`, `createParticlesLayer`. `dds/` is the exception — it uses real ES modules (`<script type="module">`).
 
 ### Frame loop and layering
 
@@ -94,7 +94,7 @@ Consequences when adding a knob:
 
 ### `tools/re/` — reverse-engineering tooling
 
-Python tools (standard library only, except `ppu_prx.py`, which needs capstone) that read the user's own PS3 firmware (for example an RPCS3 install): a `.qrc` extractor, an SPU disassembler, a matcher that uses RPCS3's SPU cache to show which code actually ran, a Cg binary (`.vpo`/`.fpo`) inspector that recovers uniform values from RPCS3's shader cache and maps the constants of RPCS3's decompiled fragment programs back to uniforms, a reader for RPCS3 RSX frame captures (vertex constants and vertex buffers per draw call), and a PPU module loader and disassembler. `tools/re/README.md` has the workflow. They write into `re-work/`, which is gitignored — **firmware files (ELFs, `.qrc` contents, textures, decompiled shaders) must never be committed**. `PARTICLES_REVERSE_ENGINEER.md` is the particle system's counterpart of the spline notes, in progress on the `particles-reeng` branch.
+Python tools (standard library only, except `ppu_prx.py`, which needs capstone) that read the user's own PS3 firmware (for example an RPCS3 install): a `.qrc` extractor, an SPU disassembler, a matcher that uses RPCS3's SPU cache to show which code actually ran, a Cg binary (`.vpo`/`.fpo`) inspector that recovers uniform values from RPCS3's shader cache and maps the constants of RPCS3's decompiled fragment programs back to uniforms, a reader for RPCS3 RSX frame captures (vertex constants and vertex buffers per draw call), and a PPU module loader and disassembler. `tools/re/README.md` has the workflow. They write into `re-work/`, which is gitignored — **firmware files (ELFs, `.qrc` contents, textures, decompiled shaders) must never be committed**. `PARTICLES_REVERSE_ENGINEER.md` and `BACKGROUND_REVERSE_ENGINEER.md` are the particle system's and the backdrop's counterparts of the spline notes, in progress on the `particles-reeng` branch.
 
 ### `dds/` — gradient extraction tool
 
