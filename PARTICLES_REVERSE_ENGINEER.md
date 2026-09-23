@@ -101,11 +101,27 @@ Each `override/<theme>/PARTICLES.mnu` is a complete parameter set. Differences f
 **Verified: overrides apply at run time.** The glare value the XMB fed `particles_second`
 was 0.201367, an override value rather than the base 0.159705.
 
-**Measured: resting on the Music column is not what applies `music_1`.** Two savestates taken
-with the cursor on that column, at 20:02 and 20:11, hold neither of the set's markers: `far
-focus` 12.0064 occurs nowhere in either image, nor does `glare` 0.201367, while values inside
-the band the running dusk-into-night blend was passing through occur in the hundreds. Music
-actually playing is the obvious next candidate.
+**Measured: `music_1` is playback, not the column.** Two savestates taken with the cursor
+resting on the Music column, at 20:02 and 20:11, hold neither of the set's markers - `far
+focus` 12.0064 occurs nowhere in either image, nor does `glare` 0.201367 - while the values
+the running dusk-into-night blend was passing through occur in the hundreds. A savestate taken
+later with a track actually playing settles it: the live `_Glare` reads **0.201367 exactly**,
+the set's own value, at 23:34, where the day cycle would be holding night's 0.159705. So the
+set replaces the cycle outright rather than blending with it.
+
+Getting music into the XMB under RPCS3 needs the media database rebuilt - dropping files into
+`/dev_hdd0/music` leaves them invisible, because nothing scans that folder (RPCS3 issue #18601;
+deleting `/dev_hdd0/mms` forces the rebuild).
+
+**And the set reaches the whole scene, not just the particles.** `override/music_1/` carries
+four files, and all four differ from the base:
+
+| File | What changes |
+|---|---|
+| `PARTICLES.mnu` | the three values above |
+| `LINE1.mnu` | 11 of 35: the wave rises and comes forward (`POS Y` -1.08844 to 0, `POS Z` -6.40287 to -5.2), turns (`ANG Y` 0.0867576 to 0.796751, `ANG ROT` 18.1208 to 13.1208), slows (`TIMESTEP` 4 to 3.72102), and its free-form deformation is rescaled |
+| `HDR.mnu` | 10 of 17: `EXPOSURE` 1.05 to 1.51, `GLARE LEVEL` 1.10245 to 2.46, `GLARE THRESH` 0.738857 to 0.260814, wider Gaussian radii - the whole image blooms harder, which is why the wave reads as lit more strongly |
+| `BACKGROUND.mnu` | all 14: the four corner colours go dark and magenta (corner 2 to black, corner 4 to 0.5, 0, 0.5), `FOVY` 71.846 to 83.2002, and `COLOUR SHADER` 0 to 1 |
 
 ## Shaders
 

@@ -40,6 +40,14 @@ instructions, `_Alpha`) are the cheap paths for when there is nothing to blend.
 `BACKGROUND.mnu` modulates the result with four corner colours - white at the top, 0.847 and 0.925
 grey at the bottom - a `FOVY` of 71.846 and a `COLOUR SHADER` flag.
 
+**`COLOUR SHADER` picks which of the three runs, and the music player proves it.** Its
+`override/music_1/BACKGROUND.mnu` flips the flag to 1 and repaints all four corners, corner 2 to
+black and corner 4 to (0.5, 0, 0.5). A savestate taken with a track playing has `back_colours1`
+live and patched, `_Alpha` 1, and the screen is magenta fading to black - not the amber the month
+walk was on that evening. So in that screen the backdrop has no month texture in it at all; the
+colour is the corner colours. `back_colours0` keeps being fed fresh uniforms in the same
+savestate, so memory alone does not say it stopped running - the screen does.
+
 ## Two months are resident, never one
 
 The RSX frame capture of 21 September holds exactly `rgb/09`, `rgb/10`, `night/09` and `night/10`
