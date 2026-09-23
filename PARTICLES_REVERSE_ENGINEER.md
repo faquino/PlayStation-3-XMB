@@ -142,6 +142,31 @@ the two buffers, over all 16384 vertices:
 It comes forward by 1.115, against the 1.203 that `POS Z` moves in the file, and rises by 1.87,
 more than `POS Y`'s 1.088 on its own - the rest is `ANG Y` turning the whole band.
 
+**Changing set is one crossfade, about eight seconds long.** Three more captures, seven and
+eight seconds apart, caught it running. The backdrop's corner colours give the factor twelve
+times over - four corners, three channels each - and they agree:
+
+| | blend factor from the twelve channels | particle `glare` | as a factor |
+|---|---|---|---|
+| 00:28:55 | 0.146767 to 0.146771 | 0.165444 | 0.137751 |
+| 00:29:02 | 0.999433 to 0.999448 | 0.201307 | 0.998560 |
+| 00:29:10 | 1 | 0.201367 | 1 |
+
+So the whole set is walked by a single number, the same shape as the day cycle, and a straight
+line through the two interior points has it start at about 00:28:54 and take 8.2 seconds; a
+smoothstep, 9.4.
+
+**The curve looks eased rather than straight**, on this argument: the particles trail the
+backdrop by 0.009017 in the first capture and 0.000875 in the second, a ratio of ten. A
+constant lag - the parameter block reaching the SPU a frame or two late, about a twentieth of
+a second here - opens a gap proportional to how fast the factor is moving, so on a straight
+line both gaps would be equal. A smoothstep's slope at those two points differs by 13.7 times.
+The argument rests on the lag being a constant time, so it is a lean, not a proof.
+
+The wave moves in the same window, and its geometry says so: mean y over the 16384 vertices
+runs 0.536 with no music, 0.701 at the 15 per cent point, then 2.432 and 2.400 at the end -
+against 2.406 in a capture taken ten minutes later with everything settled.
+
 `ps3xmbwave/` applies only the particle column of that table. The rest - the wave's place and
 tilt, the tone mapper, the backdrop without a month in it - waits for the wave's own pass,
 where an override mechanism for `LINE1.mnu`, `HDR.mnu` and `BACKGROUND.mnu` would carry all
