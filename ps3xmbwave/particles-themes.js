@@ -46,14 +46,13 @@ window.PARTICLE_THEME_OPTIONS = [
 ];
 
 (function () {
-  // Two of these are measured, and both are a four-hour smoothstep, twelve hours apart. Dusk into night from
-  // 19:00, from two frame captures 58 s apart, and dawn into day from 07:00, from two savestates 15 minutes
-  // apart: their `size middle` gives the timing and the live `glare` in the shader's own microcode names `yoake`
-  // as where the morning starts. The other two windows are modelled, and between transitions a single set holds.
+  // The day runs on four-hour smoothsteps that start every six hours, each followed by two hours of one set. Three
+  // of the four are measured, from frame captures and savestates: dawn into day from 07:00, day into dusk from
+  // 13:00, and dusk into night from 19:00. Night into dawn follows the pattern.
   const CYCLE = [
-    { from: 'night', to: 'yoake', start: 3, end: 7 },
+    { from: 'night', to: 'yoake', start: 1, end: 5 },
     { from: 'yoake', to: 'day', start: 7, end: 11 },
-    { from: 'day', to: 'higure', start: 15, end: 19 },
+    { from: 'day', to: 'higure', start: 13, end: 17 },
     { from: 'higure', to: 'night', start: 19, end: 23 },
   ];
 
@@ -75,13 +74,14 @@ window.PARTICLE_THEME_OPTIONS = [
 
   function dayCycle(date) {
     const hour = date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600;
+    let held = CYCLE[CYCLE.length - 1].to; // before the first window of the day, last night's set still holds
     for (let i = 0; i < CYCLE.length; i++) {
       const c = CYCLE[i];
       if (hour >= c.start && hour < c.end) {
         return { from: c.from, to: c.to, mix: smoothstep((hour - c.start) / (c.end - c.start)) };
       }
+      if (hour >= c.end) held = c.to;
     }
-    const held = hour >= 11 && hour < 15 ? 'day' : 'night'; // 23:00 to 03:00 keeps night, 11:00 to 15:00 day
     return { from: held, to: held, mix: 0 };
   }
 

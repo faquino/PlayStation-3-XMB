@@ -323,9 +323,24 @@ savestates. Blending night into day at the mix above would give 0.1647. Blending
 into day gives 0.18304 and 0.18450. So the morning runs **from dawn into day**, and
 `size middle` could not tell, since `yoake` keeps it where night has it.
 
-`ps3xmbwave/` uses those two windows and models the two that are left, night into dawn
-before 07:00 and day into dusk between 15:00 and 19:00. Against the four measured moments
-it lands within 0.07% on `size middle`, 0.05% on `glare` and 0.005% on `far focus`.
+**A savestate at 16:54 gives the third window, and with it the pattern.** Its `glare`
+reads 0.187501, all but exactly the `higure` value, so day into dusk was 0.9985 of the way
+through. Of the round-hour windows only 13:00 to 17:00 fits: it gives 0.187506. Twelve
+o'clock would already be over, half past one would be at 0.94.
+
+So the transitions start at 07:00, 13:00 and 19:00, four hours each, **every six hours**,
+with two hours of one set in between. `ps3xmbwave/` fills in the fourth, night into dawn
+from 01:00, by that pattern, and keeps the holds it implies: dawn from 05:00, day from
+11:00, dusk from 17:00, night from 23:00.
+
+| Window | Blend | How it is known |
+|---|---|---|
+| 01:00-05:00 | night into `yoake` | follows the pattern |
+| 07:00-11:00 | `yoake` into `day` | two savestates, `size middle` and `glare` |
+| 13:00-17:00 | `day` into `higure` | one savestate, `glare` |
+| 19:00-23:00 | `higure` into night | two frame captures, `size middle` and `far focus` |
+
+Against the five measured moments the cycle lands within 0.07%.
 
 ### The particle buffer
 
@@ -747,7 +762,6 @@ Also missing:
 
 - The code that generates `proc_iridescent`. The implementation uses the fit above.
 - What drives the theme sets outside the day cycle (`black`, `music_1`, `coldboot`,
-  `gameboot`, `welcome`). Of the day cycle itself, dawn into day and dusk into night are
-  measured; night into dawn and day into dusk are modelled, and one savestate taken
-  between 15:00 and 19:00 would settle the second of them.
+  `gameboot`, `welcome`). The day cycle itself is measured but for its night-into-dawn
+  window, which follows the pattern of the other three.
 - What `PARTICLES_SPE.mnu` is for.
