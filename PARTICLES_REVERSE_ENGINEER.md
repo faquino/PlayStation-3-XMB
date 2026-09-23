@@ -671,8 +671,8 @@ emissions a frame, simply keeps it that way.
   `gravity` alone, the drag `friction`, the time step (`delta time` × 3, 1), the spin rate
   `spin time scale`, the noise scale `brownian scale`, the flow strength 1, and the field
   turns about the origin. What the implementation adds on top is the icon wind, in the
-  force, and the shake, which multiplies the noise scale by
-  (1 + `brownian` × `rshake brw` × shake level).
+  force, and the agitation level, which multiplies the noise scale by
+  (1 + `rshake brw` × level).
 - **Flow grid.** Its 32 × 16 size and its two matrices are the firmware's; what the nodes
   hold is not, since the block only points at the matrices.
   - Each node takes the wave's nearby velocity, with Gaussian weights of radius 1.5, so
@@ -730,9 +730,9 @@ The implementation models the first three:
 - Emission: where new particles are written into free slots, with which position,
   velocity, aging rate and rotation (on the PPU side, most likely).
 - What the flow grid holds, and the code that fills the parameter block each frame. The
-  block's own layout and its values at rest are now read from memory; what is missing is
-  the grid's data and how the field's quaternion moves.
-- How controller input changes that block.
+  block's layout and its values are read from memory, at rest and under both kinds of
+  input, but the grid's own data is not in it.
+- Why navigating showed the force and the drag at zero.
 
 Also missing:
 
