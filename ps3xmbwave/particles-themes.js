@@ -46,12 +46,12 @@ window.PARTICLE_THEME_OPTIONS = [
 ];
 
 (function () {
-  // Modelled. The one transition the captures caught, dusk into night, fits a four-hour smoothstep from 19:00 to
-  // 23:00: two frames 58 s apart mixed those two sets at 0.2525 and 0.258. The rest of the day follows the same
-  // shape, and between transitions a single set holds.
+  // Two of these transitions are measured, and both are a four-hour smoothstep, twelve hours apart. Dusk into
+  // night from 19:00, from two frame captures 58 s apart, and night straight into day from 07:00, from two
+  // savestates 15 minutes apart, which is also how we know the morning skips `yoake`. Day into dusk is modelled;
+  // between transitions a single set holds.
   const CYCLE = [
-    { from: 'night', to: 'yoake', start: 5, end: 9 },
-    { from: 'yoake', to: 'day', start: 9, end: 13 },
+    { from: 'night', to: 'day', start: 7, end: 11 },
     { from: 'day', to: 'higure', start: 15, end: 19 },
     { from: 'higure', to: 'night', start: 19, end: 23 },
   ];
@@ -80,7 +80,7 @@ window.PARTICLE_THEME_OPTIONS = [
         return { from: c.from, to: c.to, mix: smoothstep((hour - c.start) / (c.end - c.start)) };
       }
     }
-    const held = hour >= 13 && hour < 15 ? 'day' : 'night';
+    const held = hour >= 11 && hour < 15 ? 'day' : 'night';
     return { from: held, to: held, mix: 0 };
   }
 

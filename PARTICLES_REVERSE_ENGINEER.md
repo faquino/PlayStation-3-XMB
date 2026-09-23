@@ -306,9 +306,17 @@ Two samples 58 s apart cannot tell the shape of the curve apart from its length,
 captures were taken at 20:18 and 20:19, and a smoothstep over four hours from 19:00 to
 23:00 lands on t = 0.248 at 20:18. Reading the two sets at that t gives `size middle`
 0.04825 against 0.0482832 captured, and `far focus` 12.7231 against 12.7237. A straight
-line would instead take about three hours, from 19:34 to 22:30. `ps3xmbwave/` uses the
-smoothstep, and models the rest of the day the same way: this is the only transition the
-captures caught.
+line would instead take about three hours, from 19:34 to 22:30.
+
+**The morning transition is the same shape, twelve hours earlier.** The parameter block
+carries `size middle`, so the two savestates taken at 07:52 and 08:07 measure it again:
+they sit 0.124 and 0.1915 of the way towards the set with `size middle` 0.0464771. A
+four-hour smoothstep from 07:00 to 11:00 gives 0.1205 and 0.1903. It also says which set
+the morning runs to: `yoake` keeps `size middle` where night has it, so the morning goes
+from night straight to `day`.
+
+`ps3xmbwave/` uses those two windows and models the third, day into dusk, between 15:00
+and 19:00. Against all three measured moments its `size middle` lands within 0.07%.
 
 ### The particle buffer
 
@@ -467,6 +475,32 @@ Two things the block does not answer: where the grid's data lives, since the des
 points at the matrices rather than at an array, and why `size middle` sits next to the
 spin rate. The head of the 2304-byte transfer is recycled heap, still holding strings from
 whatever used the memory before, so the task reads nothing there.
+
+### What the controller does to the block
+
+**Verified** from two more savestates, one taken while the controller was being shaken and
+one while the XMB was being navigated sideways, against the one at rest:
+
+| | gravity | friction | rotation vector, y | noise scale |
+|---|---|---|---|---|
+| at rest | -6.8e-05 | 0.030551 | 0 | 0.225311, `brownian scale` itself |
+| shaking | -6.8e-05 | 0.030551 | 1.9e-07 | 1.493472, 6.63 times it |
+| navigating | 0 | 0 | 1.843731e-05 | 0.719822, 3.19 times it |
+
+- **Both raise the noise, and `rshake brw` alone accounts for it.** At
+  `brownian scale` × (1 + `rshake brw` × level) the two states put the level at 0.75 and
+  0.29. Bringing the `brownian` of `PARTICLES_UI.mnu` into that product would need a level
+  above 1 while shaking, so it is not in there.
+- **The field turns about y, and the slot at +640 holds a rotation vector, not a
+  quaternion.** While navigating, the matrix at +576 carries ∓1.843731e-05 in its x-z
+  corners, the same number the slot holds: a small-angle rotation about y, by a sixth of
+  `dpad rot max`. Shaking left it a hundred times smaller, so a shake is mostly noise.
+- **Navigating showed the force and the drag at zero**, which one sample cannot explain.
+  `ps3xmbwave/` does not copy that.
+
+The implementation now follows the two measured numbers: an icon step raises the level to
+`brownian` and turns the field about y, and 0.4 s later it reaches 3.17 times the base
+noise against the 3.19 measured.
 
 ### The pool, and what it says about emission
 
@@ -653,9 +687,11 @@ emissions a frame, simply keeps it that way.
   - The icons' scroll velocity pushes particles along y, as `icon wind` × `icon wind scl y`.
   - The accelerometer is tested as hypot(`dshake x coeff` × a_x, `dshake g coeff` × a_y)
     against `dshake thresh`. Above it, two things happen:
-    - the field is stirred around the view axis, at up to `dshake rot max` per frame, in
-      the direction of the swing that started the shake;
+    - the field is stirred about y, the axis the savestates show, at up to
+      `dshake rot max` per frame, in the direction of the swing that started the shake;
     - the shake level rises by `dshake brw imp`.
+  - The level, whichever input raised it, scales the noise as
+    `brownian scale` × (1 + `rshake brw` × level), which is what the savestates measure.
 
 ### Against the captures
 
@@ -701,7 +737,8 @@ The implementation models the first three:
 Also missing:
 
 - The code that generates `proc_iridescent`. The implementation uses the fit above.
-- Which theme set applies at each hour, and what drives the ones outside the day cycle
-  (`black`, `music_1`, `coldboot`, `gameboot`, `welcome`). Only the dusk-to-night
-  transition was captured; `ps3xmbwave/` models the rest.
+- What drives the theme sets outside the day cycle (`black`, `music_1`, `coldboot`,
+  `gameboot`, `welcome`), and when `yoake` is used, since the morning skips it. Of the day
+  cycle itself, the night-to-day and dusk-to-night transitions are measured and the third
+  is modelled.
 - What `PARTICLES_SPE.mnu` is for.

@@ -376,20 +376,24 @@
       }
       model.shake *= S.shakeDecay;
 
-      // Icon steps act as D-pad presses: horizontal ones yaw the field, vertical ones pitch it.
+      // Icon steps act as D-pad presses. A savestate taken while navigating the XMB shows the field turned about y
+      // by 1.84e-5, a sixth of `dpad rot max`, and the noise raised to `brownian`, both of them on their way down.
       if (ev.stepsX || ev.stepsY) {
         model.rotDpad[1] = clampAbs(model.rotDpad[1] - ev.stepsX * S.dpadScaleX * S.dpadRotMax, S.dpadRotMax);
         model.rotDpad[0] = clampAbs(model.rotDpad[0] - ev.stepsY * S.dpadScaleY * S.dpadRotMax, S.dpadRotMax);
+        model.shake = Math.max(model.shake, S.uiBrownian);
       }
 
-      // Shake detection on the accelerometer. A shake stirs the field around the view axis, in the direction of
-      // the swing that started it (kicks that followed each swing would cancel out), and raises the Brownian noise.
+      // Shake detection on the accelerometer. A savestate taken while the controller was shaken shows the noise at
+      // 6.63 times `brownian scale` and next to no turn, so shaking is mostly noise: it stirs the field about the
+      // same y axis the D-pad uses, in the direction of the swing that started it, since kicks that followed each
+      // swing would cancel out.
       const level = Math.hypot(S.dshakeXCoeff * ev.accelX, S.dshakeGCoeff * ev.accelY);
       if (level > S.dshakeThresh && S.dshakeThresh > 0) {
         const excess = (level - S.dshakeThresh) / S.dshakeThresh;
         if (model.shake < 0.05) model.stirSign = ev.accelX < 0 ? 1 : -1;
         const kick = S.dshakeRotImp * S.dshakeRotMax * excess;
-        model.rotShake[2] = clampAbs(model.rotShake[2] + model.stirSign * kick, S.dshakeRotMax);
+        model.rotShake[1] = clampAbs(model.rotShake[1] + model.stirSign * kick, S.dshakeRotMax);
         model.shake = Math.min(1, model.shake + S.dshakeBrwImp * (1 + excess));
       }
 
@@ -407,7 +411,9 @@
         P.fieldQuat[0] = P.fieldQuat[1] = P.fieldQuat[2] = 0;
         P.fieldQuat[3] = 1;
       }
-      P.noiseScale = S.brownianScale * (1 + S.uiBrownian * S.rshakeBrw * model.shake);
+      // The savestates put the noise at exactly `brownian scale` at rest and at 6.63 and 3.19 times that while the
+      // controller was shaken and while the XMB was being navigated, which `rshake brw` alone accounts for.
+      P.noiseScale = S.brownianScale * (1 + S.rshakeBrw * model.shake);
       stats.shake = model.shake;
       stats.fieldAngle = angle;
     }
