@@ -101,13 +101,14 @@ window.BG_GRADIENT_PRESETS_DAY = {
   // takes four of these textures at once - `_MonthlyTex1Day`, `_MonthlyTex2Day`, `_MonthlyTex1Night`
   // and `_MonthlyTex2Night` - and a frame capture has exactly the running month and the next one
   // resident, so it walks from one month's colour to the next across the month. Its `_MonthTime`
-  // uniform reads the day of the month minus one and `_NightDayBlend` mixes the day pair with the
-  // night pair; both were read live out of RPCS3 savestates. BACKGROUND_REVERSE_ENGINEER.md records
-  // the measurements and what stays modelled here: the shape of both walks.
+  // uniform carries that walk as `(day - 1) * 30 / days in month` - 21.2903 on 23 October, which is
+  // 22 * 30 / 31 - and `_NightDayBlend` mixes the day pair with the night pair. Both were read live
+  // out of RPCS3 savestates; BACKGROUND_REVERSE_ENGINEER.md records the measurements.
   merged.auto = { label: 'Auto (date and time)', auto: true };
   options.splice(1, 0, { value: 'auto', label: 'Auto (date and time)' });
 
   const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  const DAWN_END = 7;
   const DUSK_START = 17.25;
   const DUSK_END = 20.25;
 
@@ -116,14 +117,16 @@ window.BG_GRADIENT_PRESETS_DAY = {
     return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 29 : 28;
   }
 
-  // 1 in full daylight, 0 at night. Measured on 23 September: 1 at 16:54, 0.069 at 20:02, 0.018 at
-  // 20:11 and 0 by 22:55, a straight line into night that ends around 20:15. The dawn ramp is that
-  // one mirrored about noon, which is only known to be over by 07:52, where a savestate reads 1.
+  // 1 in full daylight, 0 at night, the daylight share `_NightDayBlend` carries. Eight savestates
+  // pin it: 0 at 22:55 and 23:03, 0.211 at 01:32, 1 at 07:52, 08:07 and 16:54, 0.069 at 20:02 and
+  // 0.018 at 20:11. Two straight lines hold all eight to within 0.008 - up from nothing at midnight
+  // to full daylight at 07:00, down again between 17:15 and 20:15. The night's floor is midnight,
+  // not the small hours.
   function dayness(date) {
     const hour = date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600;
-    if (hour >= DUSK_END || hour <= 24 - DUSK_END) return 0;
-    if (hour >= 24 - DUSK_START && hour <= DUSK_START) return 1;
-    if (hour < 12) return (hour - (24 - DUSK_END)) / (DUSK_END - DUSK_START);
+    if (hour <= DAWN_END) return hour / DAWN_END;
+    if (hour <= DUSK_START) return 1;
+    if (hour >= DUSK_END) return 0;
     return (DUSK_END - hour) / (DUSK_END - DUSK_START);
   }
 

@@ -46,9 +46,9 @@ window.PARTICLE_THEME_OPTIONS = [
 ];
 
 (function () {
-  // The day runs on four-hour smoothsteps that start every six hours, each followed by two hours of one set. Three
-  // of the four are measured, from frame captures and savestates: dawn into day from 07:00, day into dusk from
-  // 13:00, and dusk into night from 19:00. Night into dawn follows the pattern.
+  // The day runs on four-hour smoothsteps that start every six hours, each followed by two hours of one set. All
+  // four are measured, from frame captures and savestates: night into dawn from 01:00, dawn into day from 07:00,
+  // day into dusk from 13:00, and dusk into night from 19:00.
   const CYCLE = [
     { from: 'night', to: 'yoake', start: 1, end: 5 },
     { from: 'yoake', to: 'day', start: 7, end: 11 },

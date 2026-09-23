@@ -8,7 +8,8 @@ This started from a plain observation: on 23 September the console draws an **am
 while every published table - psdevwiki's `Lines.qrc` page, the month presets in this repository -
 says September is **magenta**. Neither is wrong. The XMB does not hold one colour per month, it
 walks from one month's colour to the next across the month, and by the 23rd September has mostly
-become October.
+become October: the walk is `(day - 1) / days in month`, so that day is 73 per cent of the way
+there.
 
 ## What the firmware has
 
@@ -51,9 +52,11 @@ month, texture 2 the next one.
 Read live out of the savestates, with the fragment microcode found in main memory and its patched
 constant slots decoded (halves swapped, as always in fragment microcode):
 
+Console clock, not host clock: the last row was taken with RPCS3's *Console time offset* moved
+forward a month.
+
 | When | `_MonthTime` | `_NightDayBlend` | `_DayTime` | `_NightTime` |
 |---|---|---|---|---|
-| 17 Sep, ~19:28 (shader cache) | 16 | 1 | 1168.77 | 2200 |
 | 22 Sep 22:55 | 21 | 0.500053 | 2136.53 | 1093.00 |
 | 22 Sep 23:03 | 21 | 0.500053 | 2165.29 | 1105.64 |
 | 23 Sep 07:52 | 22 | 1 | 1093.38 | 1988.06 |
@@ -61,17 +64,31 @@ constant slots decoded (halves swapped, as always in fragment microcode):
 | 23 Sep 16:54 | 22 | 1 | 1347.52 | 490.97 |
 | 23 Sep 20:02 | 22 | 0.534256 | 1631.51 | 803.83 |
 | 23 Sep 20:11 | 22 | 0.508853 | 1651.01 | 818.69 |
+| 23 Oct 01:32 | 21.2903 | 0.605699 | 363.13 | 1353.06 |
 
-- **`_MonthTime` is the day of the month minus one**: 16 on the 17th, 21 on the 22nd, 22 on the
-  23rd. Three separate days agree.
-- **`_NightDayBlend` spans [0.5, 1]**, 1 in daylight and 0.500053 at night, so the daylight share
-  it carries is `2 x - 1`. That share was 0.0685 at 20:02 and 0.0177 at 20:11, nine minutes apart:
-  a straight line through those two reaches zero at **20:14** and one at **17:17**, and 16:54 still
-  reading exactly 1 is consistent with it. Both night samples sit on the floor to six digits.
+- **`_MonthTime` is the walk itself, on a thirty-day scale**: `(day - 1) * 30 / days in month`. In
+  September, a thirty-day month, that is the day of the month minus one, which is what the first
+  seven rows read. October gives the law away: 21.2903 on the 23rd is exactly `22 * 30 / 31`. So
+  the share of the next month's colour is `_MonthTime / 30`, that is `(day - 1) / days in month`,
+  and it steps once a day - there is no time-of-day term in it, or 01:32 would have added 0.06.
+  The shader's own `exp(-0.01 (m - 15)^2)` is centred on 15, the middle of that same scale.
+- **`_NightDayBlend` spans [0.5, 1]**, 1 in daylight and 0.500053 at its floor, so the daylight
+  share it carries is `2 x - 1`: 0 at 22:55 and 23:03, 0.211 at 01:32, 1 at 07:52, 08:07 and 16:54,
+  0.069 at 20:02 and 0.018 at 20:11. Two straight lines hold all eight to within 0.008 - **up from
+  nothing at midnight to full daylight at 07:00, and down again between 17:15 and 20:15**. The
+  floor is midnight, not the small hours: by half past one the backdrop is already a fifth of the
+  way back towards its daylight colour, which the screenshot of that moment shows as a warm glow
+  along the bottom of an otherwise black screen.
 - **`_DayTime` and `_NightTime` are animation clocks.** They advance with emulated time, at rates
   that move with the emulator's speed (`_DayTime` gained 0.012/s over one interval and 0.036/s over
   another), and they do not encode the wall clock.
-- `_NightBrightness` held 0.486059 in every savestate.
+- `_NightBrightness` held 0.486059 in every savestate. `_Alpha` did not hold still at all - 0.038,
+  0.939, 0.926, 0.550, 0.911, 0.352 across the eight - so it is animated by something else and is
+  the reason our backdrop comes out about four times brighter than the console's.
+
+RPCS3's shader cache carries an older copy of the same uniforms, from the first frame the program
+was ever compiled for: `_Alpha` 0, `_MonthTime` 16 on 17 September (the day minus one again) and
+`_NightDayBlend` 1. Only the date-driven one is worth reading there; the rest is start-up state.
 
 ## Why the 23rd of September is amber
 
@@ -88,24 +105,25 @@ of a 30-day month is 0.73.
 the gradient dropdown, walks this month's fitted gradient towards next month's, in the day tables
 and in the night ones, and mixes those two by the time of day. Angles take the shorter way round.
 
-Modelled, not traced:
+The walk and the two ramps are the measured ones. What stays modelled:
 
-- **The shape of the walk.** Linear in `(day - 1) / days in month`. Only the uniform is measured;
-  how the shader spends it is not. There is a Gaussian in it - `exp(-0.01 (m - 15)^2)`, built from
-  literals -15 and -0.0144269 at `fc[95]` and `fc[96]` - centred on the middle of the month, but it
-  feeds something else in those 538 instructions and has not been followed to the end.
-- **The dawn ramp.** The dusk one is measured (17:17 to 20:14, rounded to 17:15 and 20:15 in the
-  code); dawn is that one mirrored about noon. All that is actually known is that it is over by
-  07:52, where a savestate reads full daylight.
-- Our backdrop is the raw gradient. The console tone maps it, which is why the screen looks less
-  saturated and more washed towards white than the textures do.
+- **That the shader spends `_MonthTime` linearly.** The uniform is measured exactly, but those 538
+  instructions have not been followed to the end, and one of the things they do with it is a
+  Gaussian - `exp(-0.01 (m - 15)^2)`, from the literals -15 and -0.0144269 at `fc[95]` and `fc[96]`
+  - which may shape the walk rather than something else.
+- **Blending two fitted gradients rather than four textures.** Each month is stored here as one
+  linear gradient fitted to its texture, so a blend of two with different angles is an
+  approximation of blending the textures themselves.
+- Our backdrop is the raw gradient, at full alpha and without the console's tone map, which is why
+  it comes out brighter and more saturated than the screen.
 
 ## Still open
 
-- What the PPU puts in `_NightDayBlend`, and whether the ramp is the same every day of the year.
-  A savestate between 01:00 and 05:00 would pin the dawn end the same way two at dusk pinned the
-  evening.
+- Whether the two ramps sit at the same hours all year. Every reading of the evening one is from
+  late September and the only one of the morning from late October, so a pair a season apart would
+  settle it.
 - Whether the walk really is linear, or the Gaussian above shapes it.
+- What animates `_Alpha`, which decides how bright the backdrop actually lands.
 - The remaining uniforms of the 538-instruction program, which do more than blend four textures.
 
 ## How to repeat the readings
