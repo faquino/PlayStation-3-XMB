@@ -123,6 +123,25 @@ four files, and all four differ from the base:
 | `HDR.mnu` | 10 of 17: `EXPOSURE` 1.05 to 1.51, `GLARE LEVEL` 1.10245 to 2.46, `GLARE THRESH` 0.738857 to 0.260814, wider Gaussian radii - the whole image blooms harder, which is why the wave reads as lit more strongly |
 | `BACKGROUND.mnu` | all 14: the four corner colours go dark and magenta (corner 2 to black, corner 4 to 0.5, 0, 0.5), `FOVY` 71.846 to 83.2002, and `COLOUR SHADER` 0 to 1 |
 
+**The GPU side of that table, from four frame captures taken with a track playing.** All four
+read a live `_Glare` of 0.201367, the set's own value and steady across the 47 seconds they
+span, so the transition was over before the first. The backdrop's four corner colours arrive
+as vertex constants and are the set's, exactly: `c[464]` (0.5, 0, 0.5), `c[465]` (1.2, 1, 1.1),
+`c[466]` (0.579004, 0.435001, 0.472), `c[467]` (0, 0, 0) - corner 4's magenta and corner 2's
+black, which is the screen. The wave's own draw (`lines1`, 16384 vertices) carries only its
+shading parameters, `MIPMAP BIAS` 1.86707, `BRIGHTNESS` 0.701917 and `FRESNEL` 0.638971, all
+three the base values that this set does not touch, and its transform is the identity with z
+flipped. So the wave's move is not in a matrix: the vertices arrive already placed. Comparing
+the two buffers, over all 16384 vertices:
+
+| | 21 September, no music | 24 September, playing |
+|---|---|---|
+| mean y | 0.536 | 2.406 |
+| mean z | 8.080 | 6.965 |
+
+It comes forward by 1.115, against the 1.203 that `POS Z` moves in the file, and rises by 1.87,
+more than `POS Y`'s 1.088 on its own - the rest is `ANG Y` turning the whole band.
+
 `ps3xmbwave/` applies only the particle column of that table. The rest - the wave's place and
 tilt, the tone mapper, the backdrop without a month in it - waits for the wave's own pass,
 where an override mechanism for `LINE1.mnu`, `HDR.mnu` and `BACKGROUND.mnu` would carry all

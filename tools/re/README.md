@@ -63,6 +63,12 @@ and the backdrop's `_MonthTime` both came back out of one - and `rrc.py` reads t
 constants beside it. Reach for a savestate only when main memory itself is what you need:
 the particle pool, the 768-byte parameter block, anything `readblock.py` walks.
 
+A capture also holds the wave's finished geometry, which is worth knowing before the wave's
+own pass: `draws --vpo .../lines1.vpo` finds it (draw 4 in every capture so far, 16384
+vertices), and `buffer` writes position, uv and normal per vertex to CSV. That is the console's
+output, not the `b300`/`b380` inputs the spline notes still want, but it is ground truth to
+measure a pipeline against.
+
 The cache only grows, which makes it a coverage recorder. To find the code behind a
 behaviour, copy `spu-safe-v1-tane.dat`, trigger the behaviour in RPCS3 (shake the
 controller, move across icons), then run `spu_cache.py match ... --since <the copy>`.
