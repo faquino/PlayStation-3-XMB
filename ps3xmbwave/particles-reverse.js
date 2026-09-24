@@ -26,9 +26,13 @@
   // Modelled PPU side: emitter, flow grid content and input response live in qgl_gaia_app / qglbase, not traced yet.
   // -----------------------------------------------------------------------------------------------------------------
   const FIELD_CENTRE = [0, 0, 0]; // the origin, as the savestate shows
-  // The spline layer has no camera, so the wave gets the depths the captured one has on screen (5th-95th percentile).
-  const WAVE_DEPTH_NEAR = 6.8;
-  const WAVE_DEPTH_FAR = 10.6;
+  // The spline layer has no camera, so the wave is given a depth range and a point's height picks its depth inside
+  // it. The range is the one that puts new particles where the console's pool has them: its just-born band sits at
+  // view depth 7.57 / 8.55 / 9.07 (5th, 50th, 95th percentile), and this range matches the median and the width.
+  // The two ends cannot both land as well, because this wave's heights are distributed differently from the
+  // console's - the band comes out a quarter of a unit deep at both ends.
+  const WAVE_DEPTH_NEAR = 7.77;
+  const WAVE_DEPTH_FAR = 9.47;
   // The captured wave runs past the screen edges, and particles are shared among its vertices evenly. Emitting this
   // far past the edges gives the captured shares: 14% of emissions fall outside the life box, 25% land off screen.
   const EMIT_EXTENT = 1.55;
@@ -435,9 +439,10 @@
       if (!drawn || !insideBounds(wA)) return;
 
       waveVelocity(gx, gz, wA, S, wB);
+      // The wave's own motion, carried into the particle. Its z goes through `emit vel zscale` like the cone's below.
       let vx = wB[0] * S.emitVelMul;
       let vy = wB[1] * S.emitVelMul;
-      let vz = wB[2] * S.emitVelMul;
+      let vz = wB[2] * S.emitVelMul * S.emitVelZscale;
 
       // Surface normal, pointing up, flipped for a share of the particles.
       waveToWorld(wave.data, wave.t, gx + NORMAL_STEP, gz, wC);
@@ -465,13 +470,17 @@
       tx *= tl; ty *= tl; tz *= tl;
       const bx = ny * tz - nz * ty, by = nz * tx - nx * tz, bz = nx * ty - ny * tx;
       const cp = Math.cos(phi) * sinT, sp = Math.sin(phi) * sinT;
-      const speed = S.emitVelMin + S.emitVelVar * rng();
-      vx += (tx * cp + bx * sp + nx * cosT) * speed;
-      vy += (ty * cp + by * sp + ny * cosT) * speed;
-      vz += (tz * cp + bz * sp + nz * cosT) * speed;
-      // `emit vel zscale` scales the whole z of the emission velocity, the wave's own motion included: the console
-      // sets it to 0 and its pool is born on a plane, the z velocity within a thousandth of zero.
-      vz *= S.emitVelZscale;
+      // `emit vel zscale` flattens the direction - the console sets it to 0 and its pool is born on a plane, the z
+      // velocity within a thousandth of zero - and the direction is renormalised, so flattening it costs no speed.
+      // The console's pool says so: the slowest twentieth of its new particles still move at `emit vel min`.
+      const dx = tx * cp + bx * sp + nx * cosT;
+      const dy = ty * cp + by * sp + ny * cosT;
+      const dz = (tz * cp + bz * sp + nz * cosT) * S.emitVelZscale;
+      const dl = Math.hypot(dx, dy, dz) || 1;
+      const speed = (S.emitVelMin + S.emitVelVar * rng()) / dl;
+      vx += dx * speed;
+      vy += dy * speed;
+      vz += dz * speed;
 
       // Random orientation (Shoemake).
       const u1 = rng(), u2 = rng() * 2 * Math.PI, u3 = rng() * 2 * Math.PI;
