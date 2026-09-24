@@ -107,6 +107,36 @@ base 1.05. `gameboot1` to `gameboot5` walk from a white corner through two black
 third and fourth being the ones that touch the particles, the fourth with `global alpha` 0 -
 and back out to white.
 
+### The XMB starts by fading out of `coldboot1`
+
+Five captures taken during start-up, across two boots, say what the opening transition is - and
+it is not `welcome`. Fitting each capture's twelve corner channels against every pair of sets
+lands on the same answer three times, to within 6e-7, which is float noise:
+
+| Capture | Blend | Factor | Particles alive |
+|---|---|---|---|
+| 18:21:00 | `coldboot1` into the cycle's set | 0.458315 | 492 |
+| 18:21:07 | same | 0.842647 | 1317 |
+| 18:22:52 | same | 0.996244 | 2019 |
+| 18:23:04 | settled | 1 | 2022 |
+| 18:23:18 | settled | 1 | 2004 |
+
+The particles' `glare` agrees on where it comes from: 0.201367 in the first two, which is
+`coldboot1`'s value where the cycle at that hour would be holding `higure`'s 0.18748 - and
+0.18748 exactly in the last two. But it does not agree on when: it was still sitting on the
+coldboot value with the backdrop 84 per cent of the way across, and read 0.188132, 95 per cent,
+where the backdrop was at 99.6. At boot the particle side trails the backdrop by much more than
+the twentieth of a second it trailed by during the music change.
+
+**And the pool fills from empty.** The draws carry 492 particles, then 1317, then 2019 and
+about 2020 from there on. The console opens the XMB with nothing in the air and lets emission
+fill it; `ps3xmbwave/` instead pre-warms 300 steps on its first frame, so the page opens full.
+That is a deliberate difference, not a missing piece.
+
+RPCS3 boots `vsh.self` directly, so what these captures see is the tail of the console's own
+boot: the XMB coming up out of the `coldboot` sequence. Where `welcome_1` and `welcome_2` sit -
+power-on, or coming back from a game - is still open, and this path does not go through them.
+
 ### Telling the sets apart in a capture
 
 Since a capture carries the corner colours as vertex constants and the particles' `glare` inside
@@ -191,9 +221,11 @@ times over - four corners, three channels each - and they agree:
 | 00:29:02 | 0.999433 to 0.999448 | 0.201307 | 0.998560 |
 | 00:29:10 | 1 | 0.201367 | 1 |
 
-So the whole set is walked by a single number, the same shape as the day cycle, and a straight
-line through the two interior points has it start at about 00:28:54 and take 8.2 seconds; a
-smoothstep, 9.4.
+So the whole set is walked by a single number, the same shape as the day cycle. Its length is
+only bounded: Alt+C freezes the emulation until the pad resumes it, so the seven and eight
+seconds between the captures' timestamps are wall clock and include the freezes. A straight
+line through the two interior points gives 8.2 seconds and a smoothstep 9.4, and the truth is
+shorter than that by however long the machine stood still.
 
 **The curve looks eased rather than straight**, on this argument: the particles trail the
 backdrop by 0.009017 in the first capture and 0.000875 in the second, a ratio of ten. A
