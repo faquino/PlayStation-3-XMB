@@ -24,13 +24,13 @@ While this is inspired by the official PlayStation 3 XMB background wave design,
 - **WebGL2 renderer**: Pure WebGL2 rendering path (background + spline mesh + particles), no framework dependency.
 - **Day/Night monthly gradient presets**: 12 month presets with day/night variants are available in the UI, plus a fallback "Original (RGB Sliders)" mode. The default is `Auto (date and time)`, which does what the console does: it walks from this month's colour to next month's across the month and mixes the day and night tables by the hour.
 - **Live control panels**: Separate spline and particle panels with per-setting sliders/selects and reset buttons.
-- **Particle sparkle layer**: Additive point-sprite sparkles with adjustable count, opacity, size, and flow speed.
-- **Reverse engineering notes included**: [SPLINE_REVERSE_ENGINEER.md](SPLINE_REVERSE_ENGINEER.md) documents traced functions, memory ranges, and what runtime data is still missing.
+- **Reverse-engineered particle system**: `particles-reverse.js` is a port of the SPU update task in the PS3's `particles.elf`, drawn in the two passes the XMB uses, re-authored in GLSL. The firmware's own parameter sets come with it: the day cycle runs by the clock, and the controller stand-in (mouse drag, pointer, arrow keys) stirs the field the way the real one does.
+- **Reverse engineering notes included**: [SPLINE_REVERSE_ENGINEER.md](SPLINE_REVERSE_ENGINEER.md), [PARTICLES_REVERSE_ENGINEER.md](PARTICLES_REVERSE_ENGINEER.md) and [BACKGROUND_REVERSE_ENGINEER.md](BACKGROUND_REVERSE_ENGINEER.md) document traced functions, memory ranges, and what is still modelled, each one saying which is which.
 
 ## Reality check (what still needs work)
 
 - Day/night gradients are now integrated as actual presets, but they're not perfect like in the .dds files, so this issue is partially solved.
-- Sparkles are still not 1:1 PS3-perfect (they look decent, but they are still the "good enough for now" version).
+- Sparkles run the console's own update task now, and a headless bench (`tools/bench/particles.js`) compares their pool with one read out of a savestate. What is left is the PPU side that feeds it - the emitter and the flow field are still modelled - and they drift about twice as fast as the console's late in life.
 - The wave pipeline is much less blind guesswork than before, but still not fully 1:1 because some runtime descriptor data from real hardware is still missing.
 
 ## Local Development
@@ -113,8 +113,8 @@ This project is open source and available under the [MIT License](LICENSE).
 ## TODO
 
 - Capture real runtime descriptor/control payloads (`b300` / `b380`) from PS3 hardware or RPCS3 and wire them into the pipeline.
-- Improve sparkle behavior toward PS3-accurate motion/lifecycle (less "just dots", more "XMB glitter sparkly energy stuff they got going on").
+- Find what makes the sparkles drift twice as fast as the console's late in life; the notes list six causes already ruled out.
 - Keep tuning wave calmness and flow cadence to better match real hardware captures. I realise the waves have sharp edges, when the real thing is like a water wave (just realised it!)
 - Validate month day/night gradients against more references and tighten remaining color/angle drift.
 - Add optional debug views for displacement texture / pipeline intermediates so tuning is less blind.
-- Other features the original firmware had like automatic day/night cycles and the sparkles moving around (based on mouse/controller?)
+- Trace the PPU side of the particles: the emitter and what the flow grid holds.

@@ -990,7 +990,7 @@ Known differences:
   fast. A random walk would only reach 0.02 in a lifetime, so in both the drift is persistent
   and the question is only how persistent: the console's holds about half as long as ours.
 
-  Five things have been ruled out as the cause:
+  Six things have been ruled out as the cause:
 
   - **The generator.** Re-read at `FUN_000030e8`: `il 16807`, `ilhu 0x4000`, `rotmi -9`, `or`,
     then `fs` against 3.0 - values in [-1, 1), exactly what the implementation does.
