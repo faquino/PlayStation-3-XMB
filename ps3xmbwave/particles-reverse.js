@@ -125,7 +125,10 @@
     const fieldRot = new Float32Array(9);
     const noise = new Uint32Array(3);
     const flowTmp = new Float32Array(3);
-    const rng = createParkMiller((Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0);
+    // `options.seed` makes a run repeatable, which the bench uses; without it every page load emits differently.
+    const rng = createParkMiller(options && options.seed !== undefined
+      ? options.seed >>> 0
+      : (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0);
 
     const model = {
       rotDpad: [0, 0, 0], // field angular velocity from icon steps, rad per step
@@ -553,6 +556,11 @@
       params: P,
       stats,
       capacity,
+      // The pool itself, for inspection: `STRIDE` floats per slot in the task's own record layout, so it compares
+      // directly against a pool read out of a savestate. `tools/bench/particles.js` does that comparison.
+      pool,
+      stride: STRIDE,
+      free: FREE,
       get count() { return count; },
     };
   }
@@ -563,5 +571,7 @@
     LIFE_MIN,
     LIFE_MAX,
     OUT_STRIDE,
+    WAVE_DEPTH_NEAR,
+    WAVE_DEPTH_FAR,
   };
 })();
