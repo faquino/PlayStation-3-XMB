@@ -22,7 +22,7 @@ While this is inspired by the official PlayStation 3 XMB background wave design,
 
 - **Reverse-engineered spline pipeline pass**: The wave displacement is generated via a CPU-side pipeline in `spline-reverse.js` and fed into a displacement texture.
 - **WebGL2 renderer**: Pure WebGL2 rendering path (background + spline mesh + particles), no framework dependency.
-- **Day/Night monthly gradient presets**: 12 month presets with day/night variants are available in the UI, plus a fallback "Original (RGB Sliders)" mode.
+- **Day/Night monthly gradient presets**: 12 month presets with day/night variants are available in the UI, plus a fallback "Original (RGB Sliders)" mode. The default is `Auto (date and time)`, which does what the console does: it walks from this month's colour to next month's across the month and mixes the day and night tables by the hour.
 - **Live control panels**: Separate spline and particle panels with per-setting sliders/selects and reset buttons.
 - **Particle sparkle layer**: Additive point-sprite sparkles with adjustable count, opacity, size, and flow speed.
 - **Reverse engineering notes included**: [SPLINE_REVERSE_ENGINEER.md](SPLINE_REVERSE_ENGINEER.md) documents traced functions, memory ranges, and what runtime data is still missing.
@@ -67,7 +67,7 @@ npm run start
 ## How to Use (`ps3xmbwave`)
 
 1. **Spline panel (top-right)**:
-   - Pick a gradient preset (`MM Day` / `MM Night`) or use `Original (RGB Sliders)`.
+   - Leave the gradient on `Auto (date and time)`, or pick a preset (`MM Day` / `MM Night`), or go back to `Original (RGB Sliders)`.
    - Tweak wave behavior, blend, fresnel, brightness, and reverse-pipeline knobs. May be useful to get a better wave.
 
 2. **Particles panel (top-left)**:

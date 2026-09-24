@@ -3,7 +3,7 @@
 // Read by `spline.js` and the settings UI in `settings-panels.js`; this file is intentionally declarative (no runtime logic).
 
 window.SPLINE_SETTINGS = {
-  gradientPreset: 'default',
+  gradientPreset: 'auto',
 
   colorR: 37,
   colorG: 89,
