@@ -5,7 +5,7 @@
 
 window.PARTICLE_SETTINGS = {
   // Theme parameter set from `particles-themes.js`; 'base' is the firmware's own PARTICLES.mnu below.
-  theme: 'base',
+  theme: 'auto',
 
   // --- PARTICLES.mnu (firmware 4.93 defaults) -------------------------------------------------
   emitVelMin: 0.15064,

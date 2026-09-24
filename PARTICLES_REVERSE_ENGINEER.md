@@ -860,9 +860,11 @@ emissions a frame, simply keeps it that way.
 ### Modelled choices
 
 - **Where the wave is.** The spline layer draws in clip space with no camera.
-  - A wave point goes on the camera ray through its screen position, at a depth from 6.8
-    to 10.6 set by its row. That is the 5th to 95th percentile of the captured wave's
-    depth on screen.
+  - A wave point goes on the camera ray through its screen position, at a depth from 7.77
+    to 9.47 set by its row. That range is the one that puts new particles where the
+    console's pool has them, matching the median and the width of its just-born band; it
+    replaced the captured wave's own 5th to 95th percentile, 6.8 to 10.6, which was more
+    than twice as thick.
   - Emission reaches 1.55 times past the screen edges. 14.7% of emissions then land
     outside the life box and 25% off screen, against 14% and 28 to 30% in the captures.
 - **Emission.** Each frame makes `emit per frame` attempts, carrying the fraction over.
@@ -1003,9 +1005,11 @@ have spent. Positions as the 5th, 50th and 95th percentile:
   within a thousandth of zero, and by the end of a life it is spread over a quarter of a unit.
   That is `emit vel zscale`, which the `.mnu` sets to 0, read back out of the pool.
 - **Birth sits in a shell at z about -6.4, give or take 0.8**, in a band of y about a unit
-  wide around -0.5, spread widely in x. `ps3xmbwave/` instead emits between 6.8 and 10.6 deep,
-  so its band is further away and twice as thick; correcting it means re-running the headless
-  metrics against the captures, not just changing the constants.
+  wide around -0.5, spread widely in x. In view depth, which is what the emitter works in
+  since the camera sits at z = 2, that is 7.57 / 8.55 / 9.07 at the 5th, 50th and 95th
+  percentile. `ps3xmbwave/` used to emit between 6.8 and 10.6 deep - centred about right but
+  more than twice as thick - and since `bc9be26` it emits between 7.77 and 9.47, which puts
+  its own band at 7.81 / 8.63 / 9.37.
 - **The x and y velocities at birth run to about 0.3**, which `emit vel min` 0.15064 and
   `emit vel mul` 0.19 bracket.
 
@@ -1049,7 +1053,7 @@ transfer starting at 0xab80.
 
 ## Still missing
 
-The implementation models the first three:
+The implementation models both of these:
 
 - Emission: the code that writes new particles into free slots. What it produces is now
   measured from the pool, above, but not where it comes from.
