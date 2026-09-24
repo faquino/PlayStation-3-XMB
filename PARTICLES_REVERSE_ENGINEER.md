@@ -972,6 +972,46 @@ Known differences:
   sweep. The console's single reading sits inside that spread, so the two cannot be told apart
   at this precision and nothing points at the churn.
 
+  **The gap is a clean factor of two, at every age.** Binning both pools by life and taking the
+  median |vz| - which only the noise can produce, since emission gives it zero and the flow
+  gives it nothing measurable - gives this:
+
+  | Life | Simulation | Console |
+  |---|---|---|
+  | 0.00-0.05 | 0.004 | 0.004 |
+  | 0.05-0.15 | 0.025 | 0.011 |
+  | 0.15-0.30 | 0.049 | 0.020 |
+  | 0.30-0.50 | 0.097 | 0.049 |
+  | 0.50-0.70 | 0.146 | 0.069 |
+  | 0.70-0.90 | 0.178 | 0.095 |
+  | 0.90-1.01 | 0.206 | 0.110 |
+
+  Both grow in a straight line, so neither has run into the drag yet, and ours grows twice as
+  fast. A random walk would only reach 0.02 in a lifetime, so in both the drift is persistent
+  and the question is only how persistent: the console's holds about half as long as ours.
+
+  Five things have been ruled out as the cause:
+
+  - **The generator.** Re-read at `FUN_000030e8`: `il 16807`, `ilhu 0x4000`, `rotmi -9`, `or`,
+    then `fs` against 3.0 - values in [-1, 1), exactly what the implementation does.
+  - **The scale**, which is `brownian scale` read from the block, and **the application**,
+    `n = r x scale + offset` added to the force, both already verified.
+  - **The reseeding period.** Against the console's own pool, one reset per frame correlates
+    at +0.128 / +0.111 / +0.193, a reset every 64-particle call at +0.037 / +0.038 / +0.002
+    and every 512-particle chunk at +0.094 / +0.111 / +0.154. Per frame it is.
+  - **The free list's discipline.** Handing slots back as a queue instead of a stack makes it
+    worse, not better: late in life the z velocity goes to 0.50 against the stack's 0.35 and
+    the console's 0.23.
+  - **The allocation pattern.** Neighbouring live slots differ in life by 0.339 on the console
+    and 0.341 here, where unrelated lives would give 0.333, so both scatter their slots the
+    same way.
+
+  What is left is the one quantity a single snapshot cannot give: **how many particles renumber
+  per frame**. That is what sets how long a particle keeps its vector, and the table above says
+  the console's churns about twice as fast as ours. Two savestates a few frames apart would
+  measure it - the quaternions are near-unique and evolve slowly, so particles can be matched
+  between them and the renumbering counted.
+
   Nor is it a scale error. Sweeping `brownian scale` down, the z spread matches the console's
   at about 0.75 of its value and the xy speeds at about 0.5, and no setting reproduces the
   shape: the console's speeds run wider at both ends, from a 5th percentile of 0.081 that we
