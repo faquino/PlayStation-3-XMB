@@ -945,7 +945,8 @@ The implementation models the first three:
 Also missing:
 
 - The code that generates `proc_iridescent`. The implementation uses the fit above.
-- What drives the theme sets outside the day cycle (`black`, `music_1`, `coldboot`,
-  `gameboot`, `welcome`), beyond the one negative above. The day cycle itself is now
-  measured in all four of its windows.
+- What drives `black` and `bright`, and the order and timing of the `gameboot` and
+  `welcome` stages - their values are all read, and under RPCS3 neither sequence can be
+  reached. `music_1` is playback and `coldboot1` is the XMB's own opening, both measured,
+  and the day cycle is measured in all four of its windows.
 - What `PARTICLES_SPE.mnu` is for.
