@@ -901,27 +901,43 @@ emissions a frame, simply keeps it that way.
   - The level, whichever input raised it, scales the noise as
     `brownian scale` × (1 + `rshake brw` × level), which is what the savestates measure.
 
-### Against the captures
+### Against the console
 
-From three 30-second runs of the simulation on the spline layer's wave, headless:
+`tools/bench/particles.js` runs the simulation on the spline layer's own wave and prints
+this. Three 30-second runs, seeds 1 to 3. The pool's column is the resting savestate's, the
+drawn column the two frame captures':
 
-| | Simulation | Capture 1 | Capture 2 |
+| The pool | Simulation | Console |
+|---|---|---|
+| Alive | 2039 to 2043 of 2049 | 2033 of 2049 |
+| Aging rate, min / median / max | 0.001447 / 0.002517 / 0.004256 | 0.001447 / 0.002435 / 0.004256 |
+| Just born, view depth | 7.81 / 8.63 / 9.37 | 7.57 / 8.55 / 9.07 |
+| Just born, velocity z | -0.0096 / -0.0002 / 0.0078 | -0.0112 / 0.0001 / 0.0078 |
+| Just born, speed in xy | 0.146 / 0.292 / 0.426 | 0.156 / 0.276 / 0.348 |
+| Late in life, view depth | 7.57 / 8.59 / 9.64 | 7.41 / 8.40 / 9.32 |
+| Late in life, velocity z | -0.3652 / -0.0095 / 0.3591 | -0.2501 / -0.0014 / 0.2337 |
+| Late in life, speed in xy | 0.105 / 0.369 / 0.756 | 0.081 / 0.262 / 0.517 |
+
+| What is drawn | Simulation | Capture 1 | Capture 2 |
 |---|---|---|---|
-| Particles alive | 1881 to 1933 | 2028 | 2041 |
-| On screen | 1439 to 1493 | 1437 | 1417 |
-| Opacity exactly 1 | 91.6 to 92.2% | 92% | 92% |
-| View depth, median | 8.72 to 8.82 | 8.92 | 8.49 |
-| Distance outside the wave band, 90th percentile (NDC) | 0.077 to 0.085 | 0.096 | 0.114 |
-| Same, 99th percentile | 0.17 to 0.20 | 0.38 | 0.39 |
+| On screen | 1556 to 1596 | 1437 | 1417 |
+| Opacity exactly 1 | 90.9 to 93.0% | 92% | 92% |
+| View depth, median | 8.63 to 8.65 | 8.92 | 8.49 |
+| Distance outside the wave band, 90th percentile (NDC) | 0.157 to 0.179 | 0.096 | 0.114 |
+| Same, 99th percentile | 0.392 to 0.501 | 0.38 | 0.39 |
 
 Known differences:
 
 - **The spline layer's wave is flatter on screen.** Its band is 0.25 NDC tall (5th to 95th
   percentile), against 0.57 captured. Relative to the band, the particles look more spread
-  out.
-- **Fewer particles stray far from the wave.** The 99th percentile is about half the
-  captured one. The extra speed in the original may come from a faster wave, since the
-  wave's velocity feeds emission, or from a longer tail in the emission speeds.
+  out - which is also why the last two rows cannot be read cleanly: the distance is measured
+  against a band that is wrong to begin with.
+- **The particles stay too fast.** Late in life they move at 0.369 in xy where the console's
+  move at 0.262, and spread over 0.36 in z where the console spreads over 0.24. The emission
+  speeds now match at the slow end, so what keeps adding energy is downstream of emission -
+  the flow field's contents, which are still modelled, are the obvious suspect.
+- **About a tenth too many on screen**, and that has not moved with any emission change so
+  far.
 - **The captured particles are denser on the left.** The captured wave runs further left
   than right, while the spline layer's wave is centred.
 

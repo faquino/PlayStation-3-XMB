@@ -19,6 +19,12 @@ Entry points once served: `/ps3xmbwave/` (active), `/dds/` (gradient extraction 
 
 Each of the three folders also has its own `docker-compose.yml` (nginx, read-only mount) if you want them served independently: `ps3xmbwave` → 9913, `dds` → 9919, `old-research` → 9828.
 
+```bash
+node tools/bench/particles.js --seconds 30 --runs 3 --seed 1
+```
+
+The one bench there is: it runs the particle simulation headless over the spline layer's wave and prints its pool and its drawn particles beside the same measurements read off the console — a savestate's pool and two RSX frame captures. Use it before and after touching the modelled emitter. It needs no firmware.
+
 **There is no build step, no test suite, and no working lint setup.** Both tool scripts glob only the repo root: `npm run lint` (`eslint *.js`) matches no files and there is no eslint config, and `npm run format` (`prettier --write *.js *.html *.md`) only ever rewrites the root Markdown files (`README.md`, `SPLINE_REVERSE_ENGINEER.md`, this file) — it never reaches `ps3xmbwave/` or `dds/`. Don't rely on either as a verification gate. Verification is visual: serve the repo and look at the canvas, plus the browser console for shader compile/link errors (both renderers throw on failure).
 
 ## Architecture
@@ -76,7 +82,7 @@ The simulation steps at a fixed 60 Hz, because the task's semantics are per fram
 
 The system polls it once per frame.
 
-The simulation files run under Node for headless checks with `globalThis.window = globalThis` and an indirect `eval` of each file in load order. Don't use a `vm` context: global lookups there make it about 30× slower.
+The simulation files run under Node for headless checks with `globalThis.window = globalThis` and an indirect `eval` of each file in load order. Don't use a `vm` context: global lookups there make it about 30× slower. `tools/bench/particles.js` is that harness: it compares the pool against the console's, slot for slot in the task's own record layout, which is why `createSystem` takes an optional `seed` and the system exposes `pool`, `stride` and `free`.
 
 ### Settings and UI
 
