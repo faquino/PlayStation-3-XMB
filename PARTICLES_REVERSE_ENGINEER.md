@@ -945,10 +945,29 @@ Known differences:
   percentile), against 0.57 captured. Relative to the band, the particles look more spread
   out - which is also why the last two rows cannot be read cleanly: the distance is measured
   against a band that is wrong to begin with.
-- **The particles stay too fast.** Late in life they move at 0.369 in xy where the console's
-  move at 0.262, and spread over 0.36 in z where the console spreads over 0.24. The emission
-  speeds now match at the slow end, so what keeps adding energy is downstream of emission -
-  the flow field's contents, which are still modelled, are the obvious suspect.
+- **The particles stay too fast, and it is the noise.** Late in life they move at 0.366 in xy
+  where the console's move at 0.262, and spread over 0.35 in z where the console spreads over
+  0.24. Switching each modelled term off in turn says which one does it: with the flow at zero
+  the pool barely moves, 0.349 against 0.366, and at half gain not at all; with the **noise**
+  at zero the median lands on 0.269, against the console's 0.262, and the z spread vanishes
+  altogether - every bit of it is noise. So the flow is not the suspect it looked like, and
+  the modelled grid's contents matter less for what is on screen than the notes assumed. That
+  is about our flow, though: it is built by sampling this wave's velocity at a small gain, so
+  a real field could still be much stronger than ours.
+
+  The noise's own magnitude is not in question - `brownian scale` is read from the block - so
+  what differs is how it lands. **The ordering is confirmed on the console**: taking each live
+  particle's rank in slot order and the vector the task's three generators would hand it,
+  a particle's velocity correlates with its own vector at +0.128, +0.111 and +0.193 on the
+  three axes, against +0.043 for a control that shifts the series by seven. The k-th live
+  particle really does get the k-th draw.
+
+  **The churn does not explain the gap.** The idea was that a rank which changes often would
+  average the drift away, so a console pool that churns faster than ours would end up slower.
+  The simulation's own correlation is of the same size - it peaks at +0.227, though at a shift
+  of about seven rather than zero, seven being one step's worth of births and deaths, so the
+  difference is in when a death renumbers the ranks rather than in how persistent the drift
+  is. Why the same scale of noise pushes our particles harder is still open.
 - **About a tenth too many on screen**, and that has not moved with any emission change so
   far.
 - **The captured particles are denser on the left.** The captured wave runs further left
