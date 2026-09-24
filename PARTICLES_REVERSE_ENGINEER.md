@@ -137,6 +137,22 @@ RPCS3 boots `vsh.self` directly, so what these captures see is the tail of the c
 boot: the XMB coming up out of the `coldboot` sequence. Where `welcome_1` and `welcome_2` sit -
 power-on, or coming back from a game - is still open, and this path does not go through them.
 
+**The `gameboot` path is closed under RPCS3**, which cannot launch a game from the XMB, so
+neither the boot sequence nor the return from it can be captured there. Every value of those
+sets is already read out of the `.mnu` files; what stays unknown is the order the five stages
+run in and how long each takes.
+
+**A capture inside the saved-data utility rules that screen out.** Its corner colours are the
+base ones to the last digit and its `glare` is the cycle's, so the utility does not change the
+parameter set at all: the way it dims the XMB's icons and defocuses the backdrop happens
+outside `lines.qrc`. The scene carries 94 draws against the plain XMB's 77, with the same
+twelve Gaussian passes in both, so the extra ones are the utility's own.
+
+That capture did leave something, though: taken at 19:00:49, 49 seconds into the dusk-into-night
+window, it reads `glare` 0.187479 where the cycle predicts 0.1874790. The window had turned over
+one part in thirty thousand of its length and the value had already moved by one part in a
+million, in the right direction.
+
 ### Telling the sets apart in a capture
 
 Since a capture carries the corner colours as vertex constants and the particles' `glare` inside
