@@ -64,8 +64,25 @@ window.BG_GRADIENT_PRESETS_DAY = {
 };
 
 (function () {
-  const day = window.BG_GRADIENT_PRESETS_DAY || {};
-  const night = window.BG_GRADIENT_PRESETS_NIGHT || {};
+  // Both tables are fitted to the textures as they are stored, and the console samples them with v flipped: its
+  // night backdrops put the bright band along the bottom of the screen where the texture carries it at the top -
+  // `night/10` runs (216, 146, 0) at its top edge to (5, 0, 0) at its bottom, and the console draws that the other
+  // way up. The day textures are nearly uniform top to bottom, which is why only the night ones give it away.
+  // Mirroring the fitted angle's vertical component stores every record the way the screen shows it.
+  function screenOriented(table) {
+    const out = {};
+    Object.keys(table).forEach(function (key) {
+      out[key] = {
+        angleDeg: -table[key].angleDeg,
+        colorStart: table[key].colorStart.slice(),
+        colorEnd: table[key].colorEnd.slice(),
+      };
+    });
+    return out;
+  }
+
+  const day = screenOriented(window.BG_GRADIENT_PRESETS_DAY || {});
+  const night = screenOriented(window.BG_GRADIENT_PRESETS_NIGHT || {});
   const monthKeys = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
 
   const merged = {

@@ -48,6 +48,18 @@ walk was on that evening. So in that screen the backdrop has no month texture in
 colour is the corner colours. `back_colours0` keeps being fed fresh uniforms in the same
 savestate, so memory alone does not say it stopped running - the screen does.
 
+## The textures are drawn upside down
+
+`night/10` runs from (216, 146, 0) along its top edge to (5, 0, 0) along its bottom, and the
+console puts that bright band along the **bottom** of the screen: the screenshots of 23 September
+at 21:07, 23 October at 01:31 and 24 September at 22:00 all show black at the top warming to an
+orange glow at the bottom. psdevwiki's `Lines.qrc` page says the same. The day textures are nearly
+uniform top to bottom - `rgb/09` goes 202 to 207 - which is why only the night ones give it away.
+
+`background-gradients-day.js` therefore mirrors every fitted record's vertical component as it
+builds the presets, so the tables stay as the `dds/` tool fitted them and what the page draws is
+what the screen shows.
+
 ## Two months are resident, never one
 
 The RSX frame capture of 21 September holds exactly `rgb/09`, `rgb/10`, `night/09` and `night/10`
