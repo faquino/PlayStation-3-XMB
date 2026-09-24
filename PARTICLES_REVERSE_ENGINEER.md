@@ -98,6 +98,45 @@ Each `override/<theme>/PARTICLES.mnu` is a complete parameter set. Differences f
 | `gameboot3/4` | 19 changes, including `delta time` 0.08; `gameboot4` also sets `global alpha` 0 |
 | `welcome_1/2` | 31 changes, including `emit per frame` 70.5765 |
 
+**The numbering is a sequence, not a duplicate.** `welcome_1` and `welcome_2` carry the same
+`PARTICLES.mnu`, and so do `coldboot1` and `coldboot2`, which is why only one of each is in
+`particles-themes.js` - but their other three files differ, so the console is walking a chain of
+stages. `welcome_1` opens at a 158.7 degree field of view with a corner colour of (0.34, 1.16,
+10); `welcome_2` closes at 81.24 with (0.12, 6.24, 8.93). Both run `EXPOSURE` 3.404 against the
+base 1.05. `gameboot1` to `gameboot5` walk from a white corner through two black stages - the
+third and fourth being the ones that touch the particles, the fourth with `global alpha` 0 -
+and back out to white.
+
+### Telling the sets apart in a capture
+
+Since a capture carries the corner colours as vertex constants and the particles' `glare` inside
+the microcode, these four numbers name the set on screen, or the pair being crossfaded:
+
+| Set | corner 1 | corner 4 | `FOVY` | `COLOUR SHADER` | `EXPOSURE` | `glare` |
+|---|---|---|---|---|---|---|
+| base | 1, 1, 1 | 0.925, 0.923, 0.923 | 71.85 | 0 | 1.05 | 0.159705 |
+| `yoake` | = base | = base | 71.85 | 0 | 1.1 | 0.180536 |
+| `day` | = base | = base | 71.85 | 0 | 1.05 | 0.201367 |
+| `higure` | = base | = base | 71.85 | 0 | 1.2 | 0.18748 |
+| `night` | = base | = base | 71.85 | 0 | 1.41 | 0.159705 |
+| `music_1` | 0.579, 0.435, 0.472 | 0.5, 0, 0.5 | 83.2 | 1 | 1.51 | 0.201367 |
+| `black` | 0, 0, 0 | 0, 0, 0 | 72 | 0 | 1.41 | 0.201367 |
+| `bright` | = base | 0.925, 0.924, 0.924 | 71.85 | 0 | 1.356 | - |
+| `initial_setting` | 0, 0, 0 | 1, 0.9995, 0.9995 | 72 | 0 | 1.41 | - |
+| `coldboot1` | 0.0021 grey | 0, 0, 0 | 71.8 | 0 | 1.64 | 0.201367 |
+| `coldboot2` | = base | = base | 71.85 | 0 | 1.05 | 0.201367 |
+| `gameboot1` | 0.0021, 0.0022, 0.0023 | 1.012, 0.952, 0.968 | 71.93 | 0 | 1.392 | - |
+| `gameboot2` | 0.8, 0.8, 0.8 | 0, 0, 0 | 72 | 0 | 1.41 | - |
+| `gameboot3` | 0, 0, 0 | 0, 0, 0 | 72 | 0 | 1 | 0.423566 |
+| `gameboot4` | 0, 0, 0 | 0, 0, 0 | 72 | 0 | 1.41 | 0.423566 |
+| `gameboot5` | 0, 0, 0 | 1, 0.9995, 0.9995 | 72 | 0 | 1.41 | - |
+| `welcome_1` | 0.343, 1.157, 10 | 0.775, 1.814, 0.697 | 158.7 | 1 | 3.404 | 0.222198 |
+| `welcome_2` | 0.123, 6.237, 8.927 | 0.228, 2.143, 10 | 81.24 | 1 | 3.404 | 0.222198 |
+
+The day-cycle sets share the base backdrop, so only `glare` separates them - which is what the
+cycle was measured with. Everything else has a corner colour of its own, and the two `welcome`
+stages are unmistakable: no other set puts a colour above 1, let alone at 10.
+
 **Verified: overrides apply at run time.** The glare value the XMB fed `particles_second`
 was 0.201367, an override value rather than the base 0.159705.
 

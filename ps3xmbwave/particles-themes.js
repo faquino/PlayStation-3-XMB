@@ -2,8 +2,10 @@
 // Theme parameter sets: how each firmware override/<theme>/PARTICLES.mnu differs from the base one, plus the blend
 // that walks the day. Read at load time by `particles-settings.js`, applied from `index.html`.
 
-// Sets that are duplicates of another are left out: welcome_2 equals welcome_1, coldboot2 equals coldboot1, and
-// gameboot4 is gameboot3 with `global alpha` 0, like black is music with it.
+// Only the particle side is here, and on that side some numbered sets repeat: welcome_2's particles equal
+// welcome_1's, coldboot2's equal coldboot1's, and gameboot4 is gameboot3 with `global alpha` 0, like black is music
+// with it - so the repeats are left out. The numbering is a sequence, not a duplicate: those sets differ from each
+// other in `BACKGROUND.mnu` and `HDR.mnu`, which this file does not carry.
 window.PARTICLE_THEMES = {
   yoake: { farFocus: 12.0064, farFocusDist: 4.02735, glare: 0.180536 },
   day: { sizeMiddle: 0.0464771, farFocus: 12.2008, farFocusDist: 4.02735, glare: 0.201367 },
