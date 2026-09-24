@@ -142,6 +142,21 @@ neither the boot sequence nor the return from it can be captured there. Every va
 sets is already read out of the `.mnu` files; what stays unknown is the order the five stages
 run in and how long each takes.
 
+**The first-run wizard does not run this scene at all.** Removing `dev_flash2` and `dev_flash3`
+brings the wizard up (renaming the user profile does not - the XMB starts as if nothing
+happened), and eight captures taken across it, from 19:31:30 to 19:34:26, have no wave, no
+particles and no backdrop draw between them: 10 to 47 draws each, all the wizard's own. So
+whatever `override/initial_setting` configures, it is not those screens. And when the XMB
+finally comes up afterwards it is the same opening as ever - `coldboot1` into the cycle's set,
+a third independent sighting, at 0.474, 0.890 and 0.99995 with 436, 1585 and 2042 particles in
+the air. No `welcome` in any of it.
+
+That leaves `welcome_1` and `welcome_2` unplaced, and suggests where they are: RPCS3 skips the
+console's own cold-boot intro, and those two sets read like it - a 158.7 degree field of view
+closing to 81.24, exposure at 3.404, colour channels at 10 where nothing else goes past 1. A
+white flash opening into the machine. `coldboot1` would then be the tail of that same sequence,
+the part the XMB itself draws, which is exactly where we keep finding it.
+
 **A capture inside the saved-data utility rules that screen out.** Its corner colours are the
 base ones to the last digit and its `glare` is the cycle's, so the utility does not change the
 parameter set at all: the way it dims the XMB's icons and defocuses the backdrop happens
@@ -151,7 +166,11 @@ twelve Gaussian passes in both, so the extra ones are the utility's own.
 That capture did leave something, though: taken at 19:00:49, 49 seconds into the dusk-into-night
 window, it reads `glare` 0.187479 where the cycle predicts 0.1874790. The window had turned over
 one part in thirty thousand of its length and the value had already moved by one part in a
-million, in the right direction.
+million, in the right direction. The wizard captures land another of those: at 19:34:54, 0.185898
+against a predicted 0.1858885.
+
+`tools/re/whichset.py` does this matching, for any capture: it fits the four corner colours
+against every pair of sets and reads the particles' `glare` beside them.
 
 ### Telling the sets apart in a capture
 
