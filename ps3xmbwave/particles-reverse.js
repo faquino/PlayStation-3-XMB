@@ -385,9 +385,10 @@
 
       // Icon steps act as D-pad presses. A savestate taken while navigating the XMB shows the field turned about y
       // by 1.84e-5, a sixth of `dpad rot max`, and the noise raised to `brownian`, both of them on their way down.
-      // Which way it turns is modelled, not measured, and the rule is that the particles follow the icons: the XMB
-      // scrolls them against the key, so a step to the right sweeps them left, the way the wind blows them up for a
-      // step down. Two captures, one holding left and one holding right, would settle the sign by the quaternion.
+      // Which way it turns is measured: four captures, two taken holding right and two holding left, carry the
+      // field's rotation as +2.09e-5 and +2.16e-5 against -2.05e-5 and -2.23e-5. Right is positive, which is the
+      // rule the wind already followed - the particles go the way the icons go, and the XMB scrolls those against
+      // the key. It also dates the savestate taken while navigating, whose +1.84e-5 was a step to the right.
       // Only one axis drives each: `dpad scale y` is 0 in the firmware and `icon wind scl x` is 0, so sideways
       // navigation turns the field and nothing else, and vertical navigation blows and nothing else.
       if (ev.stepsX || ev.stepsY) {
