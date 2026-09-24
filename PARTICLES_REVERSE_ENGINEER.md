@@ -1,7 +1,7 @@
 # PlayStation 3 XMB particles: reverse engineering notes
 
-Work in progress, on the `particles-reeng` branch. The goal is a faithful reimplementation
-of the XMB sparkles, including how they react to the Sixaxis and to icon navigation.
+The goal is a faithful reimplementation of the XMB sparkles, including how they react to the
+Sixaxis and to icon navigation. What is still open is listed under [Still missing](#still-missing).
 
 Everything here comes from firmware 4.93 as installed in RPCS3, analysed with the tools in
 [`tools/re/`](tools/re/README.md). **Verified** means checked against the firmware files or
@@ -641,13 +641,20 @@ The next section reads the parameter block out of memory, which settles what fil
 PS3's memory. The file is zstd-compressed around a `RPCS3SAV` stream, so Python's
 `compression.zstd` opens it. Searching the 55 MB for `_LifeBounds` as a float triple, and
 for the time step as three equal floats followed by 1, finds the block four times: twice
-in main memory, at `0x200de600` and 768 bytes later, and twice inside the local store of
-an SPU thread, where the task keeps it at `0xab80`.
+in main memory, one after the other, and twice inside the local store of an SPU thread,
+where the task receives it at `0xb200`.
 
-**The structure is 768 bytes, and the task DMAs three of them.** That is what the two
-bases in the disassembly meant: the force and the drag are at `+0` and `+16` of the third
-structure, which sits 1536 bytes after the start of the transfer, and every other offset
-traced earlier is that same structure's.
+**The block is the task's whole 2304-byte transfer, and the savestate stores it shorter.**
+A savestate leaves out every 128-byte line of memory that is entirely zero, and the
+transfer has twelve of them between the drag and the rest - an empty flow grid, below - so
+the savestate holds 768 of its bytes. A frame capture keeps memory whole, and there the
+transfer is laid out exactly as the disassembly reads it: the force and the drag at +0 and
++16, the flow grid from +128, everything else from +1792. Dropping the all-zero lines from
+a capture's transfer gives the savestate's layout byte for byte, at rest and while
+navigating. The offsets below are a resting savestate's: past the drag, the transfer's are
+1536 higher, which is how the task's own `P+2048` and the rest address them. This replaces an
+earlier reading, that the task DMAs three 768-byte structures and takes its force from the
+head of the third: that head is zero in every capture.
 
 | Offset | Field | In the savestate | Source |
 |---|---|---|---|
@@ -655,7 +662,7 @@ traced earlier is that same structure's.
 | 16 | drag | (0.030551, 0.030551, 0.030551, 0) | `friction` |
 | 256 | M2, grid vector to world | diag(15.9546, 8.97447, 1), translation (-7.9773, -4.48723, -7) | |
 | 320 | M1, world to grid | its exact inverse | |
-| 384 | flow grid descriptor | pointer to the matrices at 256, then 32 and 16 | |
+| 384 | flow grid descriptor | a pointer, then 32 and 16 | the task points it at the grid, P+128 |
 | 400, 448 | the same size as floats, then 32, 16, 31, 15 | | |
 | 512, 528 | `_LifeBoundsMin` / `Max` | (-10, -10, -12) / (10, 10, 7) | not in any `.mnu` |
 | 560 | field centre | the origin | |
@@ -679,10 +686,10 @@ Reading that block settles several things:
   field of view. That is the median depth of the captured particles: the grid is the
   screen, at the particles' own distance.
 
-Two things the block does not answer: where the grid's data lives, since the descriptor
-points at the matrices rather than at an array, and why `size middle` sits next to the
-spin rate. The head of the 2304-byte transfer is recycled heap, still holding strings from
-whatever used the memory before, so the task reads nothing there.
+One thing the block does not answer: why `size middle` sits next to the spin rate. The
+grid's data, which it seemed not to hold, is the twelve lines the savestate leaves out - see
+[The flow grid](#the-flow-grid). The strings between the fields are recycled heap, left
+from whatever used the memory before, in slots the task never reads.
 
 ### What the controller does to the block
 
@@ -693,7 +700,7 @@ one while the XMB was being navigated sideways, against the one at rest:
 |---|---|---|---|---|
 | at rest | -6.8e-05 | 0.030551 | 0 | 0.225311, `brownian scale` itself |
 | shaking | -6.8e-05 | 0.030551 | 1.9e-07 | 1.493472, 6.63 times it |
-| navigating | 0 | 0 | 1.843731e-05 | 0.719822, 3.19 times it |
+| navigating | -6.8e-05 | 0.030551 | 1.843731e-05 | 0.719822, 3.19 times it |
 
 - **Both raise the noise, and `rshake brw` alone accounts for it.** At
   `brownian scale` × (1 + `rshake brw` × level) the two states put the level at 0.75 and
@@ -703,8 +710,9 @@ one while the XMB was being navigated sideways, against the one at rest:
   quaternion.** While navigating, the matrix at +576 carries ∓1.843731e-05 in its x-z
   corners, the same number the slot holds: a small-angle rotation about y, by a sixth of
   `dpad rot max`. Shaking left it a hundred times smaller, so a shake is mostly noise.
-- **Navigating showed the force and the drag at zero**, which one sample cannot explain.
-  `ps3xmbwave/` does not copy that.
+- **Navigating leaves the force and the drag alone.** A first reading of this savestate
+  put both at zero; that was the savestate's layout, not the block - see
+  [Navigating does not clear the force and the drag](#navigating-does-not-clear-the-force-and-the-drag).
 
 The implementation now follows the two measured numbers: an icon step raises the level to
 `brownian` and turns the field about y, and 0.4 s later it reaches 3.17 times the base
@@ -884,7 +892,9 @@ emissions a frame, simply keeps it that way.
   force, and the agitation level, which multiplies the noise scale by
   (1 + `rshake brw` × level).
 - **Flow grid.** Its 32 × 16 size and its two matrices are the firmware's; what the nodes
-  hold is not, since the block only points at the matrices.
+  hold is not. The console's grid is empty at rest and carries the icon wind while
+  navigating - see [The flow grid](#the-flow-grid) - where this one carries the wave's
+  velocity all the time.
   - Each node takes the wave's nearby velocity, with Gaussian weights of radius 1.5, so
     the flow fades where the wave is far, and is divided by the grid's own scale so that
     M2 hands the task back a world velocity.
@@ -895,10 +905,13 @@ emissions a frame, simply keeps it that way.
     to `dpad rot max` per frame, scaled by `dpad scale x`. A vertical one pitches it,
     scaled by `dpad scale y` (0). The rate decays by 0.85 per frame.
   - The icons' scroll velocity pushes particles along y, as `icon wind` × `icon wind scl y`.
-  - **Each axis drives one thing and only one.** `dpad scale y` is 0 and `icon wind scl x` is
-    0, both from the firmware, so navigating sideways turns the field and raises no wind, and
-    navigating up or down raises wind and turns nothing. That is why the two feel unalike: a
-    sweep of the whole field against a force that builds up.
+  - **Here, each axis drives one thing and only one.** `dpad scale y` is 0 and `icon wind scl
+    x` is 0, both from the firmware, so the implementation has navigating sideways turn the
+    field and raise no wind, and navigating up or down raise wind and turn nothing. The
+    console does not split them that way: sideways navigation also writes vertical wind into
+    the flow grid, along the row of icons - see [The flow grid](#the-flow-grid) - so `icon
+    wind scl x` being 0 means the wind has no x, not that sideways moves raise none. The
+    implementation keeps its split until it knows how the grid's bytes scale.
   - **Which way the field turns is measured.** Four captures, two taken holding right and two
     holding left, carry the rotation at +2.09e-5 and +2.16e-5 against -2.05e-5 and -2.23e-5:
     right is positive. With the particles six and a half units beyond the centre of the turn,
@@ -906,8 +919,9 @@ emissions a frame, simply keeps it that way.
     It also dates the savestate taken while navigating: its +1.84e-5 was a step to the right.
     Headless, holding a direction for two seconds moves the drawn particles' mean by -2.89 in
     x for right and +2.96 for left, +5.73 in y for down and -5.81 for up.
-  - The vertical sign stays modelled: `dpad scale y` is 0, so nothing in the block moves when
-    the selection goes up or down. Only the wind does, and the block does not carry it.
+  - The vertical sign stays modelled: `dpad scale y` is 0, so the field does not turn when the
+    selection goes up or down. Only the wind moves, through the flow grid, and no capture has
+    settled its sign for up and down yet.
   - The accelerometer is tested as hypot(`dshake x coeff` × a_x, `dshake g coeff` × a_y)
     against `dshake thresh`. Above it, two things happen:
     - the field is stirred about y, the axis the savestates show, at up to
@@ -953,9 +967,10 @@ Known differences:
   the pool barely moves, 0.349 against 0.366, and at half gain not at all; with the **noise**
   at zero the median lands on 0.269, against the console's 0.262, and the z spread vanishes
   altogether - every bit of it is noise. So the flow is not the suspect it looked like, and
-  the modelled grid's contents matter less for what is on screen than the notes assumed. That
-  is about our flow, though: it is built by sampling this wave's velocity at a small gain, so
-  a real field could still be much stronger than ours.
+  the modelled grid's contents matter less for what is on screen than the notes assumed. And
+  the console's own flow turns out to be zero at rest - its grid is empty unless the icons
+  move, see [The flow grid](#the-flow-grid) - so the faithful setting is ours switched off,
+  which takes the median to 0.349: closer, but far from 0.262.
 
   The noise's own magnitude is not in question - `brownian scale` is read from the block - so
   what differs is how it lands. **The ordering is confirmed on the console**: taking each live
@@ -1066,20 +1081,28 @@ to. The median is 0.002435, not the 0.002852 of a uniform draw, because slow par
 longer and a snapshot over-counts them: for a 1/rate weighting the median is the geometric mean,
 sqrt(0.001446 x 0.004259) = 0.002482, and that is what is there.
 
-## Navigating clears the force and the drag
+## Navigating does not clear the force and the drag
 
-**Measured** across nine savestates. Eight have the field's rotation matrix at the identity, and
-every one of them carries the same force (0, -6.8e-05, 0, 1) and drag 0.030551. The ninth, taken
-while the XMB was being navigated sideways, is the only one whose field is turned - and it is the
-only one whose force and drag are zero. Not the gravity alone: all thirty-two bytes, including
-the force's w, which the task never reads. They are cleared wholesale rather than computed, and
-only while the field turns. Whatever does the clearing is still untraced, but the correlation is
-what the question needed: the navigation branch suppresses gravity and damping so that the
-field's rotation carries the particles undamped.
+**Verified**, correcting an earlier reading of the savestates. The task takes the force and the
+drag from the head of its transfer - `FUN_00004388` loads P+0 and clears its w, `lqd r82,16(r87)`
+loads P+16 - and all 21 frame captures that hold the transfer carry (0, -6.8e-05, 0, 1) and
+0.030551 there. The four taken holding right and left are among them, with the field turned by
+±2.1e-5 and the noise at three times its rest.
 
-## The flow grid descriptor, decoded
+The zeros came from the savestate's layout. Anchored on the life bounds, the force and the drag
+were read 512 bytes before them, which is where they sit once the savestate has left out the
+twelve empty lines of the flow grid. In the savestate taken while navigating, one of those lines
+is not empty, so the file keeps it and everything after it lands 128 bytes further on: the force
+and the drag are there, intact, 640 bytes before the bounds, and the read at 512 fell on the
+first zeros of the grid's line. The line reads as row 11, the row the four navigation captures
+show being written.
 
-The descriptor at the structure's +384 reads, in the resting savestate:
+The implementation never copied the clearing, and stays as it is.
+
+## The flow grid
+
+The descriptor sits at the savestate's +384, the transfer's +1920, and reads, in the resting
+savestate:
 
 | Offset | Bytes | Meaning |
 |---|---|---|
@@ -1088,14 +1111,43 @@ The descriptor at the structure's +384 reads, in the resting savestate:
 | +416, +432 | (0, 0, 1, 0), (0, 1, 1, 1) | |
 | +448 | 32, 16, 31, 15 | the size again, and the last index of each axis |
 
-The pointer differs between the copies - `0x200de700` in main memory, `0x0000b280` in the two
-SPU local stores - and in both it is that structure's own base plus 256, which is where M2 sits.
-So the descriptor points at the matrices, not at an array of vectors, and where the grid's own
-data lives is still open. Finding one's way around the local store is at least solved: searching
-a savestate for 64 bytes of `particles.elf` at a known vaddr finds all three copies of the task
-and gives each local store's base in the file, and from there any LS address is one addition
-away. That is how the parameter structure turned out to sit at LS 0xb180, with the 2304-byte
-transfer starting at 0xab80.
+**Verified: the grid is inside the transfer, at P+128.** The update hands the sampler P+128
+as the grid, and the sampler writes that address into the descriptor's pointer before it
+reads anything (`FUN_00006b48`, `0x6b5c`-`0x6b70`), which is why the copies in local store read
+`0xb280`: `0xb200` + 128. At three bytes a cell, 32 × 16 cells run from there to P+1664 -
+exactly the twelve lines - and the captures bear that reading out.
+
+**Measured: the grid is empty at rest, and navigating writes it.** In sixteen of the 21
+captures that hold the transfer all 1536 bytes are zero, so at rest the flow adds nothing on
+the console. The other five hold 70 non-zero bytes between them, and every one is the second
+byte of a cell - y, read as a signed byte:
+
+| Capture | Cells written | Values |
+|---|---|---|
+| holding right, twice | row 11, columns 0 to 14 | negative, growing to -23 and -33, then positive from +20 and +25 up to +53 and +59 |
+| holding left, twice | row 11, columns 4 to 16 or 17 | positive, from +55 and +57 down to +27 and +24, then negative from -31 and -32 down to -2 and -3 |
+| the first of the three that caught the change to music | columns 6 and 7 in rows 4 to 6 and 13 to 15, and five cells in rows 11 and 12 | -7 to +56 |
+
+The savestate taken while navigating keeps one line of the grid, and it reads as the same row,
+with -1 to -8 and then +4 to +46: a step to the right, as its rotation says.
+
+**Inferred: it is the icon wind.** Only y is ever written, which is what `icon wind scl x` 0
+and `icon wind scl y` 1 ask for. Row 11 of 16 is about a quarter of the way down the screen at
+the grid's depth, where the XMB's row of category icons is, and columns 6 and 7 of 32 are a
+fifth of the way across, about where the selected category's items run down the screen. So the
+wind is local - the grid carries it to where the icons move - rather than a force on every
+particle.
+
+Still open: how the sampler turns a byte into a velocity (`FUN_000068e0` and what it calls),
+and the PPU code that writes the cells.
+
+Finding one's way around a savestate's local store takes one correction. Searching for 64 bytes
+of `particles.elf` at a known vaddr finds the copies of the task and gives each local store's
+base in the file, and code and read-only data sit at that base plus their address; but every
+all-zero line the file leaves out brings what follows 128 bytes closer. The task's own data
+already sits 128 bytes early - the pointers its start-up stores at `0xb080` and `0xb180` read at
+`0xb000` and `0xb100` - which is what once put the block at `0xb180` instead of the `0xb200` the
+code loads it into.
 
 ## Still missing
 
@@ -1103,9 +1155,9 @@ The implementation models both of these:
 
 - Emission: the code that writes new particles into free slots. What it produces is now
   measured from the pool, above, but not where it comes from.
-- What the flow grid holds, and the code that fills the parameter block each frame. The
-  descriptor is decoded, above; its pointer leads to the matrices rather than to an array,
-  so the data is somewhere else.
+- The code that fills the parameter block each frame, the flow grid's cells among it. Where
+  the grid lives and when it is written are measured, above; how a byte scales into a velocity
+  is not, and the implementation still builds its grid from the wave.
 
 Also missing:
 

@@ -64,25 +64,24 @@
     };
   }
 
-  // The task's parameter structure, 768 bytes, read whole out of an RPCS3 savestate: the offsets and the values at
-  // them are verified. The task DMAs three of these and works on the last, which is why the traced offsets of the
-  // force and the drag sit 1536 bytes below the rest.
+  // The task's parameter block, the 2304 bytes it DMAs in every frame, read whole out of RPCS3 frame captures: the
+  // offsets and the values at them are verified. A savestate stores it shorter, as it leaves out all-zero lines.
   function createParams() {
     return {
-      force: new Float32Array(4), // +0, in the savestate (0, gravity, 0, 1)
+      force: new Float32Array(4), // +0, (0, gravity, 0, 1)
       drag: new Float32Array(4), // +16, (friction, friction, friction, 0)
-      fromGrid: new Float32Array(16), // +256, M2: grid vector -> world
-      toGrid: new Float32Array(16), // +320, M1: world -> normalised grid coordinates
-      grid: new Float32Array(GRID_W * GRID_H * 4), // described at +384: 32 x 16, data elsewhere (see the notes)
-      boundsMin: new Float32Array(LIFE_MIN), // +512
-      boundsMax: new Float32Array(LIFE_MAX), // +528
-      fieldCentre: new Float32Array(FIELD_CENTRE), // +560
-      fieldQuat: new Float32Array([0, 0, 0, 1]), // +640, turned into the matrix at +576 by the task
-      noiseOffset: new Float32Array(4), // +656
-      flowStrength: 0, // +672, 1 in the savestate
-      noiseScale: 0, // +676, `brownian scale` unchanged
-      spinRate: 0, // +684, `spin time scale`
-      dt: new Float32Array(4), // +688, (delta time x 3, 1)
+      grid: new Float32Array(GRID_W * GRID_H * 4), // +128: on the console 32 x 16 cells of three signed bytes
+      fromGrid: new Float32Array(16), // +1792, M2: grid vector -> world
+      toGrid: new Float32Array(16), // +1856, M1: world -> normalised grid coordinates
+      boundsMin: new Float32Array(LIFE_MIN), // +2048
+      boundsMax: new Float32Array(LIFE_MAX), // +2064
+      fieldCentre: new Float32Array(FIELD_CENTRE), // +2096
+      fieldQuat: new Float32Array([0, 0, 0, 1]), // +2176, turned into the matrix at +2112 by the task
+      noiseOffset: new Float32Array(4), // +2192
+      flowStrength: 0, // +2208, 1 in the captures
+      noiseScale: 0, // +2212, `brownian scale` unchanged
+      spinRate: 0, // +2220, `spin time scale`
+      dt: new Float32Array(4), // +2224, (delta time x 3, 1)
     };
   }
 
@@ -297,6 +296,8 @@
     }
 
     // --- Flow grid: the two matrices are verified, what the grid holds is modelled ------------------------------
+    // The console's grid is empty at rest and carries the icon wind while navigating (see the notes); this one is
+    // built from the wave until the scale of the console's bytes is known.
     // The grid covers what the camera sees at a depth of 9, in normalised coordinates. The wave's own velocity
     // goes into it, scaled into grid space so that M2 brings it back to world units, with Gaussian weights that
     // fade the flow away from the wave.

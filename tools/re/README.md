@@ -14,6 +14,7 @@ Extracted firmware assets must never be committed.
 | `rrc.py` | Reads RPCS3 RSX frame captures (`captures/*.rrc.gz`, Alt+C in the emulator): the draw calls of one frame, the vertex constants at each draw, and each draw's vertex buffers, decoded to CSV. |
 | `ppu_prx.py` | Loads decrypted PPU modules (PRX or executable), applies PRX relocations, finds the TOC, and disassembles with capstone. Also finds immediates, the code that reaches an address, and the callers of each named import. Needs `pip install capstone`. |
 | `whichset.py` | Names the parameter set an RSX capture was taken under, or the pair it was crossfading and how far along, by fitting the backdrop's four corner colours against every `override/`. Reads the particles' live `glare` from the same capture. |
+| `readblock.py` | Reads the particle task's 2304-byte parameter block out of RSX captures, at the offsets the task reads it: force, drag, the field's rotation, the noise scale, and the flow grid's non-empty cells. |
 | `nids.py` | Computes PS3 function NIDs from names and names a module's imports. |
 
 ## Typical workflow
@@ -61,14 +62,18 @@ savestate of the running XMB tends to leave RPCS3 stuck and needing to be killed
 Alt+C writes its capture and carries on. The capture holds the fragment microcode with the
 same patched slots, so the reader above works on it unchanged - the particles' live `glare`
 and the backdrop's `_MonthTime` both came back out of one - and `rrc.py` reads the vertex
-constants beside it. Reach for a savestate only when main memory itself is what you need:
-the particle pool, the 768-byte parameter block, anything `readblock.py` walks.
+constants beside it. Reach for a savestate only when main memory itself is what you need, like
+the particle pool.
 
-A capture also holds **the particle parameter block**, which was read out of savestates until it
-turned up there: search the decompressed capture for the life bounds the way `readblock.py` does.
-Captures accumulate, each one carrying the blocks of those before it, so a single capture gives a
-handful of recent values without saying which is current - take two and the new one is the one the
-earlier capture does not have.
+**A savestate leaves out every 128-byte line of memory that is entirely zero.** Values read
+right, but a distance measured across empty memory comes out 128 bytes short for each line left
+out - which is how the particle parameter block once read as a 768-byte structure, and how its
+force once read as zero. Measure layouts in a capture, which keeps memory whole.
+
+A capture also holds **the particle parameter block**, whole: `readblock.py` finds it by its life
+bounds and reads it at the task's own offsets, the flow grid included. Captures accumulate, each one
+carrying the blocks of those before it, so a single capture gives a handful of recent values - the
+one its own memory map points at is current, and `readblock.py` marks the rest as old.
 
 A capture also holds the wave's finished geometry, which is worth knowing before the wave's
 own pass: `draws --vpo .../lines1.vpo` finds it (draw 4 in every capture so far, 16384
