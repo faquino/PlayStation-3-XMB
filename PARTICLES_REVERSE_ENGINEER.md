@@ -1004,7 +1004,13 @@ Known differences:
     the console's 0.23.
   - **The allocation pattern.** Neighbouring live slots differ in life by 0.339 on the console
     and 0.341 here, where unrelated lives would give 0.333, so both scatter their slots the
-    same way.
+    same way. Handing out a random free slot instead of the top of the stack lands the
+    correlation almost exactly on the console's, +0.133 / +0.101 / +0.174, and still leaves the
+    z velocity at 0.44 - so the correlation and the accumulated speed are not the same
+    question, and no discipline tried gets the speed down.
+  - **The drag being applied without the time step.** That would damp by 3.4% a step instead
+    of 0.03%, and the velocity would level off within a tenth of a life. Both curves above are
+    straight to the end, so neither does that.
 
   What is left is the one quantity a single snapshot cannot give: **how many particles renumber
   per frame**. That is what sets how long a particle keeps its vector, and the table above says
