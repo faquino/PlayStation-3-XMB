@@ -23,7 +23,7 @@ Each of the three folders also has its own `docker-compose.yml` (nginx, read-onl
 node tools/bench/particles.js --seconds 30 --runs 3 --seed 1
 ```
 
-The one bench there is: it runs the particle simulation headless over the spline layer's wave and prints its pool and its drawn particles beside the same measurements read off the console — a savestate's pool and two RSX frame captures. Use it before and after touching the modelled emitter. It needs no firmware.
+The one bench there is: it runs the particle simulation headless over the spline layer's wave and prints its pool and its drawn particles beside the same measurements read off the console — a savestate's pool and two RSX frame captures. Use it before and after touching the modelled emitter. It needs no firmware — the console's column is recorded inside it, and `tools/bench/pool-from-savestate.py` regenerates that column from a savestate if a better one turns up.
 
 **There is no build step, no test suite, and no working lint setup.** Both tool scripts glob only the repo root: `npm run lint` (`eslint *.js`) matches no files and there is no eslint config, and `npm run format` (`prettier --write *.js *.html *.md`) only ever rewrites the root Markdown files (`README.md`, `SPLINE_REVERSE_ENGINEER.md`, this file) — it never reaches `ps3xmbwave/` or `dds/`. Don't rely on either as a verification gate. Verification is visual: serve the repo and look at the canvas, plus the browser console for shader compile/link errors (both renderers throw on failure).
 
