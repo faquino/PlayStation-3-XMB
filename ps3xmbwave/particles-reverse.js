@@ -468,7 +468,10 @@
       const speed = S.emitVelMin + S.emitVelVar * rng();
       vx += (tx * cp + bx * sp + nx * cosT) * speed;
       vy += (ty * cp + by * sp + ny * cosT) * speed;
-      vz += (tz * cp + bz * sp + nz * cosT) * speed * S.emitVelZscale;
+      vz += (tz * cp + bz * sp + nz * cosT) * speed;
+      // `emit vel zscale` scales the whole z of the emission velocity, the wave's own motion included: the console
+      // sets it to 0 and its pool is born on a plane, the z velocity within a thousandth of zero.
+      vz *= S.emitVelZscale;
 
       // Random orientation (Shoemake).
       const u1 = rng(), u2 = rng() * 2 * Math.PI, u3 = rng() * 2 * Math.PI;
