@@ -964,10 +964,18 @@ Known differences:
 
   **The churn does not explain the gap.** The idea was that a rank which changes often would
   average the drift away, so a console pool that churns faster than ours would end up slower.
-  The simulation's own correlation is of the same size - it peaks at +0.227, though at a shift
-  of about seven rather than zero, seven being one step's worth of births and deaths, so the
-  difference is in when a death renumbers the ranks rather than in how persistent the drift
-  is. Why the same scale of noise pushes our particles harder is still open.
+  It does not survive the measurement: across four thirty-second runs the simulation's own
+  correlation reads between +0.02 and +0.33, with its control anywhere from -0.03 to +0.23,
+  because the alignment slides with however many particles happened to die earlier in the last
+  sweep. The console's single reading sits inside that spread, so the two cannot be told apart
+  at this precision and nothing points at the churn.
+
+  Nor is it a scale error. Sweeping `brownian scale` down, the z spread matches the console's
+  at about 0.75 of its value and the xy speeds at about 0.5, and no setting reproduces the
+  shape: the console's speeds run wider at both ends, from a 5th percentile of 0.081 that we
+  never reach down to to a 95th of 0.517, while ours sit narrower and higher. Since the scale
+  itself is read from the block, fitting it would be tuning a traced number to hide something
+  else. Why the same noise pushes our particles harder is still open.
 - **About a tenth too many on screen**, and that has not moved with any emission change so
   far.
 - **The captured particles are denser on the left.** The captured wave runs further left

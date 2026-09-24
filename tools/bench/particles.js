@@ -7,7 +7,10 @@
 // two frames - but a change to the modelled emitter should move the simulation towards it and must not move the
 // drawn metrics away. PARTICLES_REVERSE_ENGINEER.md records where each reference number comes from.
 //
-// Usage: node tools/bench/particles.js [--seconds 30] [--runs 3] [--seed 1]
+// Usage: node tools/bench/particles.js [--seconds 30] [--runs 3] [--seed 1] [--terms]
+//
+// --terms runs the pool again with each modelled force switched off, which is how the noise turned out to be what
+// keeps the particles fast late in life, and the flow to be nearly irrelevant at the gain we give it.
 
 const fs = require('fs');
 const path = require('path');
@@ -20,6 +23,8 @@ const FILES = ['background-gradients-night.js', 'background-gradients-day.js', '
 
 const ASPECT = 16 / 9;
 const STEP_HZ = 60;
+// The task's three noise generators, reseeded every frame, so the k-th live particle always draws the k-th vector.
+const NOISE_SEEDS = [0x98756161 | 0, 0x21324889 | 0, 0x82181158 | 0];
 const WAVE_GRID = 100; // the mesh spline.js draws
 const BINS = 50;
 
@@ -29,6 +34,7 @@ const CONSOLE = {
   aging: '0.001447 / 0.002435 / 0.004256',
   young: { depth: '7.57 / 8.55 / 9.07', vz: '-0.0112 / +0.0001 / +0.0078', vxy: '0.156 / 0.276 / 0.348' },
   old: { depth: '7.41 / 8.40 / 9.32', vz: '-0.2501 / -0.0014 / +0.2337', vxy: '0.081 / 0.262 / 0.517' },
+  noiseCorr: '+0.128 / +0.111 / +0.193 (ctl +0.043)',
   onScreen: '1437, 1417',
   opaque: '92%, 92%',
   depth: '8.92, 8.49',
@@ -42,6 +48,34 @@ function loadModules() {
     // An indirect eval keeps the files at global scope; a vm context makes their global lookups ~30x slower.
     (0, eval)(fs.readFileSync(path.join(DIR, file), 'utf8'));
   }
+}
+
+// The k-th draw of one of the task's generators, for k = 0 .. n-1.
+function noiseSeries(seed, n) {
+  const f32 = new Float32Array(1);
+  const u32 = new Uint32Array(f32.buffer);
+  const out = new Float64Array(n);
+  let s = seed | 0;
+  for (let i = 0; i < n; i++) {
+    s = Math.imul(s, 16807);
+    u32[0] = 0x40000000 | (s >>> 9);
+    out[i] = f32[0] - 3;
+  }
+  return out;
+}
+
+function correlation(a, b) {
+  const n = a.length;
+  let ma = 0, mb = 0;
+  for (let i = 0; i < n; i++) { ma += a[i]; mb += b[i]; }
+  ma /= n; mb /= n;
+  let sa = 0, sb = 0, sab = 0;
+  for (let i = 0; i < n; i++) {
+    sa += (a[i] - ma) * (a[i] - ma);
+    sb += (b[i] - mb) * (b[i] - mb);
+    sab += (a[i] - ma) * (b[i] - mb);
+  }
+  return sab / Math.sqrt(sa * sb);
 }
 
 function quantile(values, f) {
@@ -92,8 +126,23 @@ function poolMetrics(sys) {
     else if (life >= 0.5) bands.old.push(record);
   }
   const of = (rows, key, digits) => three(rows.map((r) => r[key]), digits);
+
+  // How long does a particle keep its drift? Rank the live ones in slot order, hand each the vector its rank would
+  // draw this frame, and see whether the velocities remember it. A control that shifts the series by one step's
+  // worth of births says how much of the answer is chance.
+  const vel = [[], [], []];
+  for (let i = 0; i < capacity; i++) {
+    const o = i * stride;
+    if (pool[o + 3] === free) continue;
+    for (let a = 0; a < 3; a++) vel[a].push(pool[o + 4 + a]);
+  }
+  const noiseCorr = NOISE_SEEDS.map((seed, a) => correlation(noiseSeries(seed, alive), vel[a]));
+  const control = correlation(noiseSeries(NOISE_SEEDS[0], alive + 7).slice(7), vel[0]);
+
   return {
     alive,
+    noiseCorr,
+    control,
     aging: [Math.min(...aging), quantile(aging, 0.5), Math.max(...aging)],
     young: { n: bands.young.length, depth: of(bands.young, 'depth', 2), vz: of(bands.young, 'vz', 4), vxy: of(bands.young, 'vxy', 3) },
     old: { n: bands.old.length, depth: of(bands.old, 'depth', 2), vz: of(bands.old, 'vz', 4), vxy: of(bands.old, 'vxy', 3) },
@@ -198,6 +247,23 @@ function main() {
   row('View depth', last.old.depth, CONSOLE.old.depth);
   row('Velocity z', last.old.vz, CONSOLE.old.vz);
   row('Velocity in xy', last.old.vxy, CONSOLE.old.vxy);
+  row('Velocity against its own noise draw',
+    last.noiseCorr.map((v) => (v >= 0 ? '+' : '') + v.toFixed(3)).join(' / ')
+    + ' (ctl ' + (last.control >= 0 ? '+' : '') + last.control.toFixed(3) + ')', CONSOLE.noiseCorr);
+
+  if (args.includes('--terms')) {
+    console.log('\nLate in life, with one modelled force switched off');
+    row('', 'speed in xy', 'velocity z');
+    const saved = Object.assign({}, window.PARTICLE_SETTINGS);
+    for (const [label, tweak] of [['everything on', {}], ['flow off', { flowStrength: 0 }],
+      ['noise off', { brownianScale: 0 }], ['both off', { flowStrength: 0, brownianScale: 0 }]]) {
+      Object.assign(window.PARTICLE_SETTINGS, saved, tweak);
+      const m = poolMetrics(simulate(seconds, Number.isNaN(seed) ? undefined : seed).sys);
+      row(label, m.old.vxy, m.old.vz);
+    }
+    Object.assign(window.PARTICLE_SETTINGS, saved);
+    row('the console', CONSOLE.old.vxy, CONSOLE.old.vz);
+  }
 
   console.log('\nWhat is drawn');
   row('', 'simulation', 'captures');
