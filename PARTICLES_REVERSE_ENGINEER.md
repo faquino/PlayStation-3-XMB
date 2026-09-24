@@ -893,6 +893,16 @@ emissions a frame, simply keeps it that way.
     to `dpad rot max` per frame, scaled by `dpad scale x`. A vertical one pitches it,
     scaled by `dpad scale y` (0). The rate decays by 0.85 per frame.
   - The icons' scroll velocity pushes particles along y, as `icon wind` × `icon wind scl y`.
+  - **Each axis drives one thing and only one.** `dpad scale y` is 0 and `icon wind scl x` is
+    0, both from the firmware, so navigating sideways turns the field and raises no wind, and
+    navigating up or down raises wind and turns nothing. That is why the two feel unalike: a
+    sweep of the whole field against a force that builds up.
+  - **Which way each one goes is modelled.** The rule taken is that the particles follow the
+    icons, and the XMB scrolls those against the key: a step right sends them left, a step
+    down sends them up. Headless, holding a direction for two seconds moves the drawn
+    particles' mean by -2.89 in x for right and +2.96 for left, +5.73 in y for down and -5.81
+    for up. Two captures, one holding left and one holding right, would put a measurement
+    under the sign, since the field quaternion changes sense between them.
   - The accelerometer is tested as hypot(`dshake x coeff` × a_x, `dshake g coeff` × a_y)
     against `dshake thresh`. Above it, two things happen:
     - the field is stirred about y, the axis the savestates show, at up to
