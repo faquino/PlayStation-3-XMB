@@ -897,12 +897,15 @@ emissions a frame, simply keeps it that way.
     0, both from the firmware, so navigating sideways turns the field and raises no wind, and
     navigating up or down raises wind and turns nothing. That is why the two feel unalike: a
     sweep of the whole field against a force that builds up.
-  - **Which way each one goes is modelled.** The rule taken is that the particles follow the
-    icons, and the XMB scrolls those against the key: a step right sends them left, a step
-    down sends them up. Headless, holding a direction for two seconds moves the drawn
-    particles' mean by -2.89 in x for right and +2.96 for left, +5.73 in y for down and -5.81
-    for up. Two captures, one holding left and one holding right, would put a measurement
-    under the sign, since the field quaternion changes sense between them.
+  - **Which way the field turns is measured.** Four captures, two taken holding right and two
+    holding left, carry the rotation at +2.09e-5 and +2.16e-5 against -2.05e-5 and -2.23e-5:
+    right is positive. With the particles six and a half units beyond the centre of the turn,
+    that sweeps them left - the way the icons go, which is the rule the wind already followed.
+    It also dates the savestate taken while navigating: its +1.84e-5 was a step to the right.
+    Headless, holding a direction for two seconds moves the drawn particles' mean by -2.89 in
+    x for right and +2.96 for left, +5.73 in y for down and -5.81 for up.
+  - The vertical sign stays modelled: `dpad scale y` is 0, so nothing in the block moves when
+    the selection goes up or down. Only the wind does, and the block does not carry it.
   - The accelerometer is tested as hypot(`dshake x coeff` × a_x, `dshake g coeff` × a_y)
     against `dshake thresh`. Above it, two things happen:
     - the field is stirred about y, the axis the savestates show, at up to

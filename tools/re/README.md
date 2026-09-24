@@ -64,6 +64,12 @@ and the backdrop's `_MonthTime` both came back out of one - and `rrc.py` reads t
 constants beside it. Reach for a savestate only when main memory itself is what you need:
 the particle pool, the 768-byte parameter block, anything `readblock.py` walks.
 
+A capture also holds **the particle parameter block**, which was read out of savestates until it
+turned up there: search the decompressed capture for the life bounds the way `readblock.py` does.
+Captures accumulate, each one carrying the blocks of those before it, so a single capture gives a
+handful of recent values without saying which is current - take two and the new one is the one the
+earlier capture does not have.
+
 A capture also holds the wave's finished geometry, which is worth knowing before the wave's
 own pass: `draws --vpo .../lines1.vpo` finds it (draw 4 in every capture so far, 16384
 vertices), and `buffer` writes position, uv and normal per vertex to CSV. That is the console's
