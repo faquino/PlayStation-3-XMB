@@ -931,16 +931,75 @@ Validating the disassembler against `spline.elf` turned up two errors in
 `SPLINE_REVERSE_ENGINEER.md`: the 1/6 constant and the kernel's per-iteration stride. Both
 are corrected there.
 
+## What the pool says about emission
+
+**Measured**, from the resting savestate's 2033 live particles, binned by how much life they
+have spent. Positions as the 5th, 50th and 95th percentile:
+
+| Life | n | x | y | z | vz |
+|---|---|---|---|---|---|
+| 0.00-0.01 | 17 | -9.86, -2.61, 4.70 | -1.17, -0.54, 0.66 | -7.23, -6.36, -5.56 | -0.002, 0.000, 0.001 |
+| 0.03-0.08 | 121 | -9.32, -2.18, 6.79 | -2.08, -0.30, 1.02 | -7.10, -6.54, -5.61 | -0.021, -0.003, 0.019 |
+| 0.20-0.50 | 590 | -9.52, -3.05, 8.42 | -1.73, -0.43, 0.82 | -7.09, -6.44, -5.58 | -0.111, -0.005, 0.097 |
+| 0.50-1.01 | 1026 | -9.50, -3.12, 7.54 | -1.90, -0.47, 1.07 | -7.33, -6.40, -5.43 | -0.250, -0.001, 0.234 |
+
+- **Particles are born on a plane and gain depth as they age.** At birth the z velocity is
+  within a thousandth of zero, and by the end of a life it is spread over a quarter of a unit.
+  That is `emit vel zscale`, which the `.mnu` sets to 0, read back out of the pool.
+- **Birth sits in a shell at z about -6.4, give or take 0.8**, in a band of y about a unit
+  wide around -0.5, spread widely in x. `ps3xmbwave/` instead emits between 6.8 and 10.6 deep,
+  so its band is further away and twice as thick; correcting it means re-running the headless
+  metrics against the captures, not just changing the constants.
+- **The x and y velocities at birth run to about 0.3**, which `emit vel min` 0.15064 and
+  `emit vel mul` 0.19 bracket.
+
+**The aging law comes out exactly.** Over all 2033 particles the rate runs from 0.001447 to
+0.004256, against the 0.001446 to 0.004259 that `aging speed` 0.00285223 and `aging variance`
+0.493003 give as `speed x (1 +- variance)` - which is the symmetric reading this branch changed
+to. The median is 0.002435, not the 0.002852 of a uniform draw, because slow particles live
+longer and a snapshot over-counts them: for a 1/rate weighting the median is the geometric mean,
+sqrt(0.001446 x 0.004259) = 0.002482, and that is what is there.
+
+## Navigating clears the force and the drag
+
+**Measured** across nine savestates. Eight have the field's rotation matrix at the identity, and
+every one of them carries the same force (0, -6.8e-05, 0, 1) and drag 0.030551. The ninth, taken
+while the XMB was being navigated sideways, is the only one whose field is turned - and it is the
+only one whose force and drag are zero. Not the gravity alone: all thirty-two bytes, including
+the force's w, which the task never reads. They are cleared wholesale rather than computed, and
+only while the field turns. Whatever does the clearing is still untraced, but the correlation is
+what the question needed: the navigation branch suppresses gravity and damping so that the
+field's rotation carries the particles undamped.
+
+## The flow grid descriptor, decoded
+
+The descriptor at the structure's +384 reads, in the resting savestate:
+
+| Offset | Bytes | Meaning |
+|---|---|---|
+| +384 | `200de700 00000020 00000010 00000000` | pointer, then 32 and 16 |
+| +400 | 32.0, 16.0, 0, 0 | the same size as floats |
+| +416, +432 | (0, 0, 1, 0), (0, 1, 1, 1) | |
+| +448 | 32, 16, 31, 15 | the size again, and the last index of each axis |
+
+The pointer differs between the copies - `0x200de700` in main memory, `0x0000b280` in the two
+SPU local stores - and in both it is that structure's own base plus 256, which is where M2 sits.
+So the descriptor points at the matrices, not at an array of vectors, and where the grid's own
+data lives is still open. Finding one's way around the local store is at least solved: searching
+a savestate for 64 bytes of `particles.elf` at a known vaddr finds all three copies of the task
+and gives each local store's base in the file, and from there any LS address is one addition
+away. That is how the parameter structure turned out to sit at LS 0xb180, with the 2304-byte
+transfer starting at 0xab80.
+
 ## Still missing
 
 The implementation models the first three:
 
-- Emission: where new particles are written into free slots, with which position,
-  velocity, aging rate and rotation (on the PPU side, most likely).
+- Emission: the code that writes new particles into free slots. What it produces is now
+  measured from the pool, above, but not where it comes from.
 - What the flow grid holds, and the code that fills the parameter block each frame. The
-  block's layout and its values are read from memory, at rest and under both kinds of
-  input, but the grid's own data is not in it.
-- Why navigating showed the force and the drag at zero.
+  descriptor is decoded, above; its pointer leads to the matrices rather than to an array,
+  so the data is somewhere else.
 
 Also missing:
 
