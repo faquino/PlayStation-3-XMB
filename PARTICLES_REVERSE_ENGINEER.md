@@ -794,7 +794,7 @@ imports.
 |---|---|
 | `vsh.elf` (`vsh.self`) | Creates SPURS instances: imports only `_cellSpursAttributeInitialize`, `cellSpursAttributeSetNamePrefix`, `cellSpursAttributeSetMemoryContainerForSpuThread`, `cellSpursInitializeWithAttribute`, `cellSpursFinalize`. |
 | `qglbase.prx` | The QGL engine: resource banks, the `.mnu` parser, a small script language (`$FRAME_COUNT`, `goto`, `repeat … until`), the debug GUI, RSX setup through the VSH's `sdk` library. |
-| `qgl_gaia_app.prx` | The Earth scene, plus a generic per-scene SPURS task manager: prefix `"SceQgl"` + scene name, tasksets, tasks, event flags (28 named `cellSpurs` imports). |
+| `qgl_gaia_app.prx` | The Earth scene and the lines scene's parameter sets, plus a generic per-scene SPURS task manager: prefix `"SceQgl"` + scene name, tasksets, tasks, event flags (28 named `cellSpurs` imports). |
 | `qgl_canyon_app.prx` | The canyon theme. |
 
 Findings so far:
@@ -831,6 +831,79 @@ vtable at `0xa4190` (virtuals at `0x44ae0`, `0x450c4`, `0x44f74`, `0x4520c`, `0x
 vtable is installed from `0x44f80`, `0x44f90`, `0x450d0`, `0x450e0`, `0x4548c` and
 `0x45498`. **The next step is to read that constructor**: the record list, and with it the
 parameter block each record points at, belongs to this class.
+
+### The lines scene's sets are in `qgl_gaia_app`, and QGL draws the icons
+
+**Verified.** `qgl_gaia_app` holds the override names the lines scene's parameter sets live
+under - `override/coldboot1` to `override/bright`, beside the Earth scene's own - next to the
+names of all fifteen `HDR.mnu` parameters, which its HDR menu shows. And the XMB's icons are QGL's
+too: `icons.qrc` carries `ICONS.mnu`, overrides for the same sets and the icons' shaders. So the
+engine that owns the particle block also knows how the icons move, which is where an icon wind would
+come from.
+
+### The task's record, and the block it reads
+
+**Verified** from the resting savestate. The record the task walks holds the addresses its main
+loop uses:
+
+| Offset | Value | What the task does with it |
+|---|---|---|
+| +0 | `0x2046a900` | the pool |
+| +4 to +16 | `0x20482980`, `0x800`, `0x204a1700`, `0x800` | not traced |
+| +20 | `0x200df890` | GETs, and PUTs back at the end, the 16 bytes of persistent state |
+| +28 | `0x200dfe00` | PUTs 128 bytes from LS `0xb100` |
+| +32 | `0x200def80` | GETs the 2304-byte parameter block |
+| +36 | `0x60300810` | PUTF of the completion flag |
+| +40 | 1 | |
+| +44 | `0x204c1800` | PUTs 1024 bytes |
+| +48, +52 | `0x400`, `0x80` | 1024 and 128, the sizes of those two PUTs |
+
+**The block the task reads is the second of two.** The first starts 2304 bytes earlier, at
+`0x200de680`, and holds the same values - force, drag, rotation, time step - down to a grid
+descriptor pointing at its own grid, `0x200de700`, which the second block carries too. The
+savestate stores the pair 768 bytes apart, having left out their empty grids. That reads as the PPU
+composing the first block and copying it whole into the second, which would be why no code writes
+the second block's fields; the copy itself is not found (inferred).
+
+### The parameters, as the PPU holds them
+
+**Verified** from the same savestate. 96 bytes after the second block - past the persistent state
+and the camera's vertical field of view, 0.925025 - come the values of `PARTICLES.mnu` and then of
+`PARTICLES_UI.mnu`, in the files' order and with the hour's blend already applied (`size middle`
+0.0536168 and `glare` 0.15973 at 22:55). A second copy follows 304 bytes later. The struct is not
+the files word for word:
+
+- `emit per frame` holds the integer **16** where the file says 16.6539;
+- two zero words follow `aging variance`, and the integers 6 and 4 follow `brownian scale`;
+- `spot pos` and `spot attn` are padded to four words each.
+
+The 16 is a lead for the emitter: 16 attempts a frame with the fraction dropped make
+16 × 0.479115 = 7.67 emissions a frame, where the model, carrying the fraction, makes 7.98.
+Untested.
+
+### The grid's writer, not found yet
+
+The PPU writes the grid - it sits in main memory and changes with the icons, and neither an RSX
+command nor the task's own PUTs reach it - but no module holds code that looks like it:
+
+- Turning a float into a signed byte takes `fctiwz`, a spill, a `lwz` and a `stb`. Across
+  `qgl_gaia_app`, `qglbase`, `qgl_canyon_app`, `xmb_plugin` and `vsh.elf` there are 22 such
+  sequences, and none computes a signed quantity like the grid's: a B-spline weight table, RGB565
+  to RGBA8, the channels of UI colours, and a buffer of random bytes.
+- Nothing outside texture decoders steps a pointer by 3 bytes or by a 96-byte row next to byte
+  stores, computes an index times 3, or clamps to ±127.
+- No code reaches the block's fields in a way that holds up on inspection - by displacement,
+  through AltiVec indexed stores or through a pointer to a field, at any offset of the block inside
+  a larger object - and none reads `icon wind` and its two scales through one base.
+- `vsh.elf` embeds one SPU program, `surf_spu.elf`, which is unrelated.
+
+So the cells are most likely computed in integers or copied in whole, and the copy above would put
+the writer on the first block.
+
+The savestates' stacks cannot narrow it down either. `tools/re/coverage.py` reads the return
+addresses they keep and places `vsh.elf` by them - two thirds of the frame-shaped values that land
+in its code follow a `bl`, where a wrong address gets a tenth or so - but the QGL modules leave no
+such trace: no load address collects more votes than chance, in any savestate.
 
 ### Ruled out
 
@@ -1043,7 +1116,8 @@ Known differences:
   itself is read from the block, fitting it would be tuning a traced number to hide something
   else. Why the same noise pushes our particles harder is still open.
 - **About a tenth too many on screen**, and that has not moved with any emission change so
-  far.
+  far. One not tried yet: the PPU holds `emit per frame` as the integer 16 - see
+  [The parameters, as the PPU holds them](#the-parameters-as-the-ppu-holds-them).
 - **The captured particles are denser on the left.** The captured wave runs further left
   than right, while the spline layer's wave is centred.
 
@@ -1164,7 +1238,8 @@ sitting in that cell from rest to the pool's median speed, 0.26, in seven frames
 would count 15.9546 / 127 and a z byte 1 / 127, but neither has been seen written.
 
 Still open: the PPU code that writes the cells, and with it the rule that turns the icons'
-motion into bytes.
+motion into bytes - see [The grid's writer, not found yet](#the-grids-writer-not-found-yet) for
+where it is not.
 
 Finding one's way around a savestate's local store takes one correction. Searching for 64 bytes
 of `particles.elf` at a known vaddr finds the copies of the task and gives each local store's
@@ -1179,7 +1254,8 @@ code loads it into.
 The implementation models both of these:
 
 - Emission: the code that writes new particles into free slots. What it produces is now
-  measured from the pool, above, but not where it comes from.
+  measured from the pool, above, but not where it comes from; the parameters it would read are
+  in the PPU's memory, `emit per frame` among them as an integer.
 - The code that fills the parameter block each frame, the flow grid's cells among it. Where
   the grid lives, how the task reads it and when it is written are known, above; the rule that
   turns the icons' motion into bytes is not, and the implementation still builds its grid

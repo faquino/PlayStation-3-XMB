@@ -15,6 +15,7 @@ Extracted firmware assets must never be committed.
 | `ppu_prx.py` | Loads decrypted PPU modules (PRX or executable), applies PRX relocations, finds the TOC, and disassembles with capstone. Also finds immediates, the code that reaches an address, and the callers of each named import. Needs `pip install capstone`. |
 | `whichset.py` | Names the parameter set an RSX capture was taken under, or the pair it was crossfading and how far along, by fitting the backdrop's four corner colours against every `override/`. Reads the particles' live `glare` from the same capture. |
 | `readblock.py` | Reads the particle task's 2304-byte parameter block out of RSX captures, at the offsets the task reads it: force, drag, the field's rotation, the noise scale, and the flow grid's non-empty cells. |
+| `coverage.py` | Finds where a PPU module sits in a savestate from the return addresses its stacks keep, and lists the module's call sites among them - which functions ran - and the ones only one savestate holds. |
 | `nids.py` | Computes PS3 function NIDs from names and names a module's imports. |
 
 ## Typical workflow
@@ -69,6 +70,16 @@ the particle pool.
 right, but a distance measured across empty memory comes out 128 bytes short for each line left
 out - which is how the particle parameter block once read as a 768-byte structure, and how its
 force once read as zero. Measure layouts in a capture, which keeps memory whole.
+
+**A savestate also remembers what code ran.** Stacks keep the return addresses of recent calls,
+stale frames included, and `coverage.py` recognises the frames by their layout, places the module
+by voting (each saved return address, paired with each `bl`, votes for a load address) and lists
+the call sites. A relocatable module loads somewhere else each boot, and a relocated `lis`/`lfs`
+pair in its code is no way to find out where: short sequences recur across modules, and a match in
+the savestate can be another module's copy. The vote is checked instead - at the right address most
+of the values that land in the code follow a `bl`, at a wrong one a tenth or so. In the savestates
+taken so far it places `vsh.elf` and none of the QGL modules, whose frames are not on the stacks.
+Compare savestates from one session: stale frames differ between boots.
 
 A capture also holds **the particle parameter block**, whole: `readblock.py` finds it by its life
 bounds and reads it at the task's own offsets, the flow grid included. Captures accumulate, each one
