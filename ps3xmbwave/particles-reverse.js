@@ -93,8 +93,9 @@
     m[6] = 2 * (x * z - w * y); m[7] = 2 * (y * z + w * x); m[8] = 1 - 2 * (x * x + y * y);
   }
 
-  // Bilinear sample of the flow grid at normalised grid coordinates, clamped to its edges. The block carries the
-  // grid's size both as 32, 16 and as 31, 15, which is what the coordinates scale by.
+  // Bilinear sample of the modelled flow grid at normalised grid coordinates, clamped to its edges, with its nodes at
+  // the corners. The console's sampler centres its cells instead: g x (32, 16) - 0.5, each corner clamped to
+  // (31, 15), and a cell is three signed bytes over 127 (see the notes).
   function sampleGrid(grid, gnx, gny, out) {
     const x = Math.min(Math.max(gnx * (GRID_W - 1), 0), GRID_W - 1);
     const y = Math.min(Math.max(gny * (GRID_H - 1), 0), GRID_H - 1);
@@ -297,7 +298,7 @@
 
     // --- Flow grid: the two matrices are verified, what the grid holds is modelled ------------------------------
     // The console's grid is empty at rest and carries the icon wind while navigating (see the notes); this one is
-    // built from the wave until the scale of the console's bytes is known.
+    // built from the wave until the rule that writes the console's cells is known.
     // The grid covers what the camera sees at a depth of 9, in normalised coordinates. The wave's own velocity
     // goes into it, scaled into grid space so that M2 brings it back to world units, with Gaussian weights that
     // fade the flow away from the wave.

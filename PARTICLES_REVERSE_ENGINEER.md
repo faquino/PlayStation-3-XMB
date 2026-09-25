@@ -900,6 +900,8 @@ emissions a frame, simply keeps it that way.
     M2 hands the task back a world velocity.
   - `flowGridGain` scales that velocity on its way in. It is the modelled half of the
     flow: the flow strength beside it is the firmware's 1.
+  - Its nodes sit at the corners, i / 31 and j / 15 of the way across, in floats; the
+    console's cells are centred, (i + 0.5) / 32 and (j + 0.5) / 16, and hold bytes over 127.
 - **Input.**
   - Icon steps are D-pad presses. A horizontal one yaws the field about its centre, at up
     to `dpad rot max` per frame, scaled by `dpad scale x`. A vertical one pitches it,
@@ -911,7 +913,8 @@ emissions a frame, simply keeps it that way.
     console does not split them that way: sideways navigation also writes vertical wind into
     the flow grid, along the row of icons - see [The flow grid](#the-flow-grid) - so `icon
     wind scl x` being 0 means the wind has no x, not that sideways moves raise none. The
-    implementation keeps its split until it knows how the grid's bytes scale.
+    implementation keeps its split for now: the grid's scale is known, the rule that writes
+    it is not.
   - **Which way the field turns is measured.** Four captures, two taken holding right and two
     holding left, carry the rotation at +2.09e-5 and +2.16e-5 against -2.05e-5 and -2.23e-5:
     right is positive. With the particles six and a half units beyond the centre of the turn,
@@ -1138,8 +1141,30 @@ fifth of the way across, about where the selected category's items run down the 
 wind is local - the grid carries it to where the icons move - rather than a force on every
 particle.
 
-Still open: how the sampler turns a byte into a velocity (`FUN_000068e0` and what it calls),
-and the PPU code that writes the cells.
+**Verified: how the task reads a cell.** `FUN_000068e0` samples the grid bilinearly, with the
+cells centred:
+
+- the grid coordinates from M1 are multiplied by the size as floats, (32, 16), less half a
+  cell: u = g × (32, 16) - 0.5, and floor(u) is the base cell, u - floor(u) the fraction
+  (`FUN_00006858`);
+- the four corners are the base plus the offsets at +416 and +432 - (0, 0), (1, 0), (0, 1),
+  (1, 1) - each clamped on its own between (0, 0) and the last indices at +448, (31, 15)
+  (`FUN_00003780`);
+- a corner's three bytes sit at the pointer plus 3 × (row × 32 + column); they are
+  sign-extended, converted as they are (`csflt` with no scale) and multiplied by
+  `0x3c010204`, 1/127 (`FUN_00004100`, `FUN_00004060`);
+- the corners are blended along the row with the fraction's x, then between rows with its y
+  (`FUN_00003cb0`).
+
+M2 then carries the sample into the world, scaling it by (15.9546, 8.97447, 1), and the flow
+strength of 1 leaves it there. So a cell's y byte b adds 8.97447 × b / 127 = 0.0707 b to the
+force, which at the time step of 0.0088883 is 0.000628 b on the velocity every frame. The
+strongest byte captured, +59, is a force of 4.17 - 0.037 a frame, enough to take a particle
+sitting in that cell from rest to the pool's median speed, 0.26, in seven frames. An x byte
+would count 15.9546 / 127 and a z byte 1 / 127, but neither has been seen written.
+
+Still open: the PPU code that writes the cells, and with it the rule that turns the icons'
+motion into bytes.
 
 Finding one's way around a savestate's local store takes one correction. Searching for 64 bytes
 of `particles.elf` at a known vaddr finds the copies of the task and gives each local store's
@@ -1156,8 +1181,9 @@ The implementation models both of these:
 - Emission: the code that writes new particles into free slots. What it produces is now
   measured from the pool, above, but not where it comes from.
 - The code that fills the parameter block each frame, the flow grid's cells among it. Where
-  the grid lives and when it is written are measured, above; how a byte scales into a velocity
-  is not, and the implementation still builds its grid from the wave.
+  the grid lives, how the task reads it and when it is written are known, above; the rule that
+  turns the icons' motion into bytes is not, and the implementation still builds its grid
+  from the wave.
 
 Also missing:
 
