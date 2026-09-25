@@ -6,7 +6,6 @@
   const ICON_COLUMNS = 7; // category icons across the screen
   const ICON_ROWS = 7; // item icons down the screen
   const DRAG_SMOOTHING_SEC = 0.03;
-  const ICON_VELOCITY_SEC = 0.25;
 
   window.createXmbInput = function createXmbInput(canvas, settings) {
     let slotX = null;
@@ -20,8 +19,6 @@
     let dragY = 0;
     let velX = 0; // smoothed controller velocity, screen heights per second
     let velY = 0;
-    let iconVelX = 0; // icons per second, in the direction the icons move
-    let iconVelY = 0;
 
     function overUi(target) {
       return !!(target && target.closest && target.closest('.settings-layer-host'));
@@ -82,15 +79,9 @@
       dragX = dragY = 0;
       const toG = settings.mouseAccelToG;
 
-      const kv = 1 - Math.exp(-dt / ICON_VELOCITY_SEC);
-      iconVelX += (-stepsX / dt - iconVelX) * kv;
-      iconVelY += (stepsY / dt - iconVelY) * kv;
-
       const ev = {
         stepsX,
         stepsY,
-        iconVelX,
-        iconVelY,
         accelX: ((velX - prevX) / dt) * toG,
         accelY: (-(velY - prevY) / dt) * toG,
       };

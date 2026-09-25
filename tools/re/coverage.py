@@ -17,6 +17,10 @@ base, the share right after a `bl` is chance level at a wrong base - a tenth or 
 them at the right one: vsh.elf, which loads where it is linked, gives two thirds in every savestate
 tried. Below `--min-share` the module is reported as absent from the stacks rather than placed.
 
+In the savestates tried, no PRX module has a frame on the stacks - not even xmb_plugin, which runs
+all the time, checked at the load address its module info record gives - so vsh.elf is the only
+module placed so far, and one reported absent may still have run.
+
 A savestate leaves out all-zero 128-byte lines, which moves memory around but leaves every value as
 it is. What this cannot see: leaf functions, which never store a return address, frames already
 reused, and stacks outside 0x20000000-0x3fffffff and 0xd0000000-0xdfffffff.

@@ -78,11 +78,11 @@ window.PARTICLE_SETTINGS = {
   iconWindSclY: 1,
 
   // --- Modelled PPU side and mouse adapter (not from the firmware) ----------------------------
-  flowStrength: 1, // this one is the value read out of a savestate; what the flow grid holds is the modelled part
-  flowGridGain: 0.030551,
+  flowStrength: 1, // this one is the firmware's, the constant the PPU puts in the block
+  iconEaseSec: 0.065, // how fast the modelled icons settle after a step
+  stepNoiseImpulse: 0.4, // the kick an icon step gives the noise level's spring
+  shakeMotionGain: 0.05, // the adapter's acceleration, in g, to the motion the noise reads
   rotationDecay: 0.85,
-  shakeDecay: 0.97,
-  iconWindGain: 0.02,
   mouseAccelToG: 0.04,
 };
 
@@ -156,9 +156,9 @@ window.PARTICLE_SETTINGS_META = {
   iconWindSclX: { min: 0, max: 2, step: 0.01 },
   iconWindSclY: { min: 0, max: 2, step: 0.01 },
   flowStrength: { min: 0, max: 2, step: 0.0005 },
-  flowGridGain: { min: 0, max: 0.5, step: 0.0005 },
+  iconEaseSec: { min: 0.005, max: 1, step: 0.005 },
+  stepNoiseImpulse: { min: 0, max: 2, step: 0.01 },
+  shakeMotionGain: { min: 0, max: 1, step: 0.001 },
   rotationDecay: { min: 0, max: 0.999, step: 0.001 },
-  shakeDecay: { min: 0, max: 0.999, step: 0.001 },
-  iconWindGain: { min: 0, max: 0.5, step: 0.001 },
   mouseAccelToG: { min: 0, max: 0.2, step: 0.001 },
 };

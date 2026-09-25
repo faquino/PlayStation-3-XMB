@@ -1,6 +1,7 @@
 'use strict';
-// Particle simulation: a port of the SPU update task in `particles.elf`, plus a modelled PPU side (emitter, flow grid,
-// input response). Exported as `window.PS3ParticlesReverse`; driven by `particles.js`, reads `WaveSurfaceCPU`.
+// Particle simulation: a port of the SPU update task in `particles.elf` and of the PPU code that fills its block, plus
+// a modelled rest (emitter, icons, input). Exported as `window.PS3ParticlesReverse`; driven by `particles.js`, reads
+// `WaveSurfaceCPU`.
 
 (function () {
   // -----------------------------------------------------------------------------------------------------------------
@@ -12,7 +13,7 @@
   const LIFE_END = 0.99999;
   const NOISE_SEEDS = [0x98756161, 0x21324889, 0x82181158]; // reset every frame by FUN_00004978
   const SPIN_FREQS = [0.37, 0.17, 0.31];
-  const GRID_W = 32; // flow grid, from the parameter block read out of an RPCS3 savestate
+  const GRID_W = 32; // flow grid, 32 x 16 cells of three signed bytes
   const GRID_H = 16;
   // Its two matrices, also from the block. Grid coordinates are normalised, and the rectangle they cover is what
   // the camera sees at a depth of 9, the median depth of the captured particles.
@@ -22,10 +23,38 @@
   const LIFE_MAX = [10, 10, 7];
   const CAMERA = { eye: [0, 0, 2], fovy: 0.925025, near: 0.1, far: 1000 }; // _Modelview, _ModelviewProjection
 
+  // Traced from custom_render_plugin, the PPU side that fills the block (see the notes).
+  const BYTE_INV = Math.fround(1 / 127); // 0x3c010204, a grid byte's weight on both sides
+  const GRID_DECAY = Math.fround(0.98); // 0x2c588, applied to every byte every frame
+  const ICON_WIND_BOOST = 10; // 0x2f90c multiplies the wind by 10 before clamping it to +-1
+  const ICON_MAP_LIMIT = 100; // and forgets every icon's last position once it tracks more than this many
+  const SPRING_DAMP = 0.6; // 0x31494: the noise level's spring, velocity 0.6 v - 0.004 x + impulse
+  const SPRING_PULL = 0.004;
+  const WIND_MIN_LENGTH = 0.0001; // a shorter `wind dir` is dropped rather than normalised
+
+  // The XMB's icons, measured in the RSX captures: each is a unit quad with its own transform, so its centre and size
+  // on screen read straight off the draw. Normalised device coordinates, as the 16:9 frame lays them out.
+  const ICON_ROW_Y = 0.463; // the category row
+  const ICON_SLOT_X = -0.411; // where the selected category sits
+  const ICON_FIRST_GAP = 0.2185; // from it to its neighbours
+  const ICON_SPACING = 0.2085; // between the others
+  const ICON_SIZE = 0.217; // a category icon's height on screen
+  const ICON_SELECTED_SIZE = 0.31; // the selected one's
+  const ICON_RISE = 0.1935; // a category icon's centre rises by this much per unit of height it gains
+  const ITEM_SELECTED_Y = 0.065; // the selected item, below the row
+  const ITEM_ABOVE_Y = 0.778; // the one before it, above the row
+  const ITEM_BELOW_Y = -0.259; // the one after it
+  const ITEM_SPACING = 0.148;
+
   // -----------------------------------------------------------------------------------------------------------------
-  // Modelled PPU side: emitter, flow grid content and input response live in qgl_gaia_app / qglbase, not traced yet.
+  // Modelled PPU side: the emitter, how the icons move, and what feeds the input response - none of it traced yet.
   // -----------------------------------------------------------------------------------------------------------------
   const FIELD_CENTRE = [0, 0, 0]; // the origin, as the savestate shows
+  const CATEGORIES = 10; // the modelled XMB's categories, and the items in each
+  const ITEMS = 8;
+  // The wind writer's factor on x motion, the particle object's +0x14, is not traced; x counts for nothing while
+  // `icon wind scl x` is 0.
+  const ICON_T = 1;
   // The spline layer has no camera, so the wave is given a depth range and a point's height picks its depth inside
   // it. The range is the one that puts new particles where the console's pool has them: its just-born band sits at
   // view depth 7.57 / 8.55 / 9.07 (5th, 50th, 95th percentile), and this range matches the median and the width.
@@ -36,9 +65,6 @@
   // The captured wave runs past the screen edges, and particles are shared among its vertices evenly. Emitting this
   // far past the edges gives the captured shares: 14% of emissions fall outside the life box, 25% land off screen.
   const EMIT_EXTENT = 1.55;
-  const FLOW_SAMPLES_X = 24;
-  const FLOW_SAMPLES_Z = [-0.75, -0.25, 0.25, 0.75];
-  const FLOW_RADIUS = 1.5;
   const NORMAL_STEP = 0.01;
   const STEP_HZ = 60;
   const MAX_STEPS_PER_FRAME = 4;
@@ -70,16 +96,16 @@
     return {
       force: new Float32Array(4), // +0, (0, gravity, 0, 1)
       drag: new Float32Array(4), // +16, (friction, friction, friction, 0)
-      grid: new Float32Array(GRID_W * GRID_H * 4), // +128: on the console 32 x 16 cells of three signed bytes
+      grid: new Int8Array(GRID_W * GRID_H * 3), // +128, 32 x 16 cells of three signed bytes, row by row
       fromGrid: new Float32Array(16), // +1792, M2: grid vector -> world
       toGrid: new Float32Array(16), // +1856, M1: world -> normalised grid coordinates
       boundsMin: new Float32Array(LIFE_MIN), // +2048
       boundsMax: new Float32Array(LIFE_MAX), // +2064
       fieldCentre: new Float32Array(FIELD_CENTRE), // +2096
       fieldQuat: new Float32Array([0, 0, 0, 1]), // +2176, turned into the matrix at +2112 by the task
-      noiseOffset: new Float32Array(4), // +2192
+      noiseOffset: new Float32Array(4), // +2192, the wind
       flowStrength: 0, // +2208, 1 in the captures
-      noiseScale: 0, // +2212, `brownian scale` unchanged
+      noiseScale: 0, // +2212, `brownian scale` at rest
       spinRate: 0, // +2220, `spin time scale`
       dt: new Float32Array(4), // +2224, (delta time x 3, 1)
     };
@@ -93,25 +119,58 @@
     m[6] = 2 * (x * z - w * y); m[7] = 2 * (y * z + w * x); m[8] = 1 - 2 * (x * x + y * y);
   }
 
-  // Bilinear sample of the modelled flow grid at normalised grid coordinates, clamped to its edges, with its nodes at
-  // the corners. The console's sampler centres its cells instead: g x (32, 16) - 0.5, each corner clamped to
-  // (31, 15), and a cell is three signed bytes over 127 (see the notes).
+  function clampIndex(i, last) { return i < 0 ? 0 : i > last ? last : i; }
+
+  // FUN_000068e0: the flow grid sampled bilinearly at normalised grid coordinates, with the cells centred. u = g x
+  // (32, 16) - 0.5 gives the base cell and the fraction, each of the four corners is clamped to the grid on its own,
+  // a byte counts 1/127, and the corners blend along the row first, then between the rows.
   function sampleGrid(grid, gnx, gny, out) {
-    const x = Math.min(Math.max(gnx * (GRID_W - 1), 0), GRID_W - 1);
-    const y = Math.min(Math.max(gny * (GRID_H - 1), 0), GRID_H - 1);
-    const x0 = Math.min(Math.floor(x), GRID_W - 2);
-    const y0 = Math.min(Math.floor(y), GRID_H - 2);
-    const fx = x - x0;
-    const fy = y - y0;
-    const i00 = (y0 * GRID_W + x0) * 4;
-    const i10 = i00 + 4;
-    const i01 = i00 + GRID_W * 4;
-    const i11 = i01 + 4;
+    const u = gnx * GRID_W - 0.5;
+    const v = gny * GRID_H - 0.5;
+    const x0 = Math.floor(u);
+    const y0 = Math.floor(v);
+    const fx = u - x0;
+    const fy = v - y0;
+    const xa = clampIndex(x0, GRID_W - 1), xb = clampIndex(x0 + 1, GRID_W - 1);
+    const ya = clampIndex(y0, GRID_H - 1) * GRID_W, yb = clampIndex(y0 + 1, GRID_H - 1) * GRID_W;
+    const i00 = (ya + xa) * 3, i10 = (ya + xb) * 3, i01 = (yb + xa) * 3, i11 = (yb + xb) * 3;
     for (let c = 0; c < 3; c++) {
       const a = grid[i00 + c] + (grid[i10 + c] - grid[i00 + c]) * fx;
       const b = grid[i01 + c] + (grid[i11 + c] - grid[i01 + c]) * fx;
-      out[c] = a + (b - a) * fy;
+      out[c] = (a + (b - a) * fy) * BYTE_INV;
     }
+  }
+
+  // M1 and M2, as the block carries them: both diagonal with a translation. Memory keeps the translation in the last
+  // row; here it goes in the last column, which is the way the task applies them.
+  function setGridMatrices(P) {
+    const M1 = P.toGrid;
+    const M2 = P.fromGrid;
+    M2.fill(0);
+    M1.fill(0);
+    for (let a = 0; a < 3; a++) {
+      M2[a * 5] = GRID_SCALE[a];
+      M2[3 + a * 4] = GRID_ORIGIN[a];
+      M1[a * 5] = 1 / GRID_SCALE[a];
+      M1[3 + a * 4] = -GRID_ORIGIN[a] / GRID_SCALE[a];
+    }
+    M2[15] = 1;
+    M1[15] = 1;
+  }
+
+  // Where the captures put category icon i when `selected` is the selected one, and item j of a column whose
+  // selected item is `selected`.
+  function categoryTargetX(i, selected) {
+    const d = i - selected;
+    if (d === 0) return ICON_SLOT_X;
+    return ICON_SLOT_X + Math.sign(d) * (ICON_FIRST_GAP + (Math.abs(d) - 1) * ICON_SPACING);
+  }
+
+  function itemTargetY(j, selected) {
+    if (j === selected) return ITEM_SELECTED_Y;
+    return j < selected
+      ? ITEM_ABOVE_Y + (selected - 1 - j) * ITEM_SPACING
+      : ITEM_BELOW_Y - (j - selected - 1) * ITEM_SPACING;
   }
 
   function createSystem(options) {
@@ -126,6 +185,7 @@
     }
 
     const P = createParams();
+    setGridMatrices(P);
     const fieldRot = new Float32Array(9);
     const noise = new Uint32Array(3);
     const flowTmp = new Float32Array(3);
@@ -137,25 +197,44 @@
     const model = {
       rotDpad: [0, 0, 0], // field angular velocity from icon steps, rad per step
       rotShake: [0, 0, 0], // and from shaking the controller
-      shake: 0, // shake level driving the Brownian boost, 0..1
       stirSign: 1,
       emitCarry: 0,
+      // The noise level's spring (0x31494): position, velocity, and the impulse the next step adds.
+      spring: 0,
+      springVel: 0,
+      impulse: 0,
+      level: 0, // the position clamped to [0, 1]
+      motion: 0, // what the controller's newest motion vector measures
     };
+    // The modelled XMB: which category and which item in each is selected, and where the icons are on screen. Only
+    // the selected category's items are drawn.
+    const icons = {
+      category: 4,
+      item: new Int32Array(CATEGORIES).fill(2),
+      x: new Float32Array(CATEGORIES),
+      size: new Float32Array(CATEGORIES),
+      column: -1,
+      itemY: new Float32Array(ITEMS),
+      // The wind writer's own memory: every icon's position when it was last drawn, by id.
+      last: new Map(),
+    };
+    for (let i = 0; i < CATEGORIES; i++) {
+      icons.x[i] = categoryTargetX(i, icons.category);
+      icons.size[i] = i === icons.category ? ICON_SELECTED_SIZE : ICON_SIZE;
+    }
     const wave = {
       surface: null, data: null, prevData: null, t: 0, prevT: 0, dtWave: 0, p00: 1, p11: 1,
     };
-    const flowPos = new Float32Array(FLOW_SAMPLES_X * FLOW_SAMPLES_Z.length * 2);
-    const flowVel = new Float32Array(FLOW_SAMPLES_X * FLOW_SAMPLES_Z.length * 3);
     const wA = new Float32Array(4);
     const wB = new Float32Array(4);
     const wC = new Float32Array(4);
     const wD = new Float32Array(4);
     const evalTmp = new Float32Array(3);
-    const noInput = { stepsX: 0, stepsY: 0, iconVelX: 0, iconVelY: 0, accelX: 0, accelY: 0 };
+    const noInput = { stepsX: 0, stepsY: 0, accelX: 0, accelY: 0 };
     // Input gathered since the last simulation step: frames above 60 Hz can run no step at all.
-    const pending = { stepsX: 0, stepsY: 0, iconVelX: 0, iconVelY: 0, accelX: 0, accelY: 0 };
+    const pending = { stepsX: 0, stepsY: 0, accelX: 0, accelY: 0 };
 
-    const stats = { count: 0, emitted: 0, died: 0, steps: 0, shake: 0, fieldAngle: 0 };
+    const stats = { count: 0, emitted: 0, died: 0, steps: 0, level: 0, noiseScale: 0, fieldAngle: 0 };
     let count = 0;
     let stepCarry = 0;
     let warm = false;
@@ -296,121 +375,134 @@
       return out;
     }
 
-    // --- Flow grid: the two matrices are verified, what the grid holds is modelled ------------------------------
-    // The console's grid is empty at rest and carries the icon wind while navigating (see the notes); this one is
-    // built from the wave until the rule that writes the console's cells is known.
-    // The grid covers what the camera sees at a depth of 9, in normalised coordinates. The wave's own velocity
-    // goes into it, scaled into grid space so that M2 brings it back to world units, with Gaussian weights that
-    // fade the flow away from the wave.
-    function buildFlowGrid(S) {
-      // Both matrices are diagonal with a translation. Memory keeps the translation in the last row; here it goes
-      // in the last column, which is the way the task applies them above.
-      const M1 = P.toGrid;
-      const M2 = P.fromGrid;
-      M2.fill(0);
-      M1.fill(0);
-      for (let a = 0; a < 3; a++) {
-        M2[a * 5] = GRID_SCALE[a];
-        M2[3 + a * 4] = GRID_ORIGIN[a];
-        M1[a * 5] = 1 / GRID_SCALE[a];
-        M1[3 + a * 4] = -GRID_ORIGIN[a] / GRID_SCALE[a];
-      }
-      M2[15] = 1;
-      M1[15] = 1;
-
-      let m = 0;
-      for (let j = 0; j < FLOW_SAMPLES_Z.length; j++) {
-        for (let i = 0; i < FLOW_SAMPLES_X; i++) {
-          const gx = ((i / (FLOW_SAMPLES_X - 1)) * 2 - 1) * EMIT_EXTENT;
-          waveToWorld(wave.data, wave.t, gx, FLOW_SAMPLES_Z[j], wA);
-          if (Math.abs(wA[3]) > 1) continue;
-          waveVelocity(gx, FLOW_SAMPLES_Z[j], wA, S, wB);
-          flowPos[m * 2] = wA[0];
-          flowPos[m * 2 + 1] = wA[1];
-          flowVel[m * 3] = wB[0];
-          flowVel[m * 3 + 1] = wB[1];
-          flowVel[m * 3 + 2] = wB[2];
-          m++;
-        }
-      }
-
-      const inv = 1 / (FLOW_RADIUS * FLOW_RADIUS);
-      const gain = S.flowGridGain;
-      for (let gy = 0; gy < GRID_H; gy++) {
-        const y = GRID_ORIGIN[1] + (gy / (GRID_H - 1)) * GRID_SCALE[1];
-        for (let gx = 0; gx < GRID_W; gx++) {
-          const x = GRID_ORIGIN[0] + (gx / (GRID_W - 1)) * GRID_SCALE[0];
-          let wsum = 0, ax = 0, ay = 0, az = 0;
-          for (let k = 0; k < m; k++) {
-            const dx = x - flowPos[k * 2];
-            const dy = y - flowPos[k * 2 + 1];
-            const w = Math.exp(-(dx * dx + dy * dy) * inv);
-            wsum += w;
-            ax += flowVel[k * 3] * w;
-            ay += flowVel[k * 3 + 1] * w;
-            az += flowVel[k * 3 + 2] * w;
-          }
-          const g = (gy * GRID_W + gx) * 4;
-          // The +1 lets the flow fade where the wave is far; dividing by the grid's scale is what makes M2 hand
-          // the task back the wave's own velocity.
-          const norm = gain / (wsum + 1);
-          P.grid[g] = ax * norm / GRID_SCALE[0];
-          P.grid[g + 1] = ay * norm / GRID_SCALE[1];
-          P.grid[g + 2] = az * norm / GRID_SCALE[2];
-          P.grid[g + 3] = 0;
-        }
+    // --- Verified: the flow grid, as custom_render_plugin writes it --------------------------------------------
+    // Empty at rest. A moving icon overwrites the cell under it with its motion on screen (0x2f90c), and every byte
+    // decays by 0.98 a frame (0x2c588), both in single precision the way the PPU works them out.
+    function decayGrid() {
+      const g = P.grid;
+      for (let i = 0; i < g.length; i++) {
+        if (g[i] === 0) continue;
+        const v = Math.fround(Math.fround(g[i] * BYTE_INV) * GRID_DECAY);
+        g[i] = Math.trunc(Math.fround(Math.min(Math.max(v, -1), 1) * 127));
       }
     }
 
-    // --- Modelled: the parameter block and the input response -----------------------------------------------------
+    // A component of the wind as a byte: times 10, clamped to +-1, times 127, truncated.
+    function windByte(v) {
+      const c = Math.min(Math.max(Math.fround(Math.fround(v) * ICON_WIND_BOOST), -1), 1);
+      return Math.trunc(Math.fround(c * 127));
+    }
+
+    // 0x2f90c, called for every icon drawn, with its position on screen in normalised device coordinates. The first
+    // time it sees an icon it only remembers where it is; after that, an icon that has moved writes its motion, times
+    // `icon wind` and its two scales, into the cell it is over.
+    function iconWind(S, id, x, y) {
+      if (icons.last.size > ICON_MAP_LIMIT) icons.last.clear();
+      const last = icons.last.get(id);
+      if (!last) {
+        icons.last.set(id, [x, y]);
+        return;
+      }
+      const dx = x - last[0];
+      const dy = y - last[1];
+      last[0] = x;
+      last[1] = y;
+      if (dx === 0 && dy === 0) return;
+      const col = clampIndex(Math.trunc((x + 1) * 0.5 * GRID_W), GRID_W - 1);
+      const row = clampIndex(Math.trunc((y + 1) * 0.5 * GRID_H), GRID_H - 1);
+      const w = Math.fround(S.iconWind);
+      const cell = (row * GRID_W + col) * 3;
+      P.grid[cell] = windByte(Math.fround(Math.fround(dx * ICON_T) * w) * S.iconWindSclX);
+      P.grid[cell + 1] = windByte(Math.fround(dy * w) * S.iconWindSclY);
+      P.grid[cell + 2] = 0;
+    }
+
+    // --- Modelled: the XMB's icons, which the wind follows. Where they sit is measured, how they move is not -----
+    // An icon step moves the selection, and every icon eases towards where the captures put it for the new one: the
+    // row slides, the selected category's icon grows and rises, its column scrolls. The easing's time constant,
+    // `iconEaseSec`, is the modelled part: at 0.065 s, the first frame of a step writes about the strongest byte the
+    // captures show along the row, 59.
+    function moveIcons(S, ev) {
+      if (ev.stepsX) icons.category = Math.min(Math.max(icons.category + ev.stepsX, 0), CATEGORIES - 1);
+      const c = icons.category;
+      if (ev.stepsY) icons.item[c] = Math.min(Math.max(icons.item[c] + ev.stepsY, 0), ITEMS - 1);
+      const k = 1 - Math.exp(-1 / (STEP_HZ * Math.max(S.iconEaseSec, 0.001)));
+      for (let i = 0; i < CATEGORIES; i++) {
+        icons.x[i] += (categoryTargetX(i, c) - icons.x[i]) * k;
+        icons.size[i] += ((i === c ? ICON_SELECTED_SIZE : ICON_SIZE) - icons.size[i]) * k;
+        iconWind(S, i, icons.x[i], ICON_ROW_Y + ICON_RISE * (icons.size[i] - ICON_SIZE));
+      }
+      // A category's items appear in place when it is selected, and the column they replace stops being drawn.
+      const selected = icons.item[c];
+      if (icons.column !== c) {
+        icons.column = c;
+        for (let j = 0; j < ITEMS; j++) icons.itemY[j] = itemTargetY(j, selected);
+      }
+      for (let j = 0; j < ITEMS; j++) {
+        icons.itemY[j] += (itemTargetY(j, selected) - icons.itemY[j]) * k;
+        iconWind(S, CATEGORIES + c * ITEMS + j, icons.x[c], icons.itemY[j]);
+      }
+    }
+
+    // --- The parameter block, as 0x31494 fills it; what the input feeds into it is modelled -----------------------
     function clampAbs(v, max) { return Math.max(-max, Math.min(max, v)); }
 
     function buildParams(S, ev) {
-      const windGain = S.windScale + 10 * S.windScale10;
-      const iconGain = S.iconWindGain * S.iconWind;
-      P.force[0] = S.windDirX * windGain + iconGain * S.iconWindSclX * ev.iconVelX;
-      P.force[1] = S.windDirY * windGain + S.gravity + iconGain * S.iconWindSclY * ev.iconVelY;
-      P.force[2] = S.windDirZ * windGain;
+      // The force is `gravity` alone. The wind goes to the noise offset instead, which the task adds to the force
+      // all the same: `wind dir` normalised - dropped when shorter than 0.0001 - times `wind scale` + 10 x
+      // `wind scale 10`.
+      P.force[0] = 0;
+      P.force[1] = S.gravity;
+      P.force[2] = 0;
       P.force[3] = 0;
+      const windLength = Math.hypot(S.windDirX, S.windDirY, S.windDirZ);
+      const wind = windLength < WIND_MIN_LENGTH ? 0 : (S.windScale + 10 * S.windScale10) / windLength;
+      P.noiseOffset[0] = S.windDirX * wind;
+      P.noiseOffset[1] = S.windDirY * wind;
+      P.noiseOffset[2] = S.windDirZ * wind;
       P.drag[0] = P.drag[1] = P.drag[2] = S.friction;
       P.drag[3] = 0;
       P.dt[0] = P.dt[1] = P.dt[2] = S.deltaTime;
       P.dt[3] = 1;
       P.spinRate = S.spinTimeScale;
       P.flowStrength = S.flowStrength;
+      decayGrid();
 
       for (let a = 0; a < 3; a++) {
         model.rotDpad[a] *= S.rotationDecay;
         model.rotShake[a] *= S.rotationDecay;
       }
-      model.shake *= S.shakeDecay;
 
       // Icon steps act as D-pad presses. A savestate taken while navigating the XMB shows the field turned about y
-      // by 1.84e-5, a sixth of `dpad rot max`, and the noise raised to `brownian`, both of them on their way down.
+      // by 1.84e-5, a sixth of `dpad rot max`, and the noise at 3.19 times its rest, both of them on their way down.
       // Which way it turns is measured: four captures, two taken holding right and two holding left, carry the
-      // field's rotation as +2.09e-5 and +2.16e-5 against -2.05e-5 and -2.23e-5. Right is positive, which is the
-      // rule the wind already followed - the particles go the way the icons go, and the XMB scrolls those against
-      // the key. It also dates the savestate taken while navigating, whose +1.84e-5 was a step to the right.
-      // Only one axis drives each: `dpad scale y` is 0 in the firmware and `icon wind scl x` is 0, so sideways
-      // navigation turns the field and nothing else, and vertical navigation blows and nothing else.
+      // field's rotation as +2.09e-5 and +2.16e-5 against -2.05e-5 and -2.23e-5. Right is positive - the particles
+      // go the way the icons go, and the XMB scrolls those against the key. It also dates the savestate taken while
+      // navigating, whose +1.84e-5 was a step to the right. `dpad scale y` is 0 in the firmware, so only sideways
+      // steps turn the field.
+      // What kicks the noise's spring is not traced. Here a step kicks it by `stepNoiseImpulse`: at 0.4, the noise
+      // is 3.17 times its rest 0.4 s after a step, against the 3.19 that savestate measured.
       if (ev.stepsX || ev.stepsY) {
         model.rotDpad[1] = clampAbs(model.rotDpad[1] + ev.stepsX * S.dpadScaleX * S.dpadRotMax, S.dpadRotMax);
         model.rotDpad[0] = clampAbs(model.rotDpad[0] - ev.stepsY * S.dpadScaleY * S.dpadRotMax, S.dpadRotMax);
-        model.shake = Math.max(model.shake, S.uiBrownian);
+        model.impulse += S.stepNoiseImpulse * (Math.abs(ev.stepsX) + Math.abs(ev.stepsY));
       }
 
       // Shake detection on the accelerometer. A savestate taken while the controller was shaken shows the noise at
-      // 6.63 times `brownian scale` and next to no turn, so shaking is mostly noise: it stirs the field about the
-      // same y axis the D-pad uses, in the direction of the swing that started it, since kicks that followed each
-      // swing would cancel out.
-      const level = Math.hypot(S.dshakeXCoeff * ev.accelX, S.dshakeGCoeff * ev.accelY);
-      if (level > S.dshakeThresh && S.dshakeThresh > 0) {
-        const excess = (level - S.dshakeThresh) / S.dshakeThresh;
-        if (model.shake < 0.05) model.stirSign = ev.accelX < 0 ? 1 : -1;
+      // 6.63 times its rest and next to no turn, so shaking is mostly noise: it stirs the field about the same y axis
+      // the D-pad uses, in the direction of the swing that started it, since kicks that followed each swing would
+      // cancel out, and it kicks the spring by `dshake brw imp`. The motion the noise also reads is the adapter's
+      // acceleration times `shakeMotionGain`: at 0.05, a shake just past the threshold puts the noise near that
+      // savestate's.
+      const shake = Math.hypot(S.dshakeXCoeff * ev.accelX, S.dshakeGCoeff * ev.accelY);
+      if (shake > S.dshakeThresh && S.dshakeThresh > 0) {
+        const excess = (shake - S.dshakeThresh) / S.dshakeThresh;
+        if (model.level < 0.05) model.stirSign = ev.accelX < 0 ? 1 : -1;
         const kick = S.dshakeRotImp * S.dshakeRotMax * excess;
         model.rotShake[1] = clampAbs(model.rotShake[1] + model.stirSign * kick, S.dshakeRotMax);
-        model.shake = Math.min(1, model.shake + S.dshakeBrwImp * (1 + excess));
+        model.impulse += S.dshakeBrwImp * (1 + excess);
       }
+      model.motion = Math.hypot(ev.accelX, ev.accelY) * S.shakeMotionGain;
 
       const rx = model.rotDpad[0] + model.rotShake[0];
       const ry = model.rotDpad[1] + model.rotShake[1];
@@ -426,10 +518,17 @@
         P.fieldQuat[0] = P.fieldQuat[1] = P.fieldQuat[2] = 0;
         P.fieldQuat[3] = 1;
       }
-      // The savestates put the noise at exactly `brownian scale` at rest and at 6.63 and 3.19 times that while the
-      // controller was shaken and while the XMB was being navigated, which `rshake brw` alone accounts for.
-      P.noiseScale = S.brownianScale * (1 + S.rshakeBrw * model.shake);
-      stats.shake = model.shake;
+
+      // The noise scale is `brownian scale` + level x `brownian` + motion x `rshake brw`. The level is a damped
+      // spring: its velocity becomes 0.6 times itself, less 0.004 times its position, plus the impulse, and the
+      // level is its position clamped to [0, 1].
+      model.springVel = SPRING_DAMP * model.springVel - SPRING_PULL * model.spring + model.impulse;
+      model.impulse = 0;
+      model.spring += model.springVel;
+      model.level = Math.min(Math.max(model.spring, 0), 1);
+      P.noiseScale = S.brownianScale + model.level * S.uiBrownian + model.motion * S.rshakeBrw;
+      stats.level = model.level;
+      stats.noiseScale = P.noiseScale;
       stats.fieldAngle = angle;
     }
 
@@ -515,8 +614,11 @@
       }
     }
 
+    // The block first, decaying the grid, then the icons' wind on top of it: which of the two comes first within a
+    // frame on the console is not known.
     function step(S, ev) {
       buildParams(S, ev);
+      moveIcons(S, ev);
       emit(S);
       runTask();
       stats.steps++;
@@ -527,8 +629,6 @@
       const ev = input.poll(dtSec);
       pending.stepsX += ev.stepsX;
       pending.stepsY += ev.stepsY;
-      pending.iconVelX = ev.iconVelX;
-      pending.iconVelY = ev.iconVelY;
       if (Math.hypot(ev.accelX, ev.accelY) >= Math.hypot(pending.accelX, pending.accelY)) {
         pending.accelX = ev.accelX;
         pending.accelY = ev.accelY;
@@ -548,7 +648,6 @@
       wave.p11 = 1 / Math.tan(CAMERA.fovy * 0.5);
       wave.p00 = wave.p11 / aspect;
 
-      buildFlowGrid(S);
       gatherInput(input, dtSec);
 
       if (!warm) {
@@ -556,7 +655,7 @@
         for (let i = 0; i < PREWARM_STEPS; i++) step(S, noInput);
       }
 
-      // Presses and shakes go to the first step; the icon wind holds for all of them.
+      // Presses and shakes go to the first step.
       stepCarry = Math.min(stepCarry + dtSec * STEP_HZ, MAX_STEPS_PER_FRAME);
       while (stepCarry >= 1) {
         stepCarry -= 1;

@@ -13,16 +13,18 @@ against what RPCS3 recorded while running the XMB; anything else is marked as in
 - `dev_flash/vsh/resource/qgl/lines.qrc` holds the whole "lines" scene (wave and particles):
   SPU tasks, RSX shaders, textures and parameter files. It is a zlib-compressed tree of
   files; `tools/re/qrc.py` documents the format.
-- `dev_flash/vsh/module/qglbase.sprx` (PPU, encrypted) loads it and runs the tasks on a
-  SPURS instance. The RPCS3 log names it `SceQglLinesCellSpursKernel0`, with handlers
-  `SceQglLinesSpursHdlr0/1`.
+- `dev_flash/vsh/module/custom_render_plugin.sprx` (PPU, encrypted) runs the scene: it fills
+  the particles' parameter block, writes their flow grid and runs the tasks on a SPURS
+  instance, which the RPCS3 log names `SceQglLinesCellSpursKernel0`, with handlers
+  `SceQglLinesSpursHdlr0/1`. `qglbase.sprx` is the QGL engine under it and holds the names of
+  all the QGL containers, `lines.qrc` among them. See [The PPU side](#the-ppu-side-in-progress).
 
 | File in `lines.qrc` | What it is |
 |---|---|
 | `spurs/particles/particles/particles.elf` | The simulation: an SPU ELF run as a SPURS task |
 | `PARTICLES.mnu` | The system's 52 parameters, as plain text |
 | `PARTICLES_UI.mnu` | Interaction parameters: Sixaxis shake, D-pad, icon wind |
-| `PARTICLES_SPE.mnu` | 5 values, purpose unknown |
+| `PARTICLES_SPE.mnu` | 5 values, purpose unknown; `custom_render_plugin` lists them beside the other two files' |
 | `override/<theme>/PARTICLES.mnu` | Full parameter sets per theme and moment |
 | `lib/particles/particles_quads.vpo/.fpo` | Main particle shaders |
 | `lib/particles/particles_second.vpo/.fpo` | Second particle pass, adds glare |
@@ -561,9 +563,11 @@ data, in one of two ways:
 
 - the task receives raw sensor values and handles them in code it always runs (SPU code
   is largely branch-free);
-- or the PPU (`qglbase.sprx`) turns them into impulses first.
+- or the PPU turns them into impulses first.
 
-The task's parameter block will tell which.
+It is the second. The parameter block carries the result - see
+[What the controller does to the block](#what-the-controller-does-to-the-block) - and
+`custom_render_plugin` computes it - see [How the block is filled](#how-the-block-is-filled).
 
 ## The update task
 
@@ -581,7 +585,7 @@ particle.** Several things point that way:
 - `main` hands the batch machinery a single callback, the update at `0x6ed0`.
 
 Emission, the flow grid and the input-driven rotation are prepared by whoever fills its
-parameter block. That is most likely the PPU, `qgl_gaia_app.prx`.
+parameter block: the PPU, in `custom_render_plugin` - see [The PPU side](#the-ppu-side-in-progress).
 
 ### Main loop (`main` at `0x80e8`)
 
@@ -658,26 +662,29 @@ head of the third: that head is zero in every capture.
 
 | Offset | Field | In the savestate | Source |
 |---|---|---|---|
-| 0 | constant force | (0, -6.8e-05, 0, 1) | `gravity`; the wind is off, `wind scale` being 0 |
+| 0 | constant force | (0, -6.8e-05, 0, 1) | `gravity`, alone: the wind goes to +656 |
 | 16 | drag | (0.030551, 0.030551, 0.030551, 0) | `friction` |
-| 256 | M2, grid vector to world | diag(15.9546, 8.97447, 1), translation (-7.9773, -4.48723, -7) | |
-| 320 | M1, world to grid | its exact inverse | |
+| 256 | M2, grid vector to world | diag(15.9546, 8.97447, 1), translation (-7.9773, -4.48723, -7) | the camera: what it sees at a distance of 9 |
+| 320 | M1, world to grid | its exact inverse | M2, inverted by a `qglbase` export |
 | 384 | flow grid descriptor | a pointer, then 32 and 16 | the task points it at the grid, P+128 |
 | 400, 448 | the same size as floats, then 32, 16, 31, 15 | | |
-| 512, 528 | `_LifeBoundsMin` / `Max` | (-10, -10, -12) / (10, 10, 7) | not in any `.mnu` |
+| 512, 528 | `_LifeBoundsMin` / `Max` | (-10, -10, -12) / (10, 10, 7) | not in any `.mnu`; a constant in `custom_render_plugin` |
 | 560 | field centre | the origin | |
 | 576 | field rotation | the identity matrix | |
 | 640 | field quaternion | zero at rest | |
-| 656 | noise offset | zero | |
-| 672 | flow strength, noise scale, ?, spin rate | (1, 0.225311, 0.0536233, 2.74) | `brownian scale` unchanged, then `size middle`, then `spin time scale` |
+| 656 | noise offset | zero | the wind: `wind dir` normalised, × (`wind scale` + 10 × `wind scale 10`), both 0 |
+| 672 | flow strength, noise scale, `size middle`, spin rate | (1, 0.225311, 0.0536233, 2.74) | a constant 1; `brownian scale` plus two input terms, zero at rest; `size middle`; `spin time scale` |
 | 688 | time step | (0.0088883, 0.0088883, 0.0088883, 1) | `delta time`, and the 1 that ages a particle once per frame |
+
+The sources were first read off the values; the PPU code that writes them now confirms every
+one - see [How the block is filled](#how-the-block-is-filled).
 
 Reading that block settles several things:
 
 - **The time step's w is 1**, so life advances by the aging rate once per frame. The
   particle count already implied it; now it is read from memory.
-- **The noise scale is `brownian scale` itself**, not scaled by the `brownian` of
-  `PARTICLES_UI.mnu`.
+- **At rest the noise scale is `brownian scale` itself.** The two terms the PPU adds for the
+  controller, one of them the `brownian` of `PARTICLES_UI.mnu` times a level, are zero then.
 - **The flow strength is 1**, not something small.
 - **The field turns about the origin**, and at rest its quaternion is zero and its matrix
   the identity.
@@ -686,10 +693,11 @@ Reading that block settles several things:
   field of view. That is the median depth of the captured particles: the grid is the
   screen, at the particles' own distance.
 
-One thing the block does not answer: why `size middle` sits next to the spin rate. The
-grid's data, which it seemed not to hold, is the twelve lines the savestate leaves out - see
-[The flow grid](#the-flow-grid). The strings between the fields are recycled heap, left
-from whatever used the memory before, in slots the task never reads.
+`size middle` sits next to the spin rate because the PPU puts it there with the rest, though
+none of the task's steps above reads it. The grid's data, which the block seemed not to hold,
+is the twelve lines the savestate leaves out - see [The flow grid](#the-flow-grid). The
+strings between the fields are recycled heap, left from whatever used the memory before, in
+slots the task never reads.
 
 ### What the controller does to the block
 
@@ -702,10 +710,14 @@ one while the XMB was being navigated sideways, against the one at rest:
 | shaking | -6.8e-05 | 0.030551 | 1.9e-07 | 1.493472, 6.63 times it |
 | navigating | -6.8e-05 | 0.030551 | 1.843731e-05 | 0.719822, 3.19 times it |
 
-- **Both raise the noise, and `rshake brw` alone accounts for it.** At
-  `brownian scale` × (1 + `rshake brw` × level) the two states put the level at 0.75 and
-  0.29. Bringing the `brownian` of `PARTICLES_UI.mnu` into that product would need a level
-  above 1 while shaking, so it is not in there.
+- **Both raise the noise.** On their own, the two states fit
+  `brownian scale` × (1 + `rshake brw` × level) with the level at 0.75 and 0.29, which seemed
+  to leave the `brownian` of `PARTICLES_UI.mnu` out. The PPU's code says otherwise: it adds
+  two terms to `brownian scale`, a level between 0 and 1 times `brownian`, and the
+  controller's motion times `rshake brw` - see [How the block is filled](#how-the-block-is-filled).
+  The savestates add 1.268 and 0.495 to the resting value, one equation each for two
+  unknowns, so they cannot split them; but the level's term stops at 0.6, so while shaking
+  at least 0.67 of the 1.268 comes from the motion.
 - **The field turns about y, and the slot at +640 holds a rotation vector, not a
   quaternion.** While navigating, the matrix at +576 carries ∓1.843731e-05 in its x-z
   corners, the same number the slot holds: a small-angle rotation about y, by a sixth of
@@ -714,9 +726,10 @@ one while the XMB was being navigated sideways, against the one at rest:
   put both at zero; that was the savestate's layout, not the block - see
   [Navigating does not clear the force and the drag](#navigating-does-not-clear-the-force-and-the-drag).
 
-The implementation now follows the two measured numbers: an icon step raises the level to
-`brownian` and turns the field about y, and 0.4 s later it reaches 3.17 times the base
-noise against the 3.19 measured.
+The implementation now uses the console's formula, spring and all, and follows the two
+measured numbers with the inputs it models: an icon step turns the field about y and kicks the
+spring, and 0.4 s later the noise is 3.17 times its rest against the 3.19 measured - see
+[Modelled choices](#modelled-choices).
 
 ### The pool, and what it says about emission
 
@@ -793,9 +806,10 @@ imports.
 | Module | Role |
 |---|---|
 | `vsh.elf` (`vsh.self`) | Creates SPURS instances: imports only `_cellSpursAttributeInitialize`, `cellSpursAttributeSetNamePrefix`, `cellSpursAttributeSetMemoryContainerForSpuThread`, `cellSpursInitializeWithAttribute`, `cellSpursFinalize`. |
+| `custom_render_plugin.prx` | The XMB's QGL scene: the wave, the particles, the icons, the backdrop, the rays and the HDR pass, with a menu for each parameter file. It creates the `SceQgl` SPURS instance and the tasks, fills the particles' parameter block and writes their flow grid. |
 | `qglbase.prx` | The QGL engine: resource banks, the `.mnu` parser, a small script language (`$FRAME_COUNT`, `goto`, `repeat … until`), the debug GUI, RSX setup through the VSH's `sdk` library. |
-| `qgl_gaia_app.prx` | The Earth scene and the lines scene's parameter sets, plus a generic per-scene SPURS task manager: prefix `"SceQgl"` + scene name, tasksets, tasks, event flags (28 named `cellSpurs` imports). |
-| `qgl_canyon_app.prx` | The canyon theme. |
+| `qgl_gaia_app.prx` | The Earth scene, the lines scene's override names, and the same per-scene SPURS task manager: prefix `"SceQgl"` + scene name, tasksets, tasks, event flags (28 named `cellSpurs` imports). **Not loaded in the XMB.** |
+| `qgl_canyon_app.prx` | The canyon theme. **Not loaded in the XMB.** |
 
 Findings so far:
 
@@ -808,38 +822,84 @@ Findings so far:
   So the PPU writes new particles straight into slots taken from that list, and never
   needs the -666 marker. No module contains -666.0f, as a float or as an integer
   immediate.
-- **The emitter itself has not been located yet.** No module contains particle parameter
-  names, which fits parameters being read by position. The scene code is reached through
-  C++ virtual calls.
-- The lines scene seems split between modules (inferred from the RPCS3 log). Right before
+- **The emitter itself has not been located yet.** `custom_render_plugin` is where to look:
+  it holds the particle parameters' names, as menu labels, and the code that fills the
+  block, below. None of the modules searched before it holds the names. The scene code is
+  reached through C++ virtual calls.
+- The lines scene leans on `qglbase` (inferred from the RPCS3 log). Right before
   the `SceQglLines` SPURS instance is created, `qglbase` allocates memory and the RSX I/O
   mappings of the wave (`io 0x500000`) and particle (`io 0x600000`) buffers are set up.
 
-### Every SPU task comes from `qgl_gaia_app`
+### The XMB runs `custom_render_plugin`, not `qgl_gaia_app`
 
-**Verified.** `qglbase.prx` and `qgl_canyon_app.prx` import no `cellSpurs` function at
-all, so the task manager in `qgl_gaia_app` runs the tasks of every scene, the lines one
-included. It holds a single `cellSpursCreateTask` call, at `0x468a4`, inside the function
-at `0x46590`, and passes the task an argument whose second word is `object + 0x200`: the
-address of the list of 56-byte records the task walks. The same object holds event flags
-at `+0x80` and `+0x100`, a three-word descriptor at `+0x180`, the local-store pattern at
-`+0x318` (from a table at `0xa32c8`) and the pointer to the SPU ELF at `+0x328`.
+**Verified** from the savestates. A loaded PRX module keeps its module info record in memory -
+attributes, version 1.1, a 28-byte name, then its TOC and the bounds of its export and import
+tables - so a savestate lists what is loaded. Five savestates list 40 to 47 modules, with
+`qgl_base_module`, `xmb_plugin_module` and `custom_render_module` in every one and
+`gaia_app_module` and `canyon_app_module` in none; nor is `qgl_gaia_app`'s code in memory, in
+the one savestate searched for it. `custom_render_plugin` carries both modules' paths under
+`/dev_flash/vsh/module/` and imports from both, so it seems to load them only when it needs
+them (inferred).
 
-`0x46590` has no callers: it is reached by a tail call from `0x48ce8`, whose class has its
-vtable at `0xa4190` (virtuals at `0x44ae0`, `0x450c4`, `0x44f74`, `0x4520c`, `0x45ac0`,
-`0x46558`, `0x46c08`, `0x49594` and others, through the OPDs at `0xa5ef4`-`0xa5f8c`). The
-vtable is installed from `0x44f80`, `0x44f90`, `0x450d0`, `0x450e0`, `0x4548c` and
-`0x45498`. **The next step is to read that constructor**: the record list, and with it the
-parameter block each record points at, belongs to this class.
+`custom_render_plugin` is the lines scene, and more:
 
-### The lines scene's sets are in `qgl_gaia_app`, and QGL draws the icons
+- its strings name `LinesAppLayer`, `LinesLayer`, `ParticlesLayer`,
+  `CustomParticleVramAllocator`, and the menus `LinesMenu`, `BackMenu`, `RaysMenu`, `HDRMenu`,
+  `ParticlesMenu`, `ParticlesInteractionMenu` and `ParticlesHackMenu`, which list the
+  parameters of `PARTICLES.mnu`, `PARTICLES_UI.mnu` and `PARTICLES_SPE.mnu` by name;
+- it holds the override names the lines scene's sets live under, the `ICONS` menu and the
+  icons' shaders, so the code that draws the icons and the code that fills the particle block
+  are in one module;
+- it creates the SPURS instance with the `SceQgl` prefix, and `0x53cd0` launches the task
+  exactly as `qgl_gaia_app`'s `0x46590` does: the argument's second word is `object + 0x200`,
+  the list of 56-byte records the task walks, with event flags at `+0x80` and `+0x100`, a
+  three-word descriptor at `+0x180`, the local-store pattern at `+0x318` and the pointer to the
+  SPU ELF at `+0x328`. `cellSpursCreateTask` is reached through a wrapper at `0x53c84`.
 
-**Verified.** `qgl_gaia_app` holds the override names the lines scene's parameter sets live
-under - `override/coldboot1` to `override/bright`, beside the Earth scene's own - next to the
-names of all fifteen `HDR.mnu` parameters, which its HDR menu shows. And the XMB's icons are QGL's
-too: `icons.qrc` carries `ICONS.mnu`, overrides for the same sets and the icons' shaders. So the
-engine that owns the particle block also knows how the icons move, which is where an icon wind would
-come from.
+So what was found in `qgl_gaia_app` - the task manager, whose launcher there is reached by a
+tail call from `0x48ce8`, in a class with its vtable at `0xa4190`, and the lines scene's
+override names - is a copy of what the XMB runs from here. The earlier reading, that every SPU task comes from
+`qgl_gaia_app`, rested on `qglbase` and `qgl_canyon_app` importing no `cellSpurs` function,
+and never looked at this module.
+
+### How the block is filled
+
+**Verified** in `custom_render_plugin`. The particle object points at `+0x18` to a larger
+object, B, laid out as the resting savestate shows it, with B at `0x200de580`: the first block
+at B+0x100, its grid at B+0x180, the second block at B+0xa00, the persistent state at
+B+0x1310, the field of view at B+0x1358, and the parameters at B+0x1360, with their second
+copy at B+0x1490. Every frame, `0x31494` writes the first block field by field:
+
+| Block | What `0x31494` puts there |
+|---|---|
+| +0, force | (0, `gravity`, 0), leaving w as it is |
+| +16, drag | `friction` three times, leaving w as it is |
+| +128, grid | the previous frame's cells, decayed in place by `0x2c588` - see [The flow grid](#the-flow-grid) |
+| +1792, M2 | what the camera sees at a distance of 9, at z = -7: 2 × 9 × `tanf`(fov / 2) = 8.97447 high, and the camera's aspect, 16 / 9, times that wide, 15.9546 |
+| +1856, M1 | M2 inverted, through a `qglbase` export |
+| +2048, +2064 | the life bounds, two vector constants at `0x940b0` and `0x940c0` |
+| +2176, rotation vector | zero, at the start of the update; the turn is written after it, by code not read yet |
+| +2192, noise offset | a vector the object keeps at `+0x680`, plus `wind dir` normalised × (`wind scale` + 10 × `wind scale 10`) when `wind dir` is longer than 0.0001 |
+| +2208, flow strength | the object's `+0xc0`: 1, from its constructor, and written nowhere else |
+| +2212, noise scale | `brownian scale` + level × `brownian` + motion × `rshake brw`, below |
+| +2216 | `size middle` |
+| +2220, spin rate | `spin time scale` |
+| +2224, time step | (`delta time` × 3, 1) |
+
+The noise's two input terms:
+
+- **The level** is a damped spring the object keeps at `+0x1d8`. Each frame its velocity
+  becomes 0.6 times itself, less 0.004 times its position, plus an impulse, which is then
+  cleared; the position moves by the velocity; and the level, at `+0x1d4`, is the position
+  clamped to [0, 1]. What writes the impulse is not traced yet.
+- **The motion** comes from `0x2c758`, which the update calls while a byte at `+0x1004` is
+  set, as the constructor leaves it: the length of the newest of up to 16 vectors the object
+  keeps in a ring at `+0x400`, times `rshake brw`, kept at `+0x604`. What fills the ring is not
+  traced yet.
+
+A byte at `+0xb4`, cleared by the constructor, collapses both life bounds to zero for one
+frame when set, and is cleared again: a way to kill every particle at once. What sets it is not
+traced.
 
 ### The task's record, and the block it reads
 
@@ -862,8 +922,9 @@ loop uses:
 `0x200de680`, and holds the same values - force, drag, rotation, time step - down to a grid
 descriptor pointing at its own grid, `0x200de700`, which the second block carries too. The
 savestate stores the pair 768 bytes apart, having left out their empty grids. That reads as the PPU
-composing the first block and copying it whole into the second, which would be why no code writes
-the second block's fields; the copy itself is not found (inferred).
+composing the first block and copying it whole into the second. The first half is verified now -
+`0x31494` writes the first block, see [How the block is filled](#how-the-block-is-filled) - and
+the copy is not found yet.
 
 ### The parameters, as the PPU holds them
 
@@ -877,58 +938,57 @@ the files word for word:
 - two zero words follow `aging variance`, and the integers 6 and 4 follow `brownian scale`;
 - `spot pos` and `spot attn` are padded to four words each.
 
+**Verified** in the code as well. `0x329a4` fills the second copy from the particle menu's
+values, and `0x3288c` its `PARTICLES_UI` part, 232 bytes in. That is where the integer comes
+from: `emit per frame` goes through `fctiwz`, which truncates it to 16. It also shows the word
+after the wind direction, at +80, holding `wind scale` + 10 × `wind scale 10`, the scale the
+block's wind is built with.
+
 The 16 is a lead for the emitter: 16 attempts a frame with the fraction dropped make
 16 × 0.479115 = 7.67 emissions a frame, where the model, carrying the fraction, makes 7.98.
 Untested.
 
-### The grid's writer, not found yet
+### The grid's writer
 
-The PPU writes the grid - it sits in main memory and changes with the icons, and neither an RSX
-command nor the task's own PUTs reach it - but no module holds code that looks like it:
+**Verified.** It is in `custom_render_plugin`: `0x2f90c` writes the icon wind into the first
+block's grid, once for every icon drawn, and `0x2c588` decays the grid every frame - see
+[The flow grid](#the-flow-grid) for the rule. The search that missed it went through
+`qgl_gaia_app`, `qglbase`, `qgl_canyon_app`, `xmb_plugin` and `vsh.elf`, every module but this
+one, looking for the float-to-signed-byte sequence - `fctiwz`, a spill, a `lwz` and a `stb` -
+that both functions turn out to use.
 
-- Turning a float into a signed byte takes `fctiwz`, a spill, a `lwz` and a `stb`. Across
-  `qgl_gaia_app`, `qglbase`, `qgl_canyon_app`, `xmb_plugin` and `vsh.elf` there are 22 such
-  sequences, and none computes a signed quantity like the grid's: a B-spline weight table, RGB565
-  to RGBA8, the channels of UI colours, and a buffer of random bytes.
-- Nothing outside texture decoders steps a pointer by 3 bytes or by a 96-byte row next to byte
-  stores, computes an index times 3, or clamps to ±127.
-- No code reaches the block's fields in a way that holds up on inspection - by displacement,
-  through AltiVec indexed stores or through a pointer to a field, at any offset of the block inside
-  a larger object - and none reads `icon wind` and its two scales through one base.
-- `vsh.elf` embeds one SPU program, `surf_spu.elf`, which is unrelated.
-
-So the cells are most likely computed in integers or copied in whole, and the copy above would put
-the writer on the first block.
-
-The savestates' stacks cannot narrow it down either. `tools/re/coverage.py` reads the return
-addresses they keep and places `vsh.elf` by them - two thirds of the frame-shaped values that land
-in its code follow a `bl`, where a wrong address gets a tenth or so - but the QGL modules leave no
-such trace: no load address collects more votes than chance, in any savestate.
+**The savestates' stacks show no PRX module at all.** `tools/re/coverage.py` places `vsh.elf`
+by the return addresses the stacks keep - two thirds of the frame-shaped values that land in
+its code follow a `bl`, where a wrong address gets a tenth or so. But at the load addresses
+their module info records give, `0x15a0000` for `xmb_plugin` and `0x980000` for `qglbase` in
+the resting savestate, neither module has a single return address in a frame-shaped slot,
+though `xmb_plugin` runs all the time. So the tool sees `vsh.elf` alone, and a module missing
+from its output says nothing about whether it ran.
 
 ### Ruled out
 
 - The `+0x830` and `+0x890` pairs in `qgl_gaia_app`, which match the parameter block's
   field centre and noise offset, are members of an array of 96-byte objects destroyed in a
   loop. They are not the parameter block.
-- The Park–Miller generator at `0x3aa38` is a **hash**, not a sequence: it reads a seed
-  through a pointer, mixes it with `0xDEADBEEF` and never writes it back. Its only two
-  callers, at `0x3aab8` and `0x3b0bc`, use it to pick a random element of a linked list.
+- The Park–Miller generator at `0x3aa38` in `qgl_gaia_app` is a **hash**, not a sequence: it
+  reads a seed through a pointer, mixes it with `0xDEADBEEF` and never writes it back. Its only
+  two callers, at `0x3aab8` and `0x3b0bc`, use it to pick a random element of a linked list.
   It is not the emitter's generator.
-- `_LifeBounds`, (-10, -10, -12) and (10, 10, 7), appears as a float triple in no module
-  and in no file of the scene, so it is built at run time.
-- No code in any of the modules or in `vsh.elf` fills a record with scalar stores at the
-  offsets the task reads (`+20`, `+28`, `+32`, `+36`, `+44`); the only match is a static
-  constructor in `qglbase` zeroing unrelated objects. The records must be written with
-  vector stores, or copied from a template.
+- No code in the modules searched before `custom_render_plugin`, `vsh.elf` included, fills a
+  record with scalar stores at the offsets the task reads (`+20`, `+28`, `+32`, `+36`, `+44`);
+  the only match is a static constructor in `qglbase` zeroing unrelated objects.
+  `custom_render_plugin` has not been searched for it yet.
 
 ## The implementation in `ps3xmbwave/`
 
-The PPU side is not traced yet, so the implementation ports what is verified as it is.
-It models the rest, marked as modelled in the code, until the PPU code replaces it.
+The implementation ports what is verified as it is and models the rest, marked as modelled
+in the code. The PPU side is ported as far as it is traced - how the block is filled, the flow
+grid's decay and wind, the noise's formula and spring, the wind - and what it needs from the XMB
+is modelled: where the icons go when the selection moves, and what kicks the spring.
 
 | File | Verified | Modelled |
 |---|---|---|
-| `particles-reverse.js` | The update task, steps 1 to 8. The pool layout, free marker, life bounds and camera. The parameter block: its layout, and the values at every offset. | What the flow grid holds, the emitter, and the response to input. |
+| `particles-reverse.js` | The update task, steps 1 to 8. The pool layout, free marker, life bounds and camera. The parameter block: its layout, the values at every offset, and how the PPU fills it, the flow grid and the noise included. The icons' layout on screen, measured. | The emitter; how the icons move; what kicks the noise's spring and what its motion term reads; the field's turn. |
 | `particles.js` | Both passes, re-authored from the decompiled programs, fed with the `.mnu` values the tables above map. | `_Color` = `color_control` × (1, 1, 1) and `_Gamma` = 1. The iridescent texture comes from the fit. |
 | `particles-themes.js` | The nine distinct theme sets, as their differences from the base. | Which set applies when: the day cycle above, with a four-hour smoothstep between neighbours. |
 | `wave-surface-cpu.js` | | A CPU copy of the spline layer's wave vertex shader, so particles are born on the wave that is drawn. |
@@ -958,53 +1018,66 @@ emissions a frame, simply keeps it that way.
   - Orientation: uniformly random.
   - The random numbers come from a Park–Miller generator, the arithmetic qgl_gaia_app
     carries, though it uses it as a hash rather than a sequence.
-- **Parameter block.** Everything the savestate shows is used as it is: the force is
-  `gravity` alone, the drag `friction`, the time step (`delta time` × 3, 1), the spin rate
-  `spin time scale`, the noise scale `brownian scale`, the flow strength 1, and the field
-  turns about the origin. What the implementation adds on top is the icon wind, in the
-  force, and the agitation level, which multiplies the noise scale by
-  (1 + `rshake brw` × level).
-- **Flow grid.** Its 32 × 16 size and its two matrices are the firmware's; what the nodes
-  hold is not. The console's grid is empty at rest and carries the icon wind while
-  navigating - see [The flow grid](#the-flow-grid) - where this one carries the wave's
-  velocity all the time.
-  - Each node takes the wave's nearby velocity, with Gaussian weights of radius 1.5, so
-    the flow fades where the wave is far, and is divided by the grid's own scale so that
-    M2 hands the task back a world velocity.
-  - `flowGridGain` scales that velocity on its way in. It is the modelled half of the
-    flow: the flow strength beside it is the firmware's 1.
-  - Its nodes sit at the corners, i / 31 and j / 15 of the way across, in floats; the
-    console's cells are centred, (i + 0.5) / 32 and (j + 0.5) / 16, and hold bytes over 127.
+- **Parameter block.** Ported from the PPU's code - see
+  [How the block is filled](#how-the-block-is-filled): the force is `gravity` alone, the drag
+  `friction`, the time step (`delta time` × 3, 1), the spin rate `spin time scale`, the flow
+  strength 1, and the field turns about the origin. The wind goes in as the noise offset,
+  `wind dir` normalised × (`wind scale` + 10 × `wind scale 10`), which only `gameboot3/4` and
+  `welcome_1/2` turn on. The noise scale is `brownian scale` + level × `brownian` + motion ×
+  `rshake brw`, with the level's spring as traced; what drives the spring and the motion is
+  modelled, under Input.
+- **Flow grid.** Ported: 32 × 16 cells of signed bytes, sampled the way the task samples them,
+  decayed by 0.98 a frame, and written by every icon that moves - see
+  [The flow grid](#the-flow-grid). At rest it stays empty, as the console's does. What is
+  modelled is what writes it: the icons' motion.
+- **Icons.** A modelled XMB of 10 categories with 8 items each, starting as the resting capture
+  does, with four categories to the left of the selection and two items above it. Where each
+  icon sits is the captures' - see [Where the icons are](#where-the-icons-are). How they get
+  there is not measured:
+  - on a step every icon eases towards its new place, and every category icon towards its new
+    height, with a time constant of `iconEaseSec`. At its 0.065 s, the first frame of a step
+    writes 58 into the category row, the captures' strongest byte there being 59.
+  - Only the selected category's column is drawn, and a newly selected one appears in place.
+    The console also draws the columns it is leaving, moving sideways with the row, which
+    writes zero bytes wherever they pass.
+  - Within a frame the grid decays first and the icons write after it; the console's order is
+    not known.
+  - A step to the right writes the category row as the captures show it, negative on the
+    left of the selection and positive on its right, the shrinking icon's side and the
+    growing one's. A step down writes the item column at +127, since items travel up to a
+    third of the screen's height in a few frames.
 - **Input.**
   - Icon steps are D-pad presses. A horizontal one yaws the field about its centre, at up
     to `dpad rot max` per frame, scaled by `dpad scale x`. A vertical one pitches it,
     scaled by `dpad scale y` (0). The rate decays by 0.85 per frame.
-  - The icons' scroll velocity pushes particles along y, as `icon wind` × `icon wind scl y`.
-  - **Here, each axis drives one thing and only one.** `dpad scale y` is 0 and `icon wind scl
-    x` is 0, both from the firmware, so the implementation has navigating sideways turn the
-    field and raise no wind, and navigating up or down raise wind and turn nothing. The
-    console does not split them that way: sideways navigation also writes vertical wind into
-    the flow grid, along the row of icons - see [The flow grid](#the-flow-grid) - so `icon
-    wind scl x` being 0 means the wind has no x, not that sideways moves raise none. The
-    implementation keeps its split for now: the grid's scale is known, the rule that writes
-    it is not.
+  - Every step also moves the modelled icons, whose wind goes through the flow grid, above.
+    Sideways steps raise wind as well as turning the field, as on the console: `icon wind
+    scl x` being 0 means the wind has no x, not that sideways moves raise none.
   - **Which way the field turns is measured.** Four captures, two taken holding right and two
     holding left, carry the rotation at +2.09e-5 and +2.16e-5 against -2.05e-5 and -2.23e-5:
     right is positive. With the particles six and a half units beyond the centre of the turn,
-    that sweeps them left - the way the icons go, which is the rule the wind already followed.
-    It also dates the savestate taken while navigating: its +1.84e-5 was a step to the right.
-    Headless, holding a direction for two seconds moves the drawn particles' mean by -2.89 in
-    x for right and +2.96 for left, +5.73 in y for down and -5.81 for up.
-  - The vertical sign stays modelled: `dpad scale y` is 0, so the field does not turn when the
-    selection goes up or down. Only the wind moves, through the flow grid, and no capture has
-    settled its sign for up and down yet.
+    that sweeps them left - the way the icons go. It also dates the savestate taken while
+    navigating: its +1.84e-5 was a step to the right. Headless, holding a direction for two
+    seconds, a step every 0.1 s, moves the drawn particles' mean by -1.85 in x for right and
+    +1.84 for left. Down and up move it by +0.05 and -0.04 in y: the wind acts only where
+    the icons move.
+  - The vertical sign follows from the traced rule. `dpad scale y` is 0, so the field does not
+    turn when the selection goes up or down; only the wind moves, and a cell takes the sign of
+    the icon's own motion on screen, which M2 turns into a force pointing the same way. So the
+    wind pushes particles the way the icons move, and since pressing down scrolls the items up
+    (inferred from how the XMB scrolls), down pushes them up.
   - The accelerometer is tested as hypot(`dshake x coeff` × a_x, `dshake g coeff` × a_y)
     against `dshake thresh`. Above it, two things happen:
     - the field is stirred about y, the axis the savestates show, at up to
       `dshake rot max` per frame, in the direction of the swing that started the shake;
-    - the shake level rises by `dshake brw imp`.
-  - The level, whichever input raised it, scales the noise as
-    `brownian scale` × (1 + `rshake brw` × level), which is what the savestates measure.
+    - the noise's spring gets an impulse of `dshake brw imp` × (1 + the excess over the
+      threshold, relative to it).
+  - What else kicks the spring is not traced. Here a step kicks it by `stepNoiseImpulse`: at
+    its 0.4 the noise is 3.17 times its rest 0.4 s after a step, against the 3.19 the savestate
+    taken while navigating measured - which could as well have been hand motion.
+  - The motion term reads the adapter's acceleration, in g, times `shakeMotionGain`. At its
+    0.05, a shake just past the threshold puts the noise at about 6.6 times its rest, the
+    shaking savestate's 6.63.
 
 ### Against the console
 
@@ -1015,21 +1088,21 @@ drawn column the two frame captures':
 | The pool | Simulation | Console |
 |---|---|---|
 | Alive | 2039 to 2043 of 2049 | 2033 of 2049 |
-| Aging rate, min / median / max | 0.001447 / 0.002517 / 0.004256 | 0.001447 / 0.002435 / 0.004256 |
-| Just born, view depth | 7.81 / 8.63 / 9.37 | 7.57 / 8.55 / 9.07 |
-| Just born, velocity z | -0.0096 / -0.0002 / 0.0078 | -0.0112 / 0.0001 / 0.0078 |
-| Just born, speed in xy | 0.146 / 0.292 / 0.426 | 0.156 / 0.276 / 0.348 |
-| Late in life, view depth | 7.57 / 8.59 / 9.64 | 7.41 / 8.40 / 9.32 |
-| Late in life, velocity z | -0.3652 / -0.0095 / 0.3591 | -0.2501 / -0.0014 / 0.2337 |
-| Late in life, speed in xy | 0.105 / 0.369 / 0.756 | 0.081 / 0.262 / 0.517 |
+| Aging rate, min / median / max | 0.001447 / 0.002522 / 0.004256 | 0.001447 / 0.002435 / 0.004256 |
+| Just born, view depth | 7.81 / 8.60 / 9.30 | 7.57 / 8.55 / 9.07 |
+| Just born, velocity z | -0.0111 / -0.0007 / 0.0084 | -0.0112 / 0.0001 / 0.0078 |
+| Just born, speed in xy | 0.147 / 0.294 / 0.424 | 0.156 / 0.276 / 0.348 |
+| Late in life, view depth | 7.56 / 8.57 / 9.58 | 7.41 / 8.40 / 9.32 |
+| Late in life, velocity z | -0.3644 / -0.0057 / 0.3792 | -0.2501 / -0.0014 / 0.2337 |
+| Late in life, speed in xy | 0.102 / 0.369 / 0.716 | 0.081 / 0.262 / 0.517 |
 
 | What is drawn | Simulation | Capture 1 | Capture 2 |
 |---|---|---|---|
-| On screen | 1556 to 1596 | 1437 | 1417 |
-| Opacity exactly 1 | 90.9 to 93.0% | 92% | 92% |
-| View depth, median | 8.63 to 8.65 | 8.92 | 8.49 |
-| Distance outside the wave band, 90th percentile (NDC) | 0.157 to 0.179 | 0.096 | 0.114 |
-| Same, 99th percentile | 0.392 to 0.501 | 0.38 | 0.39 |
+| On screen | 1554 to 1601 | 1437 | 1417 |
+| Opacity exactly 1 | 91.2 to 93.3% | 92% | 92% |
+| View depth, median | 8.61 to 8.66 | 8.92 | 8.49 |
+| Distance outside the wave band, 90th percentile (NDC) | 0.156 to 0.165 | 0.096 | 0.114 |
+| Same, 99th percentile | 0.402 to 0.468 | 0.38 | 0.39 |
 
 Known differences:
 
@@ -1037,16 +1110,14 @@ Known differences:
   percentile), against 0.57 captured. Relative to the band, the particles look more spread
   out - which is also why the last two rows cannot be read cleanly: the distance is measured
   against a band that is wrong to begin with.
-- **The particles stay too fast, and it is the noise.** Late in life they move at 0.366 in xy
-  where the console's move at 0.262, and spread over 0.35 in z where the console spreads over
-  0.24. Switching each modelled term off in turn says which one does it: with the flow at zero
-  the pool barely moves, 0.349 against 0.366, and at half gain not at all; with the **noise**
-  at zero the median lands on 0.269, against the console's 0.262, and the z spread vanishes
-  altogether - every bit of it is noise. So the flow is not the suspect it looked like, and
-  the modelled grid's contents matter less for what is on screen than the notes assumed. And
-  the console's own flow turns out to be zero at rest - its grid is empty unless the icons
-  move, see [The flow grid](#the-flow-grid) - so the faithful setting is ours switched off,
-  which takes the median to 0.349: closer, but far from 0.262.
+- **The particles stay too fast, and it is the noise.** Late in life they move at 0.369 in xy
+  where the console's move at 0.262, and spread over 0.37 in z where the console spreads over
+  0.24. The flow plays no part: the console's grid is empty at rest - see
+  [The flow grid](#the-flow-grid) - and now the implementation's is too, since it writes the
+  grid the console's way, and the bench gives it no input. When the grid still held the wave's
+  modelled velocity, switching it off had moved the median from 0.366 only to 0.349. With the
+  **noise** at zero the median lands on 0.270, against the console's 0.262, and the z spread
+  vanishes altogether - every bit of it is noise.
 
   The noise's own magnitude is not in question - `brownian scale` is read from the block - so
   what differs is how it lands. **The ordering is confirmed on the console**: taking each live
@@ -1116,8 +1187,8 @@ Known differences:
   itself is read from the block, fitting it would be tuning a traced number to hide something
   else. Why the same noise pushes our particles harder is still open.
 - **About a tenth too many on screen**, and that has not moved with any emission change so
-  far. One not tried yet: the PPU holds `emit per frame` as the integer 16 - see
-  [The parameters, as the PPU holds them](#the-parameters-as-the-ppu-holds-them).
+  far. One not tried yet: the PPU holds `emit per frame` as the integer 16, truncated by
+  `fctiwz` - see [The parameters, as the PPU holds them](#the-parameters-as-the-ppu-holds-them).
 - **The captured particles are denser on the left.** The captured wave runs further left
   than right, while the spline layer's wave is centred.
 
@@ -1208,12 +1279,34 @@ byte of a cell - y, read as a signed byte:
 The savestate taken while navigating keeps one line of the grid, and it reads as the same row,
 with -1 to -8 and then +4 to +46: a step to the right, as its rotation says.
 
-**Inferred: it is the icon wind.** Only y is ever written, which is what `icon wind scl x` 0
-and `icon wind scl y` 1 ask for. Row 11 of 16 is about a quarter of the way down the screen at
-the grid's depth, where the XMB's row of category icons is, and columns 6 and 7 of 32 are a
-fifth of the way across, about where the selected category's items run down the screen. So the
-wind is local - the grid carries it to where the icons move - rather than a force on every
-particle.
+**Verified: it is the icon wind.** `custom_render_plugin` writes the grid in two places.
+
+- **The wind, `0x2f90c`.** The icons' drawing code (`0x122c0`) calls it for every icon it
+  draws, with the icon's id and matrix, while a byte the particle object keeps at `+0x1006` is
+  set, as its constructor leaves it. It projects the icon's position with the icons'
+  view-projection, which `0x6fac` hands the particle object at `+0x1020`, and divides by w.
+  Each icon's previous position waits in a map keyed by its id, emptied when it passes 100
+  entries. If the icon has not moved on screen nothing happens; if it has, the cell under it
+  is **overwritten**, not added to:
+  - column ⌊(x + 1) / 2 × 32⌋ and row ⌊(y + 1) / 2 × 16⌋, each clamped to the grid;
+  - bytes trunc(127 × clamp(10 × `icon wind` × (`icon wind scl x` × T × dx,
+    `icon wind scl y` × dy, 0), -1, 1)), where (dx, dy) is the icon's motion on screen since
+    its last call and T a float the object keeps at `+0x14`, not traced;
+  - with the firmware's 11.3877, 0 and 1, that is y = trunc(127 × clamp(113.877 × dy, -1, 1)),
+    with x and z left at 0.
+- **The decay, `0x2c588`.** The update calls it every frame, halfway through building the
+  block. Each byte becomes trunc(127 × clamp(b / 127 × 0.98, -1, 1)), in single precision,
+  with the 0.98 set by the object's constructor, `0x322b8`, and written nowhere else. A 127
+  goes to 124, 121, 118 and on, and reaches 0 after 84 frames, 1.4 s.
+
+The captures agree where they can. Every non-zero byte is a y, which is what `icon wind scl x`
+0 and `icon wind scl y` 1 ask for, and the cells are where the icons are - see
+[Where the icons are](#where-the-icons-are). Row 11 is the category row's. Columns 6 and 7 fit a
+column at x = -0.565, where one capture shows the items of an opened folder, its category moved
+left to -0.786; the capture that wrote those cells, taken on entering the music category, holds
+no icon draws to confirm it (inferred). So the wind is local - the grid carries it to where the
+icons move - rather than a force on every particle. The values themselves need the icons'
+motion over time, which a capture, a single frame, does not give.
 
 **Verified: how the task reads a cell.** `FUN_000068e0` samples the grid bilinearly, with the
 cells centred:
@@ -1235,11 +1328,12 @@ strength of 1 leaves it there. So a cell's y byte b adds 8.97447 × b / 127 = 0.
 force, which at the time step of 0.0088883 is 0.000628 b on the velocity every frame. The
 strongest byte captured, +59, is a force of 4.17 - 0.037 a frame, enough to take a particle
 sitting in that cell from rest to the pool's median speed, 0.26, in seven frames. An x byte
-would count 15.9546 / 127 and a z byte 1 / 127, but neither has been seen written.
+would count 15.9546 / 127, but with `icon wind scl x` at 0 the writer leaves x at 0, as it
+always leaves z.
 
-Still open: the PPU code that writes the cells, and with it the rule that turns the icons'
-motion into bytes - see [The grid's writer, not found yet](#the-grids-writer-not-found-yet) for
-where it is not.
+Still open: how fast the icons move, which sets the values; T, which only matters while
+`icon wind scl x` is not 0; and whether, within a frame, the icons write before or after the
+update decays the grid.
 
 Finding one's way around a savestate's local store takes one correction. Searching for 64 bytes
 of `particles.elf` at a known vaddr finds the copies of the task and gives each local store's
@@ -1249,23 +1343,50 @@ already sits 128 bytes early - the pointers its start-up stores at `0xb080` and 
 `0xb000` and `0xb100` - which is what once put the block at `0xb180` instead of the `0xb200` the
 code loads it into.
 
+### Where the icons are
+
+**Measured** from the RSX captures. Every icon is drawn as a unit quad, -0.5 to 0.5, with its own
+`_ModelviewProjection` (`lib/icons/quad.vpo`, c[256] to c[259]), so each draw's centre and size
+on screen read straight off a capture. In normalised device coordinates, as the resting captures
+show them:
+
+- the category row sits at y = 0.463, row 11 of the grid. Its icons are 0.217 high and 0.2085
+  apart, and the selected one sits at x = -0.411, column 9, 0.310 high, with its neighbours
+  0.2185 from it;
+- a category icon's centre rises by 0.1935 per unit of height it gains, to 0.481 when selected.
+  The nine icons the navigation captures catch between the two sizes, from 0.225 to 0.286 high,
+  all sit on that line, within 0.001;
+- the selected category's items run down its column: the selected item at y = 0.065, 0.377
+  high; the ones before it above the row, from 0.778 up; the ones after it below, from -0.259
+  down; those 0.158 high and 0.148 apart.
+
+While the selection moves sideways the captures also show the columns of the categories passed,
+still drawn and moving with the row. How fast the icons move is not measured: a capture is a
+single frame.
+
 ## Still missing
 
 The implementation models both of these:
 
 - Emission: the code that writes new particles into free slots. What it produces is now
-  measured from the pool, above, but not where it comes from; the parameters it would read are
-  in the PPU's memory, `emit per frame` among them as an integer.
-- The code that fills the parameter block each frame, the flow grid's cells among it. Where
-  the grid lives, how the task reads it and when it is written are known, above; the rule that
-  turns the icons' motion into bytes is not, and the implementation still builds its grid
-  from the wave.
+  measured from the pool, above, but not where it comes from. It should be in
+  `custom_render_plugin` beside the update that fills the block (inferred), and the
+  parameters it reads are in the PPU's memory, `emit per frame` among them as an integer.
+- How the icons move, which sets the flow grid's values. The rule that writes the cells and
+  where the icons sit are ported - see [The flow grid](#the-flow-grid) - and the easing
+  between places is modelled.
 
 Also missing:
 
+- What feeds the noise's two input terms: the impulses that drive the level's spring, and the
+  vectors in the particle object's motion ring - see
+  [How the block is filled](#how-the-block-is-filled).
+- What writes the field's rotation vector after the update clears it, and what copies the first
+  block into the second.
 - The code that generates `proc_iridescent`. The implementation uses the fit above.
 - What drives `black` and `bright`, and the order and timing of the `gameboot` and
   `welcome` stages - their values are all read, and under RPCS3 neither sequence can be
   reached. `music_1` is playback and `coldboot1` is the XMB's own opening, both measured,
   and the day cycle is measured in all four of its windows.
-- What `PARTICLES_SPE.mnu` is for.
+- What `PARTICLES_SPE.mnu` is for. `custom_render_plugin` lists its five names beside the
+  other two files'.

@@ -9,8 +9,9 @@
 //
 // Usage: node tools/bench/particles.js [--seconds 30] [--runs 3] [--seed 1] [--terms]
 //
-// --terms runs the pool again with each modelled force switched off, which is how the noise turned out to be what
-// keeps the particles fast late in life, and the flow to be nearly irrelevant at the gain we give it.
+// --terms runs the pool again with each force switched off, which is how the noise turned out to be what keeps the
+// particles fast late in life. The flow has nothing to switch off here: the bench gives no input, so the flow grid
+// stays empty, as the console's does at rest.
 
 const fs = require('fs');
 const path = require('path');

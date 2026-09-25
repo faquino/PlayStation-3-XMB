@@ -15,7 +15,7 @@ Extracted firmware assets must never be committed.
 | `ppu_prx.py` | Loads decrypted PPU modules (PRX or executable), applies PRX relocations, finds the TOC, and disassembles with capstone. Also finds immediates, the code that reaches an address, and the callers of each named import. Needs `pip install capstone`. |
 | `whichset.py` | Names the parameter set an RSX capture was taken under, or the pair it was crossfading and how far along, by fitting the backdrop's four corner colours against every `override/`. Reads the particles' live `glare` from the same capture. |
 | `readblock.py` | Reads the particle task's 2304-byte parameter block out of RSX captures, at the offsets the task reads it: force, drag, the field's rotation, the noise scale, and the flow grid's non-empty cells. |
-| `coverage.py` | Finds where a PPU module sits in a savestate from the return addresses its stacks keep, and lists the module's call sites among them - which functions ran - and the ones only one savestate holds. |
+| `coverage.py` | Finds where a PPU module sits in a savestate from the return addresses its stacks keep, and lists the module's call sites among them - which functions ran - and the ones only one savestate holds. So far only `vsh.elf` leaves any. |
 | `nids.py` | Computes PS3 function NIDs from names and names a module's imports. |
 
 ## Typical workflow
@@ -78,8 +78,16 @@ the call sites. A relocatable module loads somewhere else each boot, and a reloc
 pair in its code is no way to find out where: short sequences recur across modules, and a match in
 the savestate can be another module's copy. The vote is checked instead - at the right address most
 of the values that land in the code follow a `bl`, at a wrong one a tenth or so. In the savestates
-taken so far it places `vsh.elf` and none of the QGL modules, whose frames are not on the stacks.
-Compare savestates from one session: stale frames differ between boots.
+taken so far it places `vsh.elf` and no PRX module at all - not even `xmb_plugin`, which runs all
+the time and, at the load address its module info record gives, has no return address on the
+stacks. So a module it does not place may still have run. Compare savestates from one session:
+stale frames differ between boots.
+
+**A savestate also says which PRX modules are loaded.** A loaded module keeps its module info
+record in memory: attributes, version 1.1, a 28-byte name padded with zeros, then its TOC and the
+bounds of its export and import tables. Searching for that shape lists the modules, and the export
+table's address less its link address is where the module's code sits. That is how
+`custom_render_plugin`, and not `qgl_gaia_app`, turned out to be the XMB's scene.
 
 A capture also holds **the particle parameter block**, whole: `readblock.py` finds it by its life
 bounds and reads it at the task's own offsets, the flow grid included. Captures accumulate, each one
