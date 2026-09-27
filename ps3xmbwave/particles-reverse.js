@@ -275,8 +275,9 @@
     for (let s = capacity - 1; s >= 0; s--) {
       const o = s * STRIDE;
       pool[o + 3] = FREE;
-      // A new particle keeps the orientation its slot's last one left. How the console fills the slots at first is
-      // not traced; here each starts with a random orientation (Shoemake).
+      // A new particle keeps the orientation its slot's last one left. The console builds its pool with the identity
+      // (0x5b74c), but after many lives its particles' orientations are uniform, which a random one (Shoemake) gives
+      // from the start.
       const u1 = uniform(), u2 = uniform() * 2 * Math.PI, u3 = uniform() * 2 * Math.PI;
       const a = Math.sqrt(1 - u1), b = Math.sqrt(u1);
       pool[o + 8] = a * Math.sin(u2); pool[o + 9] = a * Math.cos(u2);

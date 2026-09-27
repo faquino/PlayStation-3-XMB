@@ -137,13 +137,13 @@ fill it; `ps3xmbwave/` instead pre-warms 300 steps on its first frame, so the pa
 That is a deliberate difference, not a missing piece.
 
 RPCS3 boots `vsh.self` directly, so what these captures see is the tail of the console's own
-boot: the XMB coming up out of the `coldboot` sequence. Where `welcome_1` and `welcome_2` sit -
-power-on, or coming back from a game - is still open, and this path does not go through them.
+boot: the XMB coming up out of the `coldboot` sequence. Nothing in 4.93 applies `welcome_1` and
+`welcome_2` - see [What puts each set in](#what-puts-each-set-in).
 
 **The `gameboot` path is closed under RPCS3**, which cannot launch a game from the XMB, so
 neither the boot sequence nor the return from it can be captured there. Every value of those
-sets is already read out of the `.mnu` files; what stays unknown is the order the five stages
-run in and how long each takes.
+sets is already read out of the `.mnu` files, and the order and timing are now read out of the
+scene's `.rco` - see [What puts each set in](#what-puts-each-set-in).
 
 **The first-run wizard does not run this scene at all.** Removing `dev_flash2` and `dev_flash3`
 brings the wizard up (renaming the user profile does not - the XMB starts as if nothing
@@ -174,6 +174,51 @@ against a predicted 0.1858885.
 
 `tools/re/whichset.py` does this matching, for any capture: it fits the four corner colours
 against every pair of sets and reads the particles' `glare` beside them.
+
+### What puts each set in
+
+**Verified** in `custom_render_plugin` and its own `custom_render_plugin.rco`. The scene changes
+set on animation events. Its `.rco` holds four animations whose steps fire `native:/anim_...`
+events, and a table at `0x9cbc0` maps each event to a handler, which applies an
+`override/<set>` to each of the scene's layers with a blend time (`0x39728`; the blend itself
+runs in `qglbase`). Read from the `.rco`, with the fades of the logo left out:
+
+| Animation | Started by | Steps |
+|---|---|---|
+| `anim_coldboot2` | event 1, sub-event 0, which `vsh.elf` sends | BootBG2 at 0; NormalBG2 at 4 s; ShowGUI at 5.5 s; Finished at 10 s |
+| `anim_coldboot` | nothing in the code | BootBG1 and NormalBG at 0; ShowGUI at 5.5 s; Finished at 10 s |
+| `anim_gameboot` | event 2 | BG2 at 0; BG3 at 0.5 s; Finished at 2.8 s |
+| `anim_otherboot` | event 3 | BG3 at 0; BG4 at 0.2 s; Finished at 0.5 s |
+
+And what the handlers apply:
+
+| Event | Set | Blend |
+|---|---|---|
+| coldboot BootBG1 (`0xfa38`) | `coldboot1` | at once |
+| coldboot BootBG2 (`0x110dc`) | `coldboot1` at once, then `coldboot2` | 3 s |
+| coldboot NormalBG, NormalBG2 (`0x11bbc`, `0x11b20`) | the day cycle's set (`0x11600`) | 7.5 s |
+| gameboot BG2 (`0xf440`) | `gameboot2` | 0.25 s |
+| gameboot BG3 (`0xf210`) | `gameboot3` | 1.25 s |
+| otherboot BG3 (`0xeb28`) | `gameboot3` | 0.2 s |
+| otherboot BG4 (`0xe8f8`) | `gameboot4` | 0.3 s |
+
+So:
+
+- **`black` is where the scene starts.** Its start-up (`0x11d68`, in the plugin's vtable after
+  `0x4050`) applies `override/black` at once, so the XMB comes up with `global alpha` 0 until
+  the cold boot takes it to `coldboot1` and then, 4 seconds in, over 7.5 seconds into the
+  cycle - the opening the captures show, since `coldboot1` and `coldboot2` carry the same
+  `PARTICLES.mnu`. Event 10's code names `black` too.
+- **Launching a game** takes the particles to `gameboot2` in a quarter of a second and, half a
+  second in, to `gameboot3` over 1.25 seconds - `delta time` 0.08, nine times the base - until
+  the game takes the screen at 2.8 seconds. **Other content** goes to `gameboot3` in 0.2
+  seconds and to `gameboot4`, with `global alpha` 0, in 0.3 more.
+- **Nothing applies `bright`, `welcome_1`, `welcome_2` or `initial_setting` in 4.93**: they are
+  loaded with the rest (`0x388b8`) and named nowhere else. Neither does anything fire the
+  handlers for gameboot BG1, BG4, BG5 and MoyouZoom (`0xf6c8`, `0xefe0`, `0xedb0`, `0xf8f8`),
+  which apply `gameboot1`, `gameboot4` and `gameboot5` over 0, 0.5 and 0.5 seconds: an older
+  sequence the table still carries.
+- `music_1` is event 4 - see [Where the events come from](#the-parameters-as-the-ppu-holds-them).
 
 ### Telling the sets apart in a capture
 
@@ -332,8 +377,11 @@ savestate:
 
 - `_Color` is the scene's fade: to black when another module takes the screen, and to the
   brightness Theme Settings set - see [The particles' fade](#the-particles-fade).
-- `_Gamma` is set at once by the scene, from a table indexed by a system setting (`0x14578`,
-  not followed further).
+- `_Gamma` is set at once by the scene's update (`0x14578`, through `0x1b128` and `0x2b618`,
+  with a duration of zero) whenever the value it picks changes: one of two words of a small
+  structure, chosen by whether a third is above 0.05, which the code addresses at 0x8, 0xc
+  and 0x14 with no relocation - memory this disassembly cannot place. The same value goes to
+  the wave's renderer (`0x70bf8`). It is 1 in every savestate.
 
 Vertex uniforms live in constant registers and are not in the cache. Their values come
 from the RSX frame captures below; their meaning from the decompiled vertex shader.
@@ -1280,14 +1328,16 @@ constructor's 0.03 and 0.04, 64 bytes apart:
 ## The implementation in `ps3xmbwave/`
 
 The implementation ports what is verified as it is and models the rest, marked as modelled
-in the code. The PPU side is ported as far as it is traced - how the block is filled, the flow
+in the code. It steps at 60 Hz, as the XMB runs - 60 fps under RPCS3, as its overlay shows, and
+as the scene's constants assume: the block's default time step is (1/60, 1/60, 1/60, 1)
+(`0x5d510`), and both the PPU (`0x5d7b0`) and the task divide `spin time scale` by 60 a frame. The PPU side is ported as far as it is traced - how the block is filled, the flow
 grid's decay and wind, the noise's formula and spring, the wind, the emitter, the controller's
 response - and what it needs from the XMB is modelled: where the console's wave mesh falls on
 the spline layer's wave, where the icons go when the selection moves, and the input itself.
 
 | File | Verified | Modelled |
 |---|---|---|
-| `particles-reverse.js` | The update task, steps 1 to 8. The pool layout, free marker, life bounds and camera. The parameter block: its layout, the values at every offset, and how the PPU fills it, the flow grid and the noise included. The emitter and its random numbers. The controller's response: the D-pad's turn and kicks, the motion, the shake detectors. `PARTICLES_SPE.mnu`, as the PPU applies it, and its first factor's animation. The particles' fade, `_Color`. The icons' layout on screen, measured. | Where the wave's vertices fall and how fast they move; how the icons move; how often the XMB repeats a held direction; the pool's first orientations. |
+| `particles-reverse.js` | The update task, steps 1 to 8. The pool layout, free marker, life bounds and camera. The parameter block: its layout, the values at every offset, and how the PPU fills it, the flow grid and the noise included. The emitter and its random numbers. The controller's response: the D-pad's turn and kicks, the motion, the shake detectors. `PARTICLES_SPE.mnu`, as the PPU applies it, and its first factor's animation. The particles' fade, `_Color`. The icons' layout on screen, measured. | Where the wave's vertices fall and how fast they move; how the icons move; how often the XMB repeats a held direction; the pool's first orientations, uniform as the console's are after many generations. |
 | `particles.js` | Both passes, re-authored from the decompiled programs, fed with the `.mnu` values the tables above map, `PARTICLES_SPE.mnu` applied. `color_control` as the programs use it, and `_Color` from the system's fade. | `_Gamma` held at 1, its value in every savestate. The iridescent texture comes from the fit. |
 | `particles-themes.js` | The nine distinct theme sets, as their differences from the base. | Which set applies when: the day cycle above, with a four-hour smoothstep between neighbours. |
 | `wave-surface-cpu.js` | | A CPU copy of the spline layer's wave vertex shader, so particles are born on the wave that is drawn. |
@@ -1322,7 +1372,12 @@ on each frame that passes its draw, simply keeps it that way.
     to 0.299. No one factor fits both, because the wave's speeds are distributed differently.
   - The generator starts its counter at the seed; the console's is shared by all that draw
     from it. The pool starts with random orientations, which births then pass on, and it is
-    filled on the second frame, once the wave has moved.
+    filled on the second frame, once the wave has moved. The console builds its pool with
+    every orientation the identity (`0x5ef0c`, `0x5b74c`) and then marks every slot free
+    (`0x597bc`), but the spin depends on life alone, so a first generation born from the
+    identity turns in step. After many generations the savestates' orientations are uniform -
+    each component's square averages 0.24 to 0.27 against 0.25, and the rotation angle 2.16
+    to 2.21 rad against 2.207 - which the random start gives from the first frame.
 - **Parameter block.** Ported from the PPU's code - see
   [How the block is filled](#how-the-block-is-filled): the force is `gravity` alone, the drag
   `friction`, the time step (`delta time` × 3, 1), the spin rate `spin time scale`, the flow
@@ -1680,9 +1735,8 @@ Also missing:
   side, and the factor's animation, are traced.
 - How the wave's renderer uses the fade `_Color` is sent with (`0x4fe2c`), so the spline layer
   can fade too - see [The particles' fade](#the-particles-fade).
-- The code that generates `proc_iridescent`. The implementation uses the fit above.
-- What drives `black` and `bright`, and the order and timing of the `gameboot` and
-  `welcome` stages - their values are all read, and under RPCS3 neither sequence can be
-  reached. `music_1` is playback and `coldboot1` is the XMB's own opening, both measured,
-  and the day cycle is measured in all four of its windows. The code of event 10, which the
-  time zone setting sends, names `override/black`; what it does with it is not followed.
+- `proc_iridescent` exactly. It is a file of the firmware's resources, not generated at run
+  time, so the implementation stands in for it with the fit above.
+- `_Gamma`'s source - see [Uniform values at run time](#uniform-values-at-run-time).
+- The curve of the blend between sets, which runs in `qglbase`; what starts `anim_coldboot`,
+  the opening with the logo; and who sends events 2 and 3, a game's boot and another's.
