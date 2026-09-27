@@ -1,6 +1,7 @@
 'use strict';
-// Particle parameters: firmware defaults from PARTICLES.mnu and PARTICLES_UI.mnu, plus the knobs of the modelled PPU
-// side. Consumed by `particles.js`, `particles-reverse.js` and `xmb-input.js`; sliders from `settings-panels.js`.
+// Particle parameters: firmware defaults from PARTICLES.mnu and PARTICLES_UI.mnu, plus the console's state the particles
+// are drawn under and the knobs of the modelled PPU side. Consumed by `particles.js`, `particles-reverse.js` and
+// `xmb-input.js`; sliders from `settings-panels.js`.
 // Reads `PARTICLE_THEME_OPTIONS` (`particles-themes.js`) at load time for the theme dropdown.
 
 window.PARTICLE_SETTINGS = {
@@ -77,7 +78,17 @@ window.PARTICLE_SETTINGS = {
   iconWindSclX: 0,
   iconWindSclY: 1,
 
-  // --- Modelled PPU side and mouse adapter (not from the firmware) ----------------------------
+  // --- Console output, modelled PPU side and mouse adapter (not from the firmware) ------------
+  videoOutput: '1080', // the console's video output: below 1080p the particles grow and fade (PARTICLES_SPE.mnu)
+  // What's New's board (wboard_plugin) opening its list: over 2 s the particles speed up and glint more
+  // (PARTICLES_SPE.mnu), and closing it takes them back
+  whatsNewBoard: 'closed',
+  // Theme Settings > Background > Brightness, Normal to -5: the particles drawn at 1 - 0.15 per step, faded to over 1 s
+  themeBrightness: '0',
+  // The XMB's background given away, as a video, the browser or the Store take it: the particles fade to black over
+  // backgroundFadeMs, and back to the brightness when it is taken back
+  xmbBackground: 'shown',
+  backgroundFadeMs: 200, // the firmware's callers use 0 to 1000
   flowStrength: 1, // this one is the firmware's, the constant the PPU puts in the block
   iconEaseSec: 0.065, // how fast the modelled icons settle after a step
   mouseAccelToG: 0.04, // the dragged controller's acceleration, screen heights per second squared, in g
@@ -153,6 +164,20 @@ window.PARTICLE_SETTINGS_META = {
   iconWind: { min: 0, max: 50, step: 0.01 },
   iconWindSclX: { min: 0, max: 2, step: 0.01 },
   iconWindSclY: { min: 0, max: 2, step: 0.01 },
+  videoOutput: {
+    type: 'select',
+    options: [{ value: '1080', label: '1080p' }, { value: '720', label: '720p' }, { value: '480', label: 'SD' }],
+  },
+  whatsNewBoard: { type: 'select', options: [{ value: 'closed', label: 'Closed' }, { value: 'open', label: 'Open' }] },
+  themeBrightness: {
+    type: 'select',
+    options: [
+      { value: '0', label: 'Normal' }, { value: '1', label: '-1' }, { value: '2', label: '-2' },
+      { value: '3', label: '-3' }, { value: '4', label: '-4' }, { value: '5', label: '-5' },
+    ],
+  },
+  xmbBackground: { type: 'select', options: [{ value: 'shown', label: 'Shown' }, { value: 'hidden', label: 'Hidden' }] },
+  backgroundFadeMs: { min: 0, max: 1000, step: 10 },
   flowStrength: { min: 0, max: 2, step: 0.0005 },
   iconEaseSec: { min: 0.005, max: 1, step: 0.005 },
   mouseAccelToG: { min: 0, max: 0.2, step: 0.001 },

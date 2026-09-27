@@ -243,14 +243,17 @@
     uniform vec3 uAttn;           // constant, linear and quadratic attenuation of the spot
     uniform vec4 uLight;          // lambert coefficient, specular coefficient, exposure, specular power
     uniform float uIridescentExp;
+    uniform float uColorControl;
     uniform vec4 uNearControl;
     uniform vec4 uGlare;
     uniform vec3 uColor;
     uniform float uGamma;
 
     // Thin-film colour, looked up by the flake's normal as the camera sees it.
+    // color_control, the last word of _LightPack, takes it from white to the texture's colour.
     vec3 iridescence() {
-      return pow(texture(uIridescent, vViewNormal.xy * 0.5 + 0.5).rgb, vec3(uIridescentExp));
+      vec3 c = texture(uIridescent, vViewNormal.xy * 0.5 + 0.5).rgb;
+      return pow(mix(vec3(1.0), c, uColorControl), vec3(uIridescentExp));
     }
 
     float lightDistance() { return length(uSpot - vWorld); }
@@ -298,7 +301,7 @@
   const UNIFORMS = [
     'uMVP', 'uModelView', 'uEye', 'uSpot', 'uSpecPower', 'uLifeMin', 'uLifeMax', 'uFocus', 'uFocusCurves',
     'uParticleSize', 'uDarkness', 'uNearControl', 'uFrontFacing', 'uTransparency', 'uGlare', 'uIridescent',
-    'uAttn', 'uLight', 'uIridescentExp', 'uColor', 'uGamma',
+    'uAttn', 'uLight', 'uIridescentExp', 'uColorControl', 'uColor', 'uGamma',
   ];
 
   function uniformMap(gl, program) {
@@ -368,8 +371,11 @@
       gl.uniform2f(u.uTransparency, s.fresnel, s.globalAlpha);
       gl.uniform4f(u.uGlare, s.glare, s.glareScale, s.glareP1, s.glareP2);
       gl.uniform1f(u.uIridescentExp, s.iridescentExp);
-      // _Color ran as (1, 1, 1) with `color_control` 1; tying the two together is inferred.
-      gl.uniform3f(u.uColor, s.colorControl, s.colorControl, s.colorControl);
+      gl.uniform1f(u.uColorControl, s.colorControl);
+      // _Color is the scene's fade, which the system runs; _Gamma is a value the scene picks by a system setting, 1 in
+      // every savestate.
+      const c = system.colorFade.value;
+      gl.uniform3f(u.uColor, c, c, c);
       gl.uniform1f(u.uGamma, 1);
       gl.uniform1i(u.uIridescent, 0);
     }
@@ -398,7 +404,7 @@
       gl.bindVertexArray(vao);
       passes.forEach(function (pass) {
         gl.useProgram(pass.program);
-        setUniforms(pass.u, settings);
+        setUniforms(pass.u, system.effective);
         gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, count);
       });
       gl.bindVertexArray(null);

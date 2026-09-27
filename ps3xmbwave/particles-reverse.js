@@ -52,6 +52,25 @@
   const SHAKE_REVERSAL = 119; // against the last one's direction within this many frames, it counts double
   const SHAKE_PULSE_DECAY = 0.6; // the kick fades by this a frame
   const SHAKE_DAMP = 0.8; // and the turn's spring keeps this of its velocity
+  // PARTICLES_SPE.mnu: offsets the PPU adds every frame (0x31f44) to five parameters, the first three weighted by one
+  // factor and the last two by another, and every result clamped. Events 11 and 12 of the scene's interface take
+  // the first factor to 1 (sub-event 2) or back to 0 (sub-event 3) over SPE_EVENT_SEC, easing from where it stands
+  // with a smoothstep (0x2b6a8, 0x2b9b4) on the frame's time; wboard_plugin, What's New's board, sends 11 as it opens
+  // its list and as it closes. The second follows the frame's height (0x1acb4): 0 above 1079 lines, 0.5 above 719,
+  // 1 below.
+  const SPE_OFFSETS = {
+    deltaTime: 0.00346295, glare: 0.0832176, specularPower: -29.3657, // the first factor's
+    sizeMiddle: 0.0218883, globalAlpha: -0.555603, // the second's
+  };
+  const SPE_EVENT_SEC = 2;
+  // _Color, which both passes multiply their colour by: event 0 of the scene's interface fades it (0x1afdc) to the
+  // scene's brightness (sub-event 2) or to black (sub-event 3) over the milliseconds it carries, and sub-event 7 sets
+  // that brightness to 1 - BRIGHTNESS_STEP x Theme Settings' Brightness, 0 to BRIGHTNESS_LEVEL_MAX, fading to it over
+  // BRIGHTNESS_SEC. A fade runs from where _Color stands with the factors' smoothstep (0x2b658, 0x2c1f8), and one of no
+  // time lands on the next frame. The same call fades the wave's renderer (0x4fe2c), which is not ported.
+  const BRIGHTNESS_STEP = 0.15;
+  const BRIGHTNESS_LEVEL_MAX = 5;
+  const BRIGHTNESS_SEC = 1;
   // The emitter, 0x30b80, draws from the wave's vertices: 128 lines of 128, as the captures' wave draw lays them out.
   const MESH_N = 128; // vertices along a line, column 0 at the right edge
   const MESH_M = 128; // lines
@@ -171,6 +190,23 @@
   }
 
   function clampIndex(i, last) { return i < 0 ? 0 : i > last ? last : i; }
+
+  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+  // The parameters as 0x31f44 hands them on each frame: the theme's values, plus PARTICLES_SPE.mnu's offsets times the
+  // two factors, clamped. The first factor is clamped to [0, 1] too, and the second comes from the frame's height, as
+  // 0x1acb4 sets it on every resize.
+  function applySpe(S, eventFactor, height, out) {
+    eventFactor = clamp(eventFactor, 0, 1);
+    const resolutionFactor = height > 1079 ? 0 : height > 719 ? 0.5 : 1;
+    Object.assign(out, S);
+    out.deltaTime = clamp(S.deltaTime + eventFactor * SPE_OFFSETS.deltaTime, 1 / 300, 1 / 12);
+    out.glare = clamp(S.glare + eventFactor * SPE_OFFSETS.glare, 0, 1);
+    out.specularPower = clamp(S.specularPower + eventFactor * SPE_OFFSETS.specularPower, 0, 100);
+    out.sizeMiddle = clamp(S.sizeMiddle + resolutionFactor * SPE_OFFSETS.sizeMiddle, 0, 90);
+    out.globalAlpha = clamp(S.globalAlpha + resolutionFactor * SPE_OFFSETS.globalAlpha, 0, 1);
+    return out;
+  }
 
   // FUN_000068e0: the flow grid sampled bilinearly at normalised grid coordinates, with the cells centred. u = g x
   // (32, 16) - 0.5 gives the base cell and the fraction, each of the four corners is clamped to the grid on its own,
@@ -315,7 +351,20 @@
     const frameInput = { step: -1, held: -1, sensor: null };
     let sinceStep = REPEAT_FRAMES;
 
-    const stats = { count: 0, emitted: 0, died: 0, steps: 0, level: 0, noiseScale: 0, fieldAngle: 0 };
+    // The first PARTICLES_SPE.mnu factor, an animation the particle object keeps at +0x140: where it stands, where it
+    // started from and is going, and how long it has run.
+    const spe = { value: 0, from: 0, to: 0, time: SPE_EVENT_SEC };
+    // _Color's fade (the particle object's +0xd0, written to B+0x1340 every frame), kept as one grey level since every
+    // target is grey; the scene's brightness (0xa03bc, 1 until Theme Settings sets it) and the level it came from; and
+    // whether the XMB's background is given away.
+    const colorFade = {
+      value: 1, from: 1, to: 1, time: 0, duration: 0, running: false, brightness: 1, level: 0, hidden: false,
+    };
+
+    const stats = {
+      count: 0, emitted: 0, died: 0, steps: 0, level: 0, noiseScale: 0, fieldAngle: 0, eventFactor: 0, color: 1,
+    };
+    const effective = {};
     let count = 0;
     let stepCarry = 0;
     let warm = false;
@@ -525,8 +574,6 @@
     }
 
     // --- Verified: the parameter block, as 0x31494 fills it, and the controller's part in it --------------------
-    function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
-
     // 0x2b2dc, at the top of every frame: the Sixaxis's reading goes into a ring, and its difference from the last
     // frame's into another. The first reading only primes them - on the console the opening frames see a jump from
     // zero, which here would land in the first frames the page shows.
@@ -758,13 +805,73 @@
       emission.frame++;
     }
 
-    // The block first, decaying the grid, then the icons' wind on top of it: which of the two comes first within a
-    // frame on the console is not known.
-    function step(S, ev) {
+    // Events 11 and 12 (0x15330): the animation starts again from where the factor stands, towards 1 or 0.
+    function speEvent(target) {
+      if (target === spe.to) return;
+      spe.from = spe.value;
+      spe.to = target;
+      spe.time = 0;
+    }
+
+    // 0x31494 moves the animation on by the frame's time after 0x31f44 has applied it, and stops it at its end.
+    function speAdvance() {
+      if (spe.time >= SPE_EVENT_SEC) return;
+      spe.time = Math.min(spe.time + 1 / STEP_HZ, SPE_EVENT_SEC);
+      const u = spe.time / SPE_EVENT_SEC;
+      spe.value = spe.from + (spe.to - spe.from) * u * u * (3 - 2 * u);
+    }
+
+    // Event 0 (0x15330): a fade starts again from where _Color stands, towards `target`, over `sec`.
+    function startColorFade(target, sec) {
+      colorFade.from = colorFade.value;
+      colorFade.to = target;
+      colorFade.time = 0;
+      colorFade.duration = sec;
+      colorFade.running = true;
+    }
+
+    // What the settings ask of the scene, as the XMB sends it: Theme Settings' Brightness (sub-event 7), and the
+    // background given away or taken back (sub-events 3 and 2), over `backgroundFadeMs`.
+    function colorEvents(settings) {
+      const level = clampIndex(Math.round(Number(settings.themeBrightness) || 0), BRIGHTNESS_LEVEL_MAX);
+      if (level !== colorFade.level) {
+        colorFade.level = level;
+        colorFade.brightness = 1 - BRIGHTNESS_STEP * level;
+        startColorFade(colorFade.brightness, BRIGHTNESS_SEC);
+      }
+      const hidden = settings.xmbBackground === 'hidden';
+      if (hidden !== colorFade.hidden) {
+        colorFade.hidden = hidden;
+        startColorFade(hidden ? 0 : colorFade.brightness, Math.max(0, Number(settings.backgroundFadeMs) || 0) / 1000);
+      }
+    }
+
+    // 0x31494 moves the fade on by the frame's time before the frame is drawn.
+    function colorAdvance() {
+      if (!colorFade.running) return;
+      if (!(colorFade.duration > 0)) {
+        colorFade.value = colorFade.to;
+        colorFade.running = false;
+        return;
+      }
+      colorFade.time = Math.min(colorFade.time + 1 / STEP_HZ, colorFade.duration);
+      const u = colorFade.time / colorFade.duration;
+      colorFade.value = colorFade.from + (colorFade.to - colorFade.from) * u * u * (3 - 2 * u);
+      if (u >= 1) colorFade.running = false;
+    }
+
+    // The parameters with the factors as they stand, then the block, decaying the grid, then the icons' wind on top of
+    // it (which of those two comes first within a frame on the console is not known), and the fades move on last.
+    function step(settings, height, ev) {
+      const S = applySpe(settings, spe.value, height, effective);
       buildParams(S, ev);
       moveIcons(S, ev);
       emit(S);
       runTask();
+      speAdvance();
+      colorAdvance();
+      stats.eventFactor = spe.value;
+      stats.color = colorFade.value;
       stats.steps++;
     }
 
@@ -787,8 +894,15 @@
       return dir;
     }
 
-    // Advances the system to the wave's current frame. `aspect` is the canvas aspect the camera will use.
-    function update(S, surface, input, timeSec, dtSec, aspect) {
+    // Advances the system to the wave's current frame. `aspect` is the canvas aspect the camera will use. The
+    // parameters it runs on, and the renderer draws with, are the settings with PARTICLES_SPE.mnu applied for the
+    // console's video output (`videoOutput`, the frame's height) and for What's New's board (`whatsNewBoard`), whose
+    // opening and closing send event 11. `themeBrightness` and `xmbBackground` fade the colour it is drawn with.
+    function update(settings, surface, input, timeSec, dtSec, aspect) {
+      const height = Number(settings.videoOutput) || 1080;
+      speEvent(settings.whatsNewBoard === 'open' ? 1 : 0);
+      colorEvents(settings);
+      applySpe(settings, spe.value, height, effective);
       if (!wave.prevData || wave.prevData.length !== surface.data.length) {
         wave.prevData = new Float32Array(surface.data);
         wave.prevT = timeSec;
@@ -805,14 +919,14 @@
       // The emitter needs the wave to have moved, so the scene is filled on the second frame rather than the first.
       if (!warm && wave.dtWave > 1e-4) {
         warm = true;
-        for (let i = 0; i < PREWARM_STEPS; i++) step(S, noInput);
+        for (let i = 0; i < PREWARM_STEPS; i++) step(settings, height, noInput);
       }
 
       stepCarry = Math.min(stepCarry + dtSec * STEP_HZ, MAX_STEPS_PER_FRAME);
       while (stepCarry >= 1) {
         stepCarry -= 1;
         frameInput.step = nextStep();
-        step(S, frameInput);
+        step(settings, height, frameInput);
       }
 
       wave.prevData.set(surface.data);
@@ -824,6 +938,8 @@
       update,
       output,
       params: P,
+      effective, // the parameters the last update ran on: the settings with PARTICLES_SPE.mnu applied
+      colorFade, // _Color: its grey level is `value`
       stats,
       capacity,
       // The pool itself, for inspection: `STRIDE` floats per slot in the task's own record layout, so it compares

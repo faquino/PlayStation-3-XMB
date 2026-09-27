@@ -24,7 +24,7 @@ against what RPCS3 recorded while running the XMB; anything else is marked as in
 | `spurs/particles/particles/particles.elf` | The simulation: an SPU ELF run as a SPURS task |
 | `PARTICLES.mnu` | The system's 52 parameters, as plain text |
 | `PARTICLES_UI.mnu` | Interaction parameters: Sixaxis shake, D-pad, icon wind |
-| `PARTICLES_SPE.mnu` | 5 offsets the PPU adds to parameters of the other file, weighted by two animated factors |
+| `PARTICLES_SPE.mnu` | 5 offsets the PPU adds to parameters of the other file, weighted by two factors: one the XMB switches on and off, one set by the video output |
 | `override/<theme>/PARTICLES.mnu` | Full parameter sets per theme and moment |
 | `lib/particles/particles_quads.vpo/.fpo` | Main particle shaders |
 | `lib/particles/particles_second.vpo/.fpo` | Second particle pass, adds glare |
@@ -83,7 +83,7 @@ controller will show which of them handle the Sixaxis and the D-pad.
 
 `PARTICLES_SPE.mnu`: `delta time` 0.00346295, `glare` 0.0832176, `specular power` -29.3657,
 `size middle` 0.0218883, `global alpha` -0.555603. They are offsets: every frame the PPU adds
-them to the same five parameters, weighted by two animated factors - see
+them to the same five parameters, weighted by two factors - see
 [The parameters, as the PPU holds them](#the-parameters-as-the-ppu-holds-them).
 
 ### Theme overrides
@@ -316,13 +316,24 @@ microcode as it was uploaded, so its cache holds the values the XMB used.
 |---|---|---|
 | `_LightPack` column 1 | (4.16, 2.63, -7.6, 35.2904) | `spot pos x/y/z`, `specular power` |
 | `_LightPack` column 2 | (1, 0, 0, 0) | `spot attn x/y/z` |
-| `_LightPack` column 3 | (8, 74.74, 0.0390458, 1) | `lambert coeff`, `specular coeff`, `exposure`, then 1 |
+| `_LightPack` column 3 | (8, 74.74, 0.0390458, 1) | `lambert coeff`, `specular coeff`, `exposure`, `color_control` |
 | `_LightPack` column 0 | (0, 0, 2, 1) | the eye position (inferred, see below) |
 | `_NearControl` | (13.19, 3.79, 0.722, 0) | `size align`, `near fuzziness`, `near align` |
 | `_Glare` | (0.201367, 5.44386, 0.99, 4.44) | `glare`, `glare scale`, `glare p1`, `glare p2` |
 | `_IridescentExp` | 1 | `iridescent exp` |
-| `_Color` | (1, 1, 1) | |
-| `_Gamma` | 1 | |
+| `_Color` | (1, 1, 1) | a fade the scene runs, not a parameter |
+| `_Gamma` | 1 | a value the scene picks by a system setting |
+
+**Verified: where `color_control`, `_Color` and `_Gamma` come from.** The particle draw
+(`0x5c254`) packs `lambert coeff`, `specular coeff`, `exposure` and `color_control` into
+`_LightPack`'s last column, which is the 1 at its end. `_Color` and `_Gamma` come from two values
+the particle object animates, at B+0x1340 and B+0x1350, which read (1, 1, 1) and 1 in every
+savestate:
+
+- `_Color` is the scene's fade: to black when another module takes the screen, and to the
+  brightness Theme Settings set - see [The particles' fade](#the-particles-fade).
+- `_Gamma` is set at once by the scene, from a table indexed by a system setting (`0x14578`,
+  not followed further).
 
 Vertex uniforms live in constant registers and are not in the cache. Their values come
 from the RSX frame captures below; their meaning from the decompiled vertex shader.
@@ -392,8 +403,9 @@ saturate((x − a) / (b − a)).
     hides the turn.
 - **Geometry.** The quad spans size × size along q′'s x and y axes. The lighting normal n
   stays that of q, the flake's own orientation.
-- **Colour.** c = `_IridescentTex`(n_view.xy × 0.5 + 0.5)^`iridescent exp`, a matcap-like
-  lookup by the normal in view space.
+- **Colour.** c = mix(1, `_IridescentTex`(n_view.xy × 0.5 + 0.5), `color_control`)^`iridescent
+  exp`, a matcap-like lookup by the normal in view space: `color_control` takes the specular's
+  colour from white (0) to the texture's (1). Both programs do it the same way.
 - **Lighting.** L, V and H are per fragment, from the corner's world position. With dL the
   distance to the spot:
   - I = (|n·L| · `lambert coeff` + |n·H|^`specular power` · `specular coeff` · c) /
@@ -426,7 +438,7 @@ saturate((x − a) / (b − a)).
 | 0 | the eye, (0, 0, 2, 1) |
 | 1 | spot position, and `specular power` |
 | 2 | the spot's constant, linear and quadratic attenuation |
-| 3 | `lambert coeff`, `specular coeff`, `exposure`, then 1 |
+| 3 | `lambert coeff`, `specular coeff`, `exposure`, `color_control` |
 
 **Blend state, verified from the captures.** Both particle draws and the wave's draw blend
 additively (`ONE / ONE`), with depth test and depth writes off. The particle draws also
@@ -958,18 +970,125 @@ after the wind direction, at +80, holding `wind scale` + 10 × `wind scale 10`, 
 block's wind is built with. The emitter reads the 16 as it is - see [The emitter](#the-emitter).
 
 **Verified: the first copy is the second plus `PARTICLES_SPE.mnu`.** Every frame the particle
-object's per-frame method, `0x31f44`, copies the second copy over the first, 0x128 bytes, and
-then adds to five of its fields the words at the same offsets of a third struct, at B+0x15c0,
-each weighted by one of two animated factors the object keeps at `+0x140` and `+0x160`,
-clamped:
+object's per-frame method, `0x31f44`, copies the second copy over the first, 0x128 bytes. It then
+adds to five of its fields the words at the same offsets of a third struct, at B+0x15c0, each
+weighted by one of two factors the object keeps at `+0x140` and `+0x160`, both clamped to
+[0, 1], and clamps the results:
 
-- `delta time`, `glare` and `specular power` by the first factor, `delta time` clamped to
-  1/300 to 1/12;
-- `size middle` and `global alpha` by the second.
+| Field | Weighted by | Clamped to |
+|---|---|---|
+| `delta time` | the first factor | 1/300 to 1/12 |
+| `glare` | the first factor | 0 to 1 |
+| `specular power` | the first factor | 0 to 100 |
+| `size middle` | the second factor | 0 to 90 |
+| `global alpha` | the second factor | 0 to 1 |
 
 The five fields are exactly the five names of `PARTICLES_SPE.mnu`, whose values - one of them
--29 for `specular power` - read as offsets rather than a set, so the third struct is taken to
-hold them (inferred). What drives the two factors is not traced.
+-29 for `specular power` - read as offsets rather than a set. **Verified** in three savestates:
+the copies sit at B+0x1360 and B+0x1490 and the third struct at B+0x15c0, 0x130 bytes apart,
+and the third holds `PARTICLES_SPE.mnu`'s five values at exactly the five offsets `0x31f44`
+reads (`delta time` 0.00346295 at +0x38, `specular power` -29.3657 at +0x80, `global alpha`
+-0.555603 at +0x9c, `size middle` 0.0218883 at +0xa0, `glare` 0.0832176 at +0xd8). Its other
+fields hold values no file sets, which `0x31f44` never reads. No theme carries a
+`PARTICLES_SPE.mnu` of its own. The clamps apply with the factors at zero too, and no set in
+the firmware reaches them.
+
+**What moves the two factors.** Both are animations the object runs towards a target over a
+duration, easing from where they stand with a smoothstep, 3t² - 2t³ (`0x2b9b4`). They run on
+the time the scene's update hands the object, `0x31494` moving them on once `0x31f44` has
+applied them, and they count in seconds: the handler divides event 0's fade times, which arrive
+in milliseconds, by 1000 before it starts the same kind of animation.
+
+- **The first, events 11 and 12 of the scene's interface.** The scene registers an interface
+  for the XMB (`0x4050`, through `paf`), and its third function, `0x15330`, takes an event, a
+  sub-event and an argument. Events 11 and 12 run the same code: sub-event 2 takes the factor
+  to 1 over 2 seconds (`0x2b6a8`), sub-event 3 back to 0 over 2 seconds, each from wherever
+  the factor stands. At 1 the particles move 39% faster, their glare rises from 0.16 to 0.24,
+  and `specular power` falls from 35 to 6, so a flake glints across a far wider range of
+  angles. What's New's board sends event 11 - see [What's New's board](#whats-news-board).
+- **The second, the video output.** The scene's resize method (`0x1b348`) stores the frame's
+  width, height and aspect, passes them to the particle object, and then sets the factor at
+  once (`0x1acb4`) by the height: 0 above 1079 lines, 0.5 above 719, 1 below. So on a 720p
+  output `size middle` grows by a fifth and `global alpha` drops to 0.72, and on SD by two
+  fifths and to 0.44: bigger, fainter particles where each covers fewer pixels.
+
+Every capture was taken at 1920 × 1080, and all 23 with particles in them carry both factors at
+zero: `glare`, `global alpha` and `size middle` sit exactly on the set blend, across rest,
+navigation, music, start-up and the saved-data utility.
+
+**Where the events come from.** The same handler takes the XMB's other scene commands. All 211
+modules of `dev_flash/vsh/module` are decrypted and searched: 27 name `custom_render_plugin`,
+and every place they fetch the scene's interface is accounted for.
+
+- event 0 is the menu. Sub-event 9 is the D-pad step: `explore_plugin`, the XMB's menu, sends it
+  whenever the focus moves (`0x554e4`, through the interface it keeps at `0x2deec0`, from the
+  focus handlers `0x592c8`, `0x5c908` and `0x5dc80`), and `xmb_plugin` sends it too (`0x2638`)
+  - see [The controller](#the-controller). Sub-events 2, 3 and 7 are the particles' fade - see
+  [The particles' fade](#the-particles-fade) - and 6 carries another Theme Settings value
+  (registry key 0x5f, not followed);
+- event 1 is the cold boot (`page_coldboot`, `anim_coldboot2`, the cold-boot sounds), which
+  `vsh.elf` sends with sub-events 0 and 5 (`0xcd628`, `0xcf31c`), and `explore_plugin` and the
+  XMB's columns (`explore_category_*`) with 5;
+- event 2 is a game's boot (`anim_gameboot`), event 3 another boot (`anim_otherboot`);
+- event 4 is the music, and the scene sends it to itself from two callbacks it registers
+  (`0x3184`): sub-event 2 (`0x16808`) takes in `override/music_1` unless it is in already, and
+  3 (`0x1672c`) leaves it;
+- event 10 comes from the time zone setting. `sysconf_plugin` sends sub-event 2 as the setting
+  opens (`0x7fc1c`), 8 with the zone picked (`0x81ebc`), and 3 as it closes (`0x7fb88`), whose
+  code names `override/black`;
+- event 11 comes from What's New's board, below, and nothing sends event 12.
+
+The music visualizer, `soundvisualizer_plugin`, drives the scene through the interface's first
+two functions (`0xe690`, `0xe4b8`) rather than through the handler.
+
+### The particles' fade
+
+**Verified.** `_Color`, which both passes multiply their colour by, is an animation of the
+particle object (`+0xd0`, written to B+0x1340 every frame by `0x31494`) that event 0 of the
+scene's interface starts through `0x1afdc`:
+
+- sub-event 3 takes it to black and sub-event 2 back to the scene's brightness, each over the
+  time its argument carries, in milliseconds;
+- sub-event 7 sets the brightness to 1 - 0.15 × its argument, 0 to 5, and fades to it over 1
+  second. It is Theme Settings' Brightness, whose six labels are Normal and -1 to -5:
+  `sysconf_plugin` sends it as the setting changes (`0x11110`) and keeps it in the registry
+  (key 0x60), and `system_plugin` sends it as it applies the theme (`0x88f4`, `0x9340`). The
+  scene has `system_plugin` dim the wallpaper by the same brightness too (`0x6b08`).
+
+A fade runs from where `_Color` stands to (b, b, b, 0) or to zero with the factors' smoothstep
+(`0x2b658`, `0x2c1f8`) on the frame's time, and one of no time lands on the next frame. The
+scene starts at brightness 1 (`0x4050`), and the three savestates read (1, 1, 1, 0).
+
+`system_plugin` sends sub-events 3 and 2 from two functions of its interface, +0x1c (`0x6db4`)
+and +0x20 (`0x852c`), which also hide or show the theme's background pages. Their callers are
+the modules that take the screen: the video player (200 ms), the web browser and video chat
+(500 ms), SACD playback and `nas_plugin` (1000 ms out), the audio player (200 ms), the Store,
+What's New's board (200 ms out, back at once) and others at 100 ms. When the theme's wallpaper
+goes, `system_plugin` sends 3 with no time and then 2.
+
+The same call fades the wave's renderer, the `lib/moyou/lines*` programs (`0x4fe2c`), through
+three animations of its own; how the wave uses them is not followed.
+
+### What's New's board
+
+**Verified** in `wboard_plugin`, the board behind What's New, the first item of the Game,
+Video, TV and PlayStation Network columns (`seg_welcome`, `sel://localhost/welcome?type=...`
+in the columns' XML). The board registers an interface whose first function (`0x3330`) opens
+it with a word of flags (`0x1038c`, `0x1016c`). Opening builds the list page (`expage_wblist`)
+and a dimmer, then goes by the flags' second hex digit:
+
+- 0, 1, 2 or 4 (`0xf320`): the board puts a picture behind the menu - What's New's
+  (`cinfo-bg-whatsnew.jpg`) for 0 and 4, the Store's for games for 1 and for video for 2, each
+  with an SD version - and has `system_plugin` hide the theme and fade the particles' `_Color`
+  to zero over 200 ms (the function at +0x20 of its interface, `0x852c`, which sends event 0,
+  sub-event 3). The first factor does not move.
+- Any other value: it sends event 11, sub-event 2 (`0x102d8`), and over 2 seconds the particles
+  speed up and glint.
+
+Closing the board (`0x104e8`) always sends event 11, sub-event 3, taking the factor back to 0
+over 2 seconds from wherever it stands, and if the board had faded the theme and `_Color`, it
+brings them back at once (`0x10980`). Which of the XMB's actions opens the board with which
+flags is not traced: they come from its caller.
 
 ### The grid's writer
 
@@ -1132,10 +1251,9 @@ constructor's 0.03 and 0.04, 64 bytes apart:
 - The icon wind's T, the particle object's `+0x14`, is the frame's width over its height. The
   resize method, `0x2b97c`, writes the width, the height and their ratio at `+0xc`, `+0x10`
   and `+0x14`.
-- The two factors that weight `PARTICLES_SPE.mnu` are animations towards a target over a
-  duration. `0x2b6a8` starts the first, called from the same event handler, `0x15330`, and
-  `0x2b6dc` the second, through `0x1acb4`, from `0x1b348` and `0x1b490`. Which events those
-  are is not read.
+- The two factors that weight `PARTICLES_SPE.mnu` are started by `0x2b6a8` and `0x2b6dc`, from
+  the same event handler and from the resize method - see
+  [The parameters, as the PPU holds them](#the-parameters-as-the-ppu-holds-them).
 
 ### Ruled out
 
@@ -1161,8 +1279,8 @@ the spline layer's wave, where the icons go when the selection moves, and the in
 
 | File | Verified | Modelled |
 |---|---|---|
-| `particles-reverse.js` | The update task, steps 1 to 8. The pool layout, free marker, life bounds and camera. The parameter block: its layout, the values at every offset, and how the PPU fills it, the flow grid and the noise included. The emitter and its random numbers. The controller's response: the D-pad's turn and kicks, the motion, the shake detectors. The icons' layout on screen, measured. | Where the wave's vertices fall and how fast they move; how the icons move; how often the XMB repeats a held direction; the pool's first orientations. |
-| `particles.js` | Both passes, re-authored from the decompiled programs, fed with the `.mnu` values the tables above map. | `_Color` = `color_control` × (1, 1, 1) and `_Gamma` = 1. The iridescent texture comes from the fit. |
+| `particles-reverse.js` | The update task, steps 1 to 8. The pool layout, free marker, life bounds and camera. The parameter block: its layout, the values at every offset, and how the PPU fills it, the flow grid and the noise included. The emitter and its random numbers. The controller's response: the D-pad's turn and kicks, the motion, the shake detectors. `PARTICLES_SPE.mnu`, as the PPU applies it, and its first factor's animation. The particles' fade, `_Color`. The icons' layout on screen, measured. | Where the wave's vertices fall and how fast they move; how the icons move; how often the XMB repeats a held direction; the pool's first orientations. |
+| `particles.js` | Both passes, re-authored from the decompiled programs, fed with the `.mnu` values the tables above map, `PARTICLES_SPE.mnu` applied. `color_control` as the programs use it, and `_Color` from the system's fade. | `_Gamma` held at 1, its value in every savestate. The iridescent texture comes from the fit. |
 | `particles-themes.js` | The nine distinct theme sets, as their differences from the base. | Which set applies when: the day cycle above, with a four-hour smoothstep between neighbours. |
 | `wave-surface-cpu.js` | | A CPU copy of the spline layer's wave vertex shader, so particles are born on the wave that is drawn. |
 | `xmb-input.js` | What it hands over: steps with the XMB's four directions, and the four sensors in the PPU's units. | The rest: the mouse and keyboard stand in for the controller. |
@@ -1205,6 +1323,18 @@ on each frame that passes its draw, simply keeps it that way.
   `welcome_1/2` turn on. The noise scale is `brownian scale` + level × `brownian` + motion ×
   `rshake brw`, with the level's spring, and what drives it and the motion, as traced - see
   [The controller](#the-controller).
+- **`PARTICLES_SPE.mnu`.** Applied every frame the way `0x31f44` applies it, clamps included,
+  to what the simulation runs on and the shaders draw with. The video output's factor comes
+  from `videoOutput`, 1080p by default as in every capture. The event factor runs the
+  firmware's animation, towards 1 while `whatsNewBoard` is open and towards 0 while it is
+  closed, as events 11 would take it; closed is the default, as in every capture. Headless,
+  opening and closing the board, and reopening it halfway down, the factor stays within 1e-15
+  of the firmware's curve, and each frame's parameters carry the factor of the frame before.
+- **The particles' fade.** `_Color` runs the scene's fade: `themeBrightness` stands for Theme
+  Settings' Brightness, and `xmbBackground` for the XMB's background given away and taken back,
+  over `backgroundFadeMs`, the page's choice where the console's callers use 0 to 1000 ms.
+  Headless it stays within 1e-15 of the firmware's curve, and in the browser the particles'
+  light scales with it, to nothing when hidden. The wave does not fade: that part is not ported.
 - **Flow grid.** Ported: 32 × 16 cells of signed bytes, sampled the way the task samples them,
   decayed by 0.98 a frame, and written by every icon that moves - see
   [The flow grid](#the-flow-grid). At rest it stays empty, as the console's does. What is
@@ -1538,11 +1668,14 @@ The implementation models all of these:
 Also missing:
 
 - What copies the first block into the second, and what the pool commands' type 3 does.
-- Which events start the two factors that weight `PARTICLES_SPE.mnu`'s offsets: their
-  starters and the event handler that calls one of them are found - see
-  [The controller](#the-controller).
+- Which of the XMB's actions open What's New's board in which mode, and so switch the first
+  `PARTICLES_SPE.mnu` factor on - see [What's New's board](#whats-news-board). The board's
+  side, and the factor's animation, are traced.
+- How the wave's renderer uses the fade `_Color` is sent with (`0x4fe2c`), so the spline layer
+  can fade too - see [The particles' fade](#the-particles-fade).
 - The code that generates `proc_iridescent`. The implementation uses the fit above.
 - What drives `black` and `bright`, and the order and timing of the `gameboot` and
   `welcome` stages - their values are all read, and under RPCS3 neither sequence can be
   reached. `music_1` is playback and `coldboot1` is the XMB's own opening, both measured,
-  and the day cycle is measured in all four of its windows.
+  and the day cycle is measured in all four of its windows. The code of event 10, which the
+  time zone setting sends, names `override/black`; what it does with it is not followed.
