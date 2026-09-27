@@ -24,7 +24,7 @@ against what RPCS3 recorded while running the XMB; anything else is marked as in
 | `spurs/particles/particles/particles.elf` | The simulation: an SPU ELF run as a SPURS task |
 | `PARTICLES.mnu` | The system's 52 parameters, as plain text |
 | `PARTICLES_UI.mnu` | Interaction parameters: Sixaxis shake, D-pad, icon wind |
-| `PARTICLES_SPE.mnu` | 5 values, purpose unknown; `custom_render_plugin` lists them beside the other two files' |
+| `PARTICLES_SPE.mnu` | 5 offsets the PPU adds to parameters of the other file, weighted by two animated factors |
 | `override/<theme>/PARTICLES.mnu` | Full parameter sets per theme and moment |
 | `lib/particles/particles_quads.vpo/.fpo` | Main particle shaders |
 | `lib/particles/particles_second.vpo/.fpo` | Second particle pass, adds glare |
@@ -82,8 +82,9 @@ controller will show which of them handle the Sixaxis and the D-pad.
 `dshake g coeff` 0.444397, `icon wind` 11.3877, `icon wind scl x` 0, `icon wind scl y` 1.
 
 `PARTICLES_SPE.mnu`: `delta time` 0.00346295, `glare` 0.0832176, `specular power` -29.3657,
-`size middle` 0.0218883, `global alpha` -0.555603. Negative values suggest offsets rather
-than a parameter set (inferred).
+`size middle` 0.0218883, `global alpha` -0.555603. They are offsets: every frame the PPU adds
+them to the same five parameters, weighted by two animated factors - see
+[The parameters, as the PPU holds them](#the-parameters-as-the-ppu-holds-them).
 
 ### Theme overrides
 
@@ -549,10 +550,12 @@ All four windows are measured, and against the six measured moments the cycle la
 - `lines1.vpo` draws the wave from a 16384-vertex buffer in main memory, written by
   `spline.elf`. Positions are already in clip space: w is the view depth. A second vec4 is
   probably a normal (inferred), and uv is static.
+- The buffer is 128 lines of 128 vertices, one line after the other: u is the line's index
+  over 127, and along a line x runs from the right edge, 1.45 in normalised coordinates, to
+  the left, -1.55.
 - The particles fill the same depth slab as the wave: view z [-11.6, -4.4] against
   [-10.8, -4.5]. Projected to the screen, they cluster tightly around the wave and thin
-  out with distance from it. So particles are emitted from the wave surface (inferred
-  from the distribution; the emission code is still to be traced).
+  out with distance from it. They are born on its vertices - see [The emitter](#the-emitter).
 
 ### Controller input
 
@@ -746,19 +749,23 @@ the disassembly describes it, down to the rotation being a unit quaternion.
   draw gives. A one-sided draw would have started at 0.00285. A life therefore lasts
   between 235 and 692 frames, a median of 410, rather than the 285 assumed before.
 - **Emission velocity, from the particles younger than 3% of a life:** speed median 0.276,
-  5th to 95th percentile 0.115 to 0.348, against the 0.1506 to 0.433 that
-  `emit vel min` + `emit vel var` × U(0, 1) gives, median 0.29.
+  5th to 95th percentile 0.115 to 0.348. The speed is not `emit vel min` + `emit vel var` ×
+  U(0, 1), as first read, but grows as the square root of the wave's own speed - see
+  [The emitter](#the-emitter).
 - **Their z velocity is zero**: |vz| / |v| has a median of 0.005 at birth. `emit vel
   zscale` being 0 flattens emission into the screen plane.
-- **The direction is the cone around the vertical**: |vy| / |v| has a median of 0.838,
-  where a cone of `emit cone angle` 51.87° around y gives 0.809.
+- **The direction is a cone around the vertical**: |vy| / |v| has a median of 0.838,
+  where a cone of `emit cone angle` 51.87° around y gives 0.809. The cone's axis is the way
+  the wave moves where the particle is born, which is mostly up and down.
 - **The noise builds up over a life:** |vz| / |v| climbs to 0.05, 0.20 and 0.34 at a
   tenth, a half and nine tenths of a life, and the median speed grows from 0.276 to 0.324
   while the 95th percentile goes from 0.348 to 0.633. Nothing else pushes a particle in z.
 
 ## Emission, as the captures show it
 
-**Inferred** from the two RSX captures. The emitter's code is still to be found.
+**Inferred** from the two RSX captures, before the emitter's code was found. What it does is
+in [The emitter](#the-emitter); the readings below hold, except the count, which is 7.67 a
+frame rather than 7.98.
 
 - **Particles are shared evenly among the wave's vertices.** Binned by world x, the share
   of particles matches the share of wave vertices to within 1 to 2 points, in both
@@ -781,7 +788,8 @@ the disassembly describes it, down to the rotation being a unit quaternion.
   particles are off screen. 14% of its vertices lie outside the life box, so particles
   born there die on their first update.
 - **That accounts for the particle count.**
-  - 16.6539 × 0.479115 = 7.98 emissions per frame (`emit per frame` × `emit prob`).
+  - 16.6539 × 0.479115 = 7.98 emissions per frame (`emit per frame` × `emit prob`) - 16 ×
+    0.479115 = 7.67 as the emitter counts them.
   - 86% of them land inside the box.
   - With aging rates uniform between 1 and 1 + `aging variance` times `aging speed`, a
     life lasts ln(1.493) / 0.493 / 0.00285 ≈ 285 frames on average.
@@ -821,11 +829,12 @@ Findings so far:
   - writes the list and the state back.
   So the PPU writes new particles straight into slots taken from that list, and never
   needs the -666 marker. No module contains -666.0f, as a float or as an integer
-  immediate.
-- **The emitter itself has not been located yet.** `custom_render_plugin` is where to look:
-  it holds the particle parameters' names, as menu labels, and the code that fills the
-  block, below. None of the modules searched before it holds the names. The scene code is
-  reached through C++ virtual calls.
+  immediate. The PPU side agrees: it takes the list's last slot - see
+  [The emitter](#the-emitter).
+- **The emitter is in `custom_render_plugin`**, beside the code that fills the block - see
+  [The emitter](#the-emitter). None of the modules searched before it holds the particle
+  parameters' names, which it holds as menu labels. The scene code is reached through C++
+  virtual calls.
 - The lines scene leans on `qglbase` (inferred from the RPCS3 log). Right before
   the `SceQglLines` SPURS instance is created, `qglbase` allocates memory and the RSX I/O
   mappings of the wave (`io 0x500000`) and particle (`io 0x600000`) buffers are set up.
@@ -942,11 +951,21 @@ the files word for word:
 values, and `0x3288c` its `PARTICLES_UI` part, 232 bytes in. That is where the integer comes
 from: `emit per frame` goes through `fctiwz`, which truncates it to 16. It also shows the word
 after the wind direction, at +80, holding `wind scale` + 10 × `wind scale 10`, the scale the
-block's wind is built with.
+block's wind is built with. The emitter reads the 16 as it is - see [The emitter](#the-emitter).
 
-The 16 is a lead for the emitter: 16 attempts a frame with the fraction dropped make
-16 × 0.479115 = 7.67 emissions a frame, where the model, carrying the fraction, makes 7.98.
-Untested.
+**Verified: the first copy is the second plus `PARTICLES_SPE.mnu`.** Every frame the particle
+object's per-frame method, `0x31f44`, copies the second copy over the first, 0x128 bytes, and
+then adds to five of its fields the words at the same offsets of a third struct, at B+0x15c0,
+each weighted by one of two animated factors the object keeps at `+0x140` and `+0x160`,
+clamped:
+
+- `delta time`, `glare` and `specular power` by the first factor, `delta time` clamped to
+  1/300 to 1/12;
+- `size middle` and `global alpha` by the second.
+
+The five fields are exactly the five names of `PARTICLES_SPE.mnu`, whose values - one of them
+-29 for `specular power` - read as offsets rather than a set, so the third struct is taken to
+hold them (inferred). What drives the two factors is not traced.
 
 ### The grid's writer
 
@@ -964,6 +983,61 @@ their module info records give, `0x15a0000` for `xmb_plugin` and `0x980000` for 
 the resting savestate, neither module has a single return address in a frame-shaped slot,
 though `xmb_plugin` runs all the time. So the tool sees `vsh.elf` alone, and a module missing
 from its output says nothing about whether it ran.
+
+### The emitter
+
+**Verified** in `custom_render_plugin`. The per-frame update, `0x31494`, ends by calling
+`0x30b80`, which runs the two ways particles are born and turns each birth into commands for the
+pool.
+
+**Which vertices.** The emitter draws from the wave's own vertices, the 128 lines of 128 that
+`spline.elf` writes - see [The wave](#the-wave). Vertex ix of line iy sits at 32 × (128 iy + ix)
+in the buffer, and a matrix the particle object keeps at `+0x50` takes it into the world
+(`0x2d6e8`, `0x2d640`). Two sources pick them:
+
+- `0x2dde4` makes one draw a frame against `emit prob`. If it passes, it picks `emit per frame`
+  vertices, the integer 16, each at trunc(U × 127) on both axes; if not, none. That is 16 ×
+  0.479115 = 7.67 a frame on average, in bursts.
+- `0x2dbf4` sweeps. While no sweep runs, one starts with a 0.06 chance a frame, at a random
+  vertex, for 100 + 80 r births. While one runs, every other frame picks the next vertex along
+  its line, towards the left edge, until the births or the line run out. The frames it skips
+  are the odd ones of a counter `qglbase` exports, the frame count by all appearances.
+
+U is (r + 1) / 2, with r a draw from `qglbase`'s generator (its export `0x2e67e2d8`): a global
+counter n run through the classic integer hash, x(x² 15731 + 789221) + 1376312589 on
+x = n ^ (n << 13), whose low 31 bits t give 1 - t / 2^30, in (-1, 1].
+
+**How they are born.** The vertices picked in one frame are born in the next, each the same way:
+
+1. The vertex is fetched again, and its velocity v is how far it moved since it was picked,
+   over `delta time`. A vertex that moved less than 0.0001 emits nothing.
+2. The cone's axis d is that velocity's direction, reversed with a chance of `emit neg prob`.
+   Across it go t1, the longest of d × X, d × Y and d × Z, normalised, and t2 = d × t1.
+3. θ = U × `emit cone angle`, in degrees times 0.0174533, and φ = U × 2π give the direction
+   cos θ d + sin θ (cos φ t1 + sin φ t2): uniform in angle, not over the cone's cap.
+4. What lies along the camera's axis is scaled by `emit vel zscale` (`0x2b560`), and the
+   direction is not renormalised.
+5. The speed is max(√(|v| × `emit vel mul` × (1 + `emit vel var` × r)), `emit vel min`), a
+   `powf` with 0.5 and a max.
+6. The aging rate is max(0.001, `aging speed` × (1 + `aging variance` × r)), the symmetric law
+   the pool shows.
+
+**How they reach the pool.** The emitter does not write the pool. It queues 24-byte commands on
+the block object, at B+0x1328, which `0x5cad0` runs through later in the frame:
+
+- type 0 (`0x5b6bc`) takes a new slot, the free list's last - the one freed most recently - and
+  zeroes its position and velocity, so life starts at 0;
+- type 1 (`0x5bbf4`) sets the position's x, y and z, type 2 (`0x5bbc0`) the velocity's, and
+  type 4 (`0x5934c`) the aging rate, in the velocity's w;
+- type 3 (`0x59140`), which the emitter does not use, works on the velocity with a vector; what
+  it does is not read.
+
+Nothing writes the orientation: a new particle keeps the quaternion its slot's last particle
+left.
+
+This replaces the modelled emitter on every count: one draw per attempt with the fraction
+carried, from random points of the surface, in a cone around its normal, at `emit vel min` +
+`emit vel var` × U, flattened and renormalised, with a random orientation and no sweeps.
 
 ### Ruled out
 
@@ -983,20 +1057,21 @@ from its output says nothing about whether it ran.
 
 The implementation ports what is verified as it is and models the rest, marked as modelled
 in the code. The PPU side is ported as far as it is traced - how the block is filled, the flow
-grid's decay and wind, the noise's formula and spring, the wind - and what it needs from the XMB
-is modelled: where the icons go when the selection moves, and what kicks the spring.
+grid's decay and wind, the noise's formula and spring, the wind, the emitter - and what it needs
+from the XMB is modelled: where the console's wave mesh falls on the spline layer's wave, where
+the icons go when the selection moves, and what kicks the spring.
 
 | File | Verified | Modelled |
 |---|---|---|
-| `particles-reverse.js` | The update task, steps 1 to 8. The pool layout, free marker, life bounds and camera. The parameter block: its layout, the values at every offset, and how the PPU fills it, the flow grid and the noise included. The icons' layout on screen, measured. | The emitter; how the icons move; what kicks the noise's spring and what its motion term reads; the field's turn. |
+| `particles-reverse.js` | The update task, steps 1 to 8. The pool layout, free marker, life bounds and camera. The parameter block: its layout, the values at every offset, and how the PPU fills it, the flow grid and the noise included. The emitter and its random numbers. The icons' layout on screen, measured. | Where the wave's vertices fall and how fast they move; how the icons move; what kicks the noise's spring and what its motion term reads; the field's turn; the pool's first orientations. |
 | `particles.js` | Both passes, re-authored from the decompiled programs, fed with the `.mnu` values the tables above map. | `_Color` = `color_control` × (1, 1, 1) and `_Gamma` = 1. The iridescent texture comes from the fit. |
 | `particles-themes.js` | The nine distinct theme sets, as their differences from the base. | Which set applies when: the day cycle above, with a four-hour smoothstep between neighbours. |
 | `wave-surface-cpu.js` | | A CPU copy of the spline layer's wave vertex shader, so particles are born on the wave that is drawn. |
 | `xmb-input.js` | | All of it: the mouse and keyboard stand in for the controller. |
 
 The pool holds 2049 particles, the size read out of the savestate. Like the original it
-runs full, so emission waits on a free slot; the `welcome` set, which asks for 70.6
-emissions a frame, simply keeps it that way.
+runs full, so emission waits on a free slot; the `welcome` set, which asks for 70 births
+on each frame that passes its draw, simply keeps it that way.
 
 ### Modelled choices
 
@@ -1006,18 +1081,24 @@ emissions a frame, simply keeps it that way.
     console's pool has them, matching the median and the width of its just-born band; it
     replaced the captured wave's own 5th to 95th percentile, 6.8 to 10.6, which was more
     than twice as thick.
-  - Emission reaches 1.55 times past the screen edges. 14.7% of emissions then land
-    outside the life box and 25% off screen, against 14% and 28 to 30% in the captures.
-- **Emission.** Each frame makes `emit per frame` attempts, carrying the fraction over.
-  Each attempt is kept with probability `emit prob`, at a random point of the wave.
-  - Velocity: `emit vel mul` times the wave's own velocity there. On top of that, a
-    random direction in a cone of `emit cone angle` around the surface normal, flipped
-    with probability `emit neg prob`, at `emit vel min` + `emit vel var` × U(0, 1). Its z
-    is scaled by `emit vel zscale`.
-  - Aging rate: `aging speed` × (1 + `aging variance` × U(-1, 1)), as the pool shows.
-  - Orientation: uniformly random.
-  - The random numbers come from a Park–Miller generator, the arithmetic qgl_gaia_app
-    carries, though it uses it as a hash rather than a sequence.
+  - The console's mesh reaches past the screen edges, and its 128 columns are spread 1.55
+    times past them. 15.1% of births then land outside the life box and 35% off screen,
+    against 14% and 28 to 30% in the captures.
+- **Emission.** Ported - see [The emitter](#the-emitter) - with these modelled parts:
+  - The console's 128 lines are the spline layer's rows, and its columns run across the
+    surface from the right edge. A row the spline layer clips has no vertex there, and a
+    birth picked on it is lost.
+  - A vertex's velocity is the wave's own there, over `delta time`, rather than how far it
+    moved since it was picked, since the page's frames need not match the steps.
+  - **The spline layer's wave moves more slowly than the console's.** Its vertices move at
+    a median 0.113 in the emitter's units, where the pool's newborns need about 0.4, so the
+    emitter reads them 3.5 times faster (`WAVE_SPEED_GAIN`). That brings late life in line -
+    0.081 / 0.258 / 0.491 in xy against the console's 0.081 / 0.262 / 0.517 - but leaves the
+    newborns at a median 0.232 against 0.276; 4.5 brings the newborns to 0.263 and late life
+    to 0.299. No one factor fits both, because the wave's speeds are distributed differently.
+  - The generator starts its counter at the seed; the console's is shared by all that draw
+    from it. The pool starts with random orientations, which births then pass on, and it is
+    filled on the second frame, once the wave has moved.
 - **Parameter block.** Ported from the PPU's code - see
   [How the block is filled](#how-the-block-is-filled): the force is `gravity` alone, the drag
   `friction`, the time step (`delta time` × 3, 1), the spin rate `spin time scale`, the flow
@@ -1087,22 +1168,22 @@ drawn column the two frame captures':
 
 | The pool | Simulation | Console |
 |---|---|---|
-| Alive | 2039 to 2043 of 2049 | 2033 of 2049 |
-| Aging rate, min / median / max | 0.001447 / 0.002522 / 0.004256 | 0.001447 / 0.002435 / 0.004256 |
-| Just born, view depth | 7.81 / 8.60 / 9.30 | 7.57 / 8.55 / 9.07 |
-| Just born, velocity z | -0.0111 / -0.0007 / 0.0084 | -0.0112 / 0.0001 / 0.0078 |
-| Just born, speed in xy | 0.147 / 0.294 / 0.424 | 0.156 / 0.276 / 0.348 |
-| Late in life, view depth | 7.56 / 8.57 / 9.58 | 7.41 / 8.40 / 9.32 |
-| Late in life, velocity z | -0.3644 / -0.0057 / 0.3792 | -0.2501 / -0.0014 / 0.2337 |
-| Late in life, speed in xy | 0.102 / 0.369 / 0.716 | 0.081 / 0.262 / 0.517 |
+| Alive | 2014 to 2044 of 2049 | 2033 of 2049 |
+| Aging rate, min / median / max | 0.001446 / 0.002491 / 0.004257 | 0.001447 / 0.002435 / 0.004256 |
+| Just born, view depth | 7.81 / 8.81 / 9.31 | 7.57 / 8.55 / 9.07 |
+| Just born, velocity z | -0.0063 / -0.0000 / 0.0080 | -0.0112 / 0.0001 / 0.0078 |
+| Just born, speed in xy | 0.135 / 0.232 / 0.335 | 0.156 / 0.276 / 0.348 |
+| Late in life, view depth | 7.74 / 8.53 / 9.48 | 7.41 / 8.40 / 9.32 |
+| Late in life, velocity z | -0.2017 / -0.0107 / 0.2198 | -0.2501 / -0.0014 / 0.2337 |
+| Late in life, speed in xy | 0.081 / 0.258 / 0.491 | 0.081 / 0.262 / 0.517 |
 
 | What is drawn | Simulation | Capture 1 | Capture 2 |
 |---|---|---|---|
-| On screen | 1554 to 1601 | 1437 | 1417 |
-| Opacity exactly 1 | 91.2 to 93.3% | 92% | 92% |
-| View depth, median | 8.61 to 8.66 | 8.92 | 8.49 |
-| Distance outside the wave band, 90th percentile (NDC) | 0.156 to 0.165 | 0.096 | 0.114 |
-| Same, 99th percentile | 0.402 to 0.468 | 0.38 | 0.39 |
+| On screen | 1552 to 1572 | 1437 | 1417 |
+| Opacity exactly 1 | 91.4 to 91.9% | 92% | 92% |
+| View depth, median | 8.63 to 8.66 | 8.92 | 8.49 |
+| Distance outside the wave band, 90th percentile (NDC) | 0.157 to 0.173 | 0.096 | 0.114 |
+| Same, 99th percentile | 0.351 to 0.387 | 0.38 | 0.39 |
 
 Known differences:
 
@@ -1110,87 +1191,59 @@ Known differences:
   percentile), against 0.57 captured. Relative to the band, the particles look more spread
   out - which is also why the last two rows cannot be read cleanly: the distance is measured
   against a band that is wrong to begin with.
-- **The particles stay too fast, and it is the noise.** Late in life they move at 0.369 in xy
-  where the console's move at 0.262, and spread over 0.37 in z where the console spreads over
-  0.24. The flow plays no part: the console's grid is empty at rest - see
-  [The flow grid](#the-flow-grid) - and now the implementation's is too, since it writes the
-  grid the console's way, and the bench gives it no input. When the grid still held the wave's
-  modelled velocity, switching it off had moved the median from 0.366 only to 0.349. With the
-  **noise** at zero the median lands on 0.270, against the console's 0.262, and the z spread
-  vanishes altogether - every bit of it is noise.
-
-  The noise's own magnitude is not in question - `brownian scale` is read from the block - so
-  what differs is how it lands. **The ordering is confirmed on the console**: taking each live
-  particle's rank in slot order and the vector the task's three generators would hand it,
-  a particle's velocity correlates with its own vector at +0.128, +0.111 and +0.193 on the
-  three axes, against +0.043 for a control that shifts the series by seven. The k-th live
-  particle really does get the k-th draw.
-
-  **The churn does not explain the gap.** The idea was that a rank which changes often would
-  average the drift away, so a console pool that churns faster than ours would end up slower.
-  It does not survive the measurement: across four thirty-second runs the simulation's own
-  correlation reads between +0.02 and +0.33, with its control anywhere from -0.03 to +0.23,
-  because the alignment slides with however many particles happened to die earlier in the last
-  sweep. The console's single reading sits inside that spread, so the two cannot be told apart
-  at this precision and nothing points at the churn.
-
-  **The gap is a clean factor of two, at every age.** Binning both pools by life and taking the
-  median |vz| - which only the noise can produce, since emission gives it zero and the flow
-  gives it nothing measurable - gives this:
-
-  | Life | Simulation | Console |
-  |---|---|---|
-  | 0.00-0.05 | 0.004 | 0.004 |
-  | 0.05-0.15 | 0.025 | 0.011 |
-  | 0.15-0.30 | 0.049 | 0.020 |
-  | 0.30-0.50 | 0.097 | 0.049 |
-  | 0.50-0.70 | 0.146 | 0.069 |
-  | 0.70-0.90 | 0.178 | 0.095 |
-  | 0.90-1.01 | 0.206 | 0.110 |
-
-  Both grow in a straight line, so neither has run into the drag yet, and ours grows twice as
-  fast. A random walk would only reach 0.02 in a lifetime, so in both the drift is persistent
-  and the question is only how persistent: the console's holds about half as long as ours.
-
-  Six things have been ruled out as the cause:
-
-  - **The generator.** Re-read at `FUN_000030e8`: `il 16807`, `ilhu 0x4000`, `rotmi -9`, `or`,
-    then `fs` against 3.0 - values in [-1, 1), exactly what the implementation does.
-  - **The scale**, which is `brownian scale` read from the block, and **the application**,
-    `n = r x scale + offset` added to the force, both already verified.
-  - **The reseeding period.** Against the console's own pool, one reset per frame correlates
-    at +0.128 / +0.111 / +0.193, a reset every 64-particle call at +0.037 / +0.038 / +0.002
-    and every 512-particle chunk at +0.094 / +0.111 / +0.154. Per frame it is.
-  - **The free list's discipline.** Handing slots back as a queue instead of a stack makes it
-    worse, not better: late in life the z velocity goes to 0.50 against the stack's 0.35 and
-    the console's 0.23.
-  - **The allocation pattern.** Neighbouring live slots differ in life by 0.339 on the console
-    and 0.341 here, where unrelated lives would give 0.333, so both scatter their slots the
-    same way. Handing out a random free slot instead of the top of the stack lands the
-    correlation almost exactly on the console's, +0.133 / +0.101 / +0.174, and still leaves the
-    z velocity at 0.44 - so the correlation and the accumulated speed are not the same
-    question, and no discipline tried gets the speed down.
-  - **The drag being applied without the time step.** That would damp by 3.4% a step instead
-    of 0.03%, and the velocity would level off within a tenth of a life. Both curves above are
-    straight to the end, so neither does that.
-
-  What is left is the one quantity a single snapshot cannot give: **how many particles renumber
-  per frame**. That is what sets how long a particle keeps its vector, and the table above says
-  the console's churns about twice as fast as ours. Two savestates a few frames apart would
-  measure it - the quaternions are near-unique and evolve slowly, so particles can be matched
-  between them and the renumbering counted.
-
-  Nor is it a scale error. Sweeping `brownian scale` down, the z spread matches the console's
-  at about 0.75 of its value and the xy speeds at about 0.5, and no setting reproduces the
-  shape: the console's speeds run wider at both ends, from a 5th percentile of 0.081 that we
-  never reach down to to a 95th of 0.517, while ours sit narrower and higher. Since the scale
-  itself is read from the block, fitting it would be tuning a traced number to hide something
-  else. Why the same noise pushes our particles harder is still open.
-- **About a tenth too many on screen**, and that has not moved with any emission change so
-  far. One not tried yet: the PPU holds `emit per frame` as the integer 16, truncated by
-  `fctiwz` - see [The parameters, as the PPU holds them](#the-parameters-as-the-ppu-holds-them).
+- **The newborns are slow**, 0.232 against 0.276 at the median, because the spline layer's
+  wave moves more slowly than the console's and the emitter's speeds follow it - see
+  [Modelled choices](#modelled-choices).
+- **About a tenth too many on screen**, and the emitter's count was not it: the traced one,
+  7.67 a frame in bursts, leaves it where it was.
 - **The captured particles are denser on the left.** The captured wave runs further left
   than right, while the spline layer's wave is centred.
+
+**The noise's drift was the emitter's count.** For as long as the emitter was modelled, the
+particles moved too fast late in life - 0.369 in xy against 0.262 - and spread twice as far in
+z, and the noise was the only thing that could do it: with the noise at zero the median fell to
+the console's, and the z spread vanished. With the traced emitter both match, and the median
+|vz| by life, which only the noise produces, matches at every age:
+
+| Life | Simulation | Before the emitter was traced | Console |
+|---|---|---|---|
+| 0.00-0.05 | 0.004 | 0.004 | 0.004 |
+| 0.05-0.15 | 0.012 | 0.025 | 0.011 |
+| 0.15-0.30 | 0.023 | 0.049 | 0.020 |
+| 0.30-0.50 | 0.045 | 0.097 | 0.049 |
+| 0.50-0.70 | 0.069 | 0.146 | 0.069 |
+| 0.70-0.90 | 0.089 | 0.178 | 0.095 |
+| 0.90-1.01 | 0.101 | 0.206 | 0.110 |
+
+What does it is the count. Emitting as the model did, `emit per frame` attempts a frame with
+the fraction carried, takes the median |vz| at the end of a life back to 0.214; dropping the
+sweeps takes it to 0.123, and a random orientation at birth leaves it at 0.101. The console
+births 16 particles on about half the frames and none on the others, and on the frames without
+births the deaths renumber the pool - the k-th live particle gets the k-th draw - so a particle
+keeps its noise vector about half as long as it did with a birth every frame into the slot a
+death had just freed.
+
+That was the one question the analysis before it had left: how many particles renumber per
+frame. On the way it had confirmed the ordering on the console - a particle's velocity
+correlates with the vector its rank draws at +0.128, +0.111 and +0.193 on the three axes,
+against +0.043 for a control shifted by seven - and ruled out six other causes:
+
+- **The generator.** Re-read at `FUN_000030e8`: `il 16807`, `ilhu 0x4000`, `rotmi -9`, `or`,
+  then `fs` against 3.0 - values in [-1, 1), exactly what the implementation does.
+- **The scale**, which is `brownian scale` read from the block, and **the application**,
+  `n = r x scale + offset` added to the force, both already verified. No `brownian scale`
+  reproduced the console's shape either, which fitting it would only have hidden.
+- **The reseeding period.** Against the console's own pool, one reset per frame correlates
+  at +0.128 / +0.111 / +0.193, a reset every 64-particle call at +0.037 / +0.038 / +0.002
+  and every 512-particle chunk at +0.094 / +0.111 / +0.154. Per frame it is.
+- **The free list's discipline.** Handing slots back as a queue instead of a stack made it
+  worse, not better; the PPU turns out to take the list's last slot, a stack.
+- **The allocation pattern.** Neighbouring live slots differ in life by 0.339 on the console
+  and 0.341 here, where unrelated lives would give 0.333, so both scatter their slots the
+  same way.
+- **The drag being applied without the time step.** That would damp by 3.4% a step instead
+  of 0.03%, and the velocity would level off within a tenth of a life. The drift grows in a
+  straight line to the end instead.
 
 ## A note on the spline document
 
@@ -1217,8 +1270,8 @@ have spent. Positions as the 5th, 50th and 95th percentile:
   wide around -0.5, spread widely in x. In view depth, which is what the emitter works in
   since the camera sits at z = 2, that is 7.57 / 8.55 / 9.07 at the 5th, 50th and 95th
   percentile. `ps3xmbwave/` used to emit between 6.8 and 10.6 deep - centred about right but
-  more than twice as thick - and since `bc9be26` it emits between 7.77 and 9.47, which puts
-  its own band at 7.81 / 8.63 / 9.37.
+  more than twice as thick - and since `bc9be26` it emits between 7.77 and 9.47, which with
+  the traced emitter puts its own band at 7.81 / 8.81 / 9.31.
 - **The x and y velocities at birth run to about 0.3**, which `emit vel min` 0.15064 and
   `emit vel mul` 0.19 bracket.
 
@@ -1366,27 +1419,26 @@ single frame.
 
 ## Still missing
 
-The implementation models both of these:
+The implementation models all of these:
 
-- Emission: the code that writes new particles into free slots. What it produces is now
-  measured from the pool, above, but not where it comes from. It should be in
-  `custom_render_plugin` beside the update that fills the block (inferred), and the
-  parameters it reads are in the PPU's memory, `emit per frame` among them as an integer.
 - How the icons move, which sets the flow grid's values. The rule that writes the cells and
   where the icons sit are ported - see [The flow grid](#the-flow-grid) - and the easing
   between places is modelled.
-
-Also missing:
-
 - What feeds the noise's two input terms: the impulses that drive the level's spring, and the
   vectors in the particle object's motion ring - see
   [How the block is filled](#how-the-block-is-filled).
-- What writes the field's rotation vector after the update clears it, and what copies the first
-  block into the second.
+- The wave the emitter reads. The spline layer's wave is not the console's: flatter, slower,
+  and with the console's 128 × 128 mesh laid over it by hand - see
+  [Modelled choices](#modelled-choices). That is the spline notes' open question, and it now
+  sets the newborns' speeds.
+
+Also missing:
+
+- What writes the field's rotation vector after the update clears it, what copies the first
+  block into the second, and what the pool commands' type 3 does.
+- What drives the two factors that weight `PARTICLES_SPE.mnu`'s offsets.
 - The code that generates `proc_iridescent`. The implementation uses the fit above.
 - What drives `black` and `bright`, and the order and timing of the `gameboot` and
   `welcome` stages - their values are all read, and under RPCS3 neither sequence can be
   reached. `music_1` is playback and `coldboot1` is the XMB's own opening, both measured,
   and the day cycle is measured in all four of its windows.
-- What `PARTICLES_SPE.mnu` is for. `custom_render_plugin` lists its five names beside the
-  other two files'.

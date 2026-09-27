@@ -31,6 +31,15 @@
   const SPRING_DAMP = 0.6; // 0x31494: the noise level's spring, velocity 0.6 v - 0.004 x + impulse
   const SPRING_PULL = 0.004;
   const WIND_MIN_LENGTH = 0.0001; // a shorter `wind dir` is dropped rather than normalised
+  // The emitter, 0x30b80, draws from the wave's vertices: 128 lines of 128, as the captures' wave draw lays them out.
+  const MESH_N = 128; // vertices along a line, column 0 at the right edge
+  const MESH_M = 128; // lines
+  const EMIT_MIN_SPEED = 0.0001; // a vertex that moved less than this emits nothing
+  const AGING_MIN = 0.001; // and no particle ages slower than this
+  const SWEEP_START = 0.06; // 0x2dbf4: an idle sweep starts with this chance a frame,
+  const SWEEP_LENGTH = 100; // for 100 + 80 r births, one every other frame along a line
+  const SWEEP_SPREAD = 80;
+  const DEG = 0.0174533; // the emitter's degrees-to-radians factor, for `emit cone angle`
 
   // The XMB's icons, measured in the RSX captures: each is a unit quad with its own transform, so its centre and size
   // on screen read straight off the draw. Normalised device coordinates, as the 16:9 frame lays them out.
@@ -47,7 +56,8 @@
   const ITEM_SPACING = 0.148;
 
   // -----------------------------------------------------------------------------------------------------------------
-  // Modelled PPU side: the emitter, how the icons move, and what feeds the input response - none of it traced yet.
+  // Modelled PPU side: where the console's wave mesh falls on the spline layer's wave, how the icons move, and what
+  // feeds the input response - none of it traced yet.
   // -----------------------------------------------------------------------------------------------------------------
   const FIELD_CENTRE = [0, 0, 0]; // the origin, as the savestate shows
   const CATEGORIES = 10; // the modelled XMB's categories, and the items in each
@@ -62,10 +72,15 @@
   // console's - the band comes out a quarter of a unit deep at both ends.
   const WAVE_DEPTH_NEAR = 7.77;
   const WAVE_DEPTH_FAR = 9.47;
-  // The captured wave runs past the screen edges, and particles are shared among its vertices evenly. Emitting this
-  // far past the edges gives the captured shares: 14% of emissions fall outside the life box, 25% land off screen.
+  // The console's mesh runs past the screen edges, its columns from 1.45 to -1.55 in normalised device coordinates
+  // in the captures, and the emitter picks among its vertices evenly. Spreading the columns this far past the edges
+  // of the spline layer's wave puts 15% of births outside the life box, as captured, and 35% off screen, against the
+  // captures' 28 to 30%.
   const EMIT_EXTENT = 1.55;
-  const NORMAL_STEP = 0.01;
+  // The spline layer's wave moves more slowly than the console's, and the emitter's speeds follow the wave's: its
+  // vertices are read this many times faster. That gives late life the console's speeds and leaves the newborns a
+  // little slow; no one factor fits both (see the notes).
+  const WAVE_SPEED_GAIN = 3.5;
   const STEP_HZ = 60;
   const MAX_STEPS_PER_FRAME = 4;
   const PREWARM_STEPS = 300;
@@ -80,13 +95,17 @@
     return f32[0] - 3;
   }
 
-  // Park-Miller "minimal standard" generator. qgl_gaia_app carries the same arithmetic, but as a hash that picks a
-  // random element of a list, so the emitter drawing from it here is part of the model.
-  function createParkMiller(seed) {
-    let s = ((seed ^ 0xdeadbeef) >>> 0) % 2147483647 || 1;
+  // qglbase's random numbers (its export 0x2e67e2d8), which the emitter draws from: a counter run through the classic
+  // integer hash, x(x^2 15731 + 789221) + 1376312589 on n ^ (n << 13), whose low 31 bits t give 1 - t / 2^30 in
+  // single precision, in (-1, 1]. The console's counter is shared by everything that draws from it; here it starts
+  // at the seed.
+  function createQglRandom(seed) {
+    let n = seed | 0;
     return function next() {
-      s = (s * 16807) % 2147483647;
-      return (s - 1) / 2147483646;
+      n = (n + 1) | 0;
+      const x = n ^ (n << 13);
+      const t = (Math.imul(x, (Math.imul(Math.imul(x, x), 15731) + 789221) | 0) + 1376312589) & 0x7fffffff;
+      return Math.fround(Math.fround(t) * -9.313225746154785e-10 + 1);
     };
   }
 
@@ -174,13 +193,26 @@
   }
 
   function createSystem(options) {
+    // `options.seed` makes a run repeatable, which the bench uses; without it every page load emits differently.
+    const rng = createQglRandom(options && options.seed !== undefined
+      ? options.seed
+      : Date.now() ^ (Math.random() * 0x7fffffff));
+    const uniform = () => (rng() + 1) * 0.5; // the way the PPU turns a draw into U(0, 1]
+
     const capacity = (options && options.capacity) || 4096;
     const pool = new Float32Array(capacity * STRIDE);
     const output = new Float32Array(capacity * OUT_STRIDE);
     const freeList = new Int32Array(capacity);
     let freeCount = 0;
     for (let s = capacity - 1; s >= 0; s--) {
-      pool[s * STRIDE + 3] = FREE;
+      const o = s * STRIDE;
+      pool[o + 3] = FREE;
+      // A new particle keeps the orientation its slot's last one left. How the console fills the slots at first is
+      // not traced; here each starts with a random orientation (Shoemake).
+      const u1 = uniform(), u2 = uniform() * 2 * Math.PI, u3 = uniform() * 2 * Math.PI;
+      const a = Math.sqrt(1 - u1), b = Math.sqrt(u1);
+      pool[o + 8] = a * Math.sin(u2); pool[o + 9] = a * Math.cos(u2);
+      pool[o + 10] = b * Math.sin(u3); pool[o + 11] = b * Math.cos(u3);
       freeList[freeCount++] = s;
     }
 
@@ -189,16 +221,11 @@
     const fieldRot = new Float32Array(9);
     const noise = new Uint32Array(3);
     const flowTmp = new Float32Array(3);
-    // `options.seed` makes a run repeatable, which the bench uses; without it every page load emits differently.
-    const rng = createParkMiller(options && options.seed !== undefined
-      ? options.seed >>> 0
-      : (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0);
 
     const model = {
       rotDpad: [0, 0, 0], // field angular velocity from icon steps, rad per step
       rotShake: [0, 0, 0], // and from shaking the controller
       stirSign: 1,
-      emitCarry: 0,
       // The noise level's spring (0x31494): position, velocity, and the impulse the next step adds.
       spring: 0,
       springVel: 0,
@@ -222,12 +249,14 @@
       icons.x[i] = categoryTargetX(i, icons.category);
       icons.size[i] = i === icons.category ? ICON_SELECTED_SIZE : ICON_SIZE;
     }
+    // The emitter's state: the vertices picked this frame, as (column, line) pairs, the ones picked the frame before,
+    // which are born now, and the sweep in progress.
+    const emission = { picked: [], due: [], sweepLeft: 0, sweepX: 0, sweepY: 0, frame: 0 };
     const wave = {
       surface: null, data: null, prevData: null, t: 0, prevT: 0, dtWave: 0, p00: 1, p11: 1,
     };
     const wA = new Float32Array(4);
     const wB = new Float32Array(4);
-    const wC = new Float32Array(4);
     const wD = new Float32Array(4);
     const evalTmp = new Float32Array(3);
     const noInput = { stepsX: 0, stepsY: 0, accelX: 0, accelY: 0 };
@@ -354,11 +383,6 @@
       out[2] = CAMERA.eye[2] - d;
       out[3] = evalTmp[2];
       return out;
-    }
-
-    function insideBounds(p) {
-      return p[0] > LIFE_MIN[0] && p[1] > LIFE_MIN[1] && p[2] > LIFE_MIN[2] &&
-        p[0] < LIFE_MAX[0] && p[1] < LIFE_MAX[1] && p[2] < LIFE_MAX[2];
     }
 
     // World velocity of the wave at (gx, gz) in task units (displacement per step / dt), or 0 on the first frame.
@@ -532,86 +556,104 @@
       stats.fieldAngle = angle;
     }
 
-    // --- Modelled: the emitter, writing new particles into free slots on the wave surface -------------------------
-    function emitOne(S) {
-      // A random point of the wave, skipping rows the spline layer clips. One outside the life box is lost, as
-      // the task would kill it on its first update.
-      let gx = 0, gz = 0, drawn = false;
-      for (let tries = 0; tries < 4 && !drawn; tries++) {
-        gx = (rng() * 2 - 1) * EMIT_EXTENT;
-        gz = rng() * 2 - 1;
-        waveToWorld(wave.data, wave.t, gx, gz, wA);
-        drawn = Math.abs(wA[3]) <= 1;
+    // --- Verified: the emitter, as custom_render_plugin runs it once a frame (0x30b80) ---------------------------
+    // Vertices of the wave are picked in one frame and born in the next: a particle starts at its vertex, moving in a
+    // cone around the way the vertex moves. The PPU queues each birth as commands - a new slot, a position, a
+    // velocity, an aging rate - that write straight into the pool, so the particle keeps its slot's last orientation.
+
+    // Where column ix of line iy falls on the spline layer's wave (modelled): the lines are the surface's rows, and
+    // the columns run from EMIT_EXTENT at the right edge, where the console's column 0 is, to -EMIT_EXTENT.
+    const mesh = { gx: 0, gz: 0 };
+    function meshPoint(ix, iy) {
+      mesh.gx = EMIT_EXTENT * (1 - (2 * ix) / (MESH_N - 1));
+      mesh.gz = (2 * iy) / (MESH_M - 1) - 1;
+    }
+
+    // 0x2dde4: one draw a frame against `emit prob`, and if it passes, `emit per frame` vertices - an integer, as
+    // the PPU keeps it - each at trunc(U x 127) on both axes.
+    function pickVertices(S) {
+      if (uniform() >= S.emitProb) return;
+      const n = Math.trunc(S.emitPerFrame);
+      for (let i = 0; i < n; i++) {
+        const ix = Math.trunc(uniform() * (MESH_N - 1));
+        emission.picked.push(ix, Math.trunc(uniform() * (MESH_M - 1)));
       }
-      if (!drawn || !insideBounds(wA)) return;
+    }
 
-      waveVelocity(gx, gz, wA, S, wB);
-      // The wave's own motion, carried into the particle. Its z goes through `emit vel zscale` like the cone's below.
-      let vx = wB[0] * S.emitVelMul;
-      let vy = wB[1] * S.emitVelMul;
-      let vz = wB[2] * S.emitVelMul * S.emitVelZscale;
+    // 0x2dbf4: while no sweep runs, one starts with a 0.06 chance a frame, at a random vertex, for 100 + 80 r
+    // births. While one runs, every other frame picks the next vertex along its line, towards the left edge, until
+    // the births or the line run out.
+    function sweep() {
+      if (emission.sweepLeft === 0) {
+        if (uniform() < SWEEP_START) {
+          emission.sweepX = Math.trunc(uniform() * (MESH_N - 1));
+          emission.sweepY = Math.trunc(uniform() * (MESH_M - 1));
+          emission.sweepLeft = Math.trunc(rng() * SWEEP_SPREAD) + SWEEP_LENGTH;
+        }
+        return;
+      }
+      if (emission.frame & 1) return;
+      if (emission.sweepX < MESH_N) {
+        emission.picked.push(emission.sweepX, emission.sweepY);
+        emission.sweepX++;
+        emission.sweepLeft--;
+      } else {
+        emission.sweepLeft = 0;
+      }
+    }
 
-      // Surface normal, pointing up, flipped for a share of the particles.
-      waveToWorld(wave.data, wave.t, gx + NORMAL_STEP, gz, wC);
-      waveToWorld(wave.data, wave.t, gx, gz + NORMAL_STEP, wD);
-      const ex = wC[0] - wA[0], ey = wC[1] - wA[1], ez = wC[2] - wA[2];
-      const fx = wD[0] - wA[0], fy = wD[1] - wA[1], fz = wD[2] - wA[2];
-      let nx = ey * fz - ez * fy;
-      let ny = ez * fx - ex * fz;
-      let nz = ex * fy - ey * fx;
-      let nl = Math.hypot(nx, ny, nz);
-      if (nl < 1e-9) { nx = 0; ny = 1; nz = 0; nl = 1; }
-      let sign = ny < 0 ? -1 / nl : 1 / nl;
-      if (rng() < S.emitNegProb) sign = -sign;
-      nx *= sign; ny *= sign; nz *= sign;
+    // One vertex picked the frame before, born now. The console takes the vertex's velocity as how far it moved in
+    // that frame over `delta time`; here it is the wave's own velocity in the same units, since the page's frames
+    // need not match the steps.
+    function emitAt(S, ix, iy) {
+      meshPoint(ix, iy);
+      waveToWorld(wave.data, wave.t, mesh.gx, mesh.gz, wA);
+      if (Math.abs(wA[3]) > 1) return; // the spline layer clips this row, so there is no vertex there (modelled)
+      waveVelocity(mesh.gx, mesh.gz, wA, S, wB);
+      const v = Math.hypot(wB[0], wB[1], wB[2]) * WAVE_SPEED_GAIN;
+      if (v < EMIT_MIN_SPEED) return;
 
-      // Random direction in the emission cone around the normal.
-      const cosMax = Math.cos((S.emitConeAngle * Math.PI) / 180);
-      const cosT = 1 - rng() * (1 - cosMax);
-      const sinT = Math.sqrt(Math.max(0, 1 - cosT * cosT));
-      const phi = 2 * Math.PI * rng();
-      let tx = Math.abs(nx) < 0.9 ? 0 : -nz;
-      let ty = Math.abs(nx) < 0.9 ? -nz : 0;
-      let tz = Math.abs(nx) < 0.9 ? ny : nx;
-      const tl = 1 / Math.hypot(tx, ty, tz);
-      tx *= tl; ty *= tl; tz *= tl;
-      const bx = ny * tz - nz * ty, by = nz * tx - nx * tz, bz = nx * ty - ny * tx;
-      const cp = Math.cos(phi) * sinT, sp = Math.sin(phi) * sinT;
-      // `emit vel zscale` flattens the direction - the console sets it to 0 and its pool is born on a plane, the z
-      // velocity within a thousandth of zero - and the direction is renormalised, so flattening it costs no speed.
-      // The console's pool says so: the slowest twentieth of its new particles still move at `emit vel min`.
-      const dx = tx * cp + bx * sp + nx * cosT;
-      const dy = ty * cp + by * sp + ny * cosT;
-      const dz = (tz * cp + bz * sp + nz * cosT) * S.emitVelZscale;
-      const dl = Math.hypot(dx, dy, dz) || 1;
-      const speed = (S.emitVelMin + S.emitVelVar * rng()) / dl;
-      vx += dx * speed;
-      vy += dy * speed;
-      vz += dz * speed;
+      // The cone's axis is the way the vertex moves, reversed with a chance of `emit neg prob`.
+      const vk = WAVE_SPEED_GAIN / v;
+      let dx = wB[0] * vk, dy = wB[1] * vk, dz = wB[2] * vk;
+      if (uniform() < S.emitNegProb) { dx = -dx; dy = -dy; dz = -dz; }
+      // Two axes across it: the longest of d x X, d x Y and d x Z, normalised, and d times that.
+      const l4 = dz * dz + dy * dy, l6 = dz * dz + dx * dx, l5 = dy * dy + dx * dx;
+      let ax, ay, az;
+      if (l4 > l6 ? l4 > l5 : false) { ax = 0; ay = dz; az = -dy; }
+      else if (l4 > l6 || !(l6 > l5)) { ax = dy; ay = -dx; az = 0; }
+      else { ax = -dz; ay = 0; az = dx; }
+      const al = Math.hypot(ax, ay, az);
+      ax /= al; ay /= al; az /= al;
+      const bx = dy * az - dz * ay, by = dz * ax - dx * az, bz = dx * ay - dy * ax;
+      // The angle off the axis is uniform up to `emit cone angle`, and the direction around it uniform.
+      const theta = uniform() * S.emitConeAngle * DEG;
+      const phi = uniform() * 2 * Math.PI;
+      const st = Math.sin(theta), ct = Math.cos(theta), sp = Math.sin(phi), cp = Math.cos(phi);
+      // `emit vel zscale` scales what lies along the camera's axis, z here, and the direction is not renormalised.
+      const ux = dx * ct + (ax * cp + bx * sp) * st;
+      const uy = dy * ct + (ay * cp + by * sp) * st;
+      const uz = (dz * ct + (az * cp + bz * sp) * st) * S.emitVelZscale;
+      // The speed grows as the square root of the vertex's own, and never drops below `emit vel min`.
+      const speed = Math.max(Math.sqrt(v * S.emitVelMul * (1 + S.emitVelVar * rng())), S.emitVelMin);
+      const aging = Math.max(AGING_MIN, S.agingSpeed * (1 + S.agingVariance * rng()));
 
-      // Random orientation (Shoemake).
-      const u1 = rng(), u2 = rng() * 2 * Math.PI, u3 = rng() * 2 * Math.PI;
-      const a = Math.sqrt(1 - u1), b = Math.sqrt(u1);
-
-      const slot = freeList[--freeCount];
-      const o = slot * STRIDE;
+      if (freeCount === 0) return;
+      const o = freeList[--freeCount] * STRIDE; // the free list's last slot: the one freed most recently
       pool[o] = wA[0]; pool[o + 1] = wA[1]; pool[o + 2] = wA[2]; pool[o + 3] = 0;
-      pool[o + 4] = vx; pool[o + 5] = vy; pool[o + 6] = vz;
-      // Verified from the pool in the savestate: the rates there run from `aging speed` x (1 - `aging variance`)
-      // to x (1 + `aging variance`), so the draw is symmetric.
-      pool[o + 7] = S.agingSpeed * (1 + S.agingVariance * (rng() * 2 - 1));
-      pool[o + 8] = a * Math.sin(u2); pool[o + 9] = a * Math.cos(u2);
-      pool[o + 10] = b * Math.sin(u3); pool[o + 11] = b * Math.cos(u3);
+      pool[o + 4] = ux * speed; pool[o + 5] = uy * speed; pool[o + 6] = uz * speed; pool[o + 7] = aging;
       stats.emitted++;
     }
 
     function emit(S) {
-      model.emitCarry += S.emitPerFrame;
-      const attempts = Math.floor(model.emitCarry);
-      model.emitCarry -= attempts;
-      for (let i = 0; i < attempts && freeCount > 0; i++) {
-        if (rng() < S.emitProb) emitOne(S);
-      }
+      emission.picked.length = 0;
+      pickVertices(S);
+      sweep();
+      const due = emission.due;
+      for (let i = 0; i < due.length; i += 2) emitAt(S, due[i], due[i + 1]);
+      emission.due = emission.picked;
+      emission.picked = due;
+      emission.frame++;
     }
 
     // The block first, decaying the grid, then the icons' wind on top of it: which of the two comes first within a
@@ -650,7 +692,8 @@
 
       gatherInput(input, dtSec);
 
-      if (!warm) {
+      // The emitter needs the wave to have moved, so the scene is filled on the second frame rather than the first.
+      if (!warm && wave.dtWave > 1e-4) {
         warm = true;
         for (let i = 0; i < PREWARM_STEPS; i++) step(S, noInput);
       }
