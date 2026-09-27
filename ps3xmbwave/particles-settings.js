@@ -7,6 +7,9 @@
 window.PARTICLE_SETTINGS = {
   // Theme parameter set from `particles-themes.js`; 'base' is the firmware's own PARTICLES.mnu below.
   theme: 'auto',
+  // A boot sequence played on top of the theme (`particles-themes.js`): the XMB's start, or a game's or other
+  // content's launch, after which the XMB starts again. It returns to 'none' when it is over.
+  sequence: 'none',
 
   // --- PARTICLES.mnu (firmware 4.93 defaults) -------------------------------------------------
   emitVelMin: 0.15064,
@@ -97,6 +100,13 @@ window.PARTICLE_SETTINGS = {
 
 window.PARTICLE_SETTINGS_META = {
   theme: { type: 'select', options: window.PARTICLE_THEME_OPTIONS },
+  sequence: {
+    type: 'select',
+    options: [
+      { value: 'none', label: 'None' }, { value: 'coldboot', label: 'XMB start' },
+      { value: 'gameboot', label: 'Game launch' }, { value: 'otherboot', label: 'Other launch' },
+    ],
+  },
 
   emitVelMin: { min: 0, max: 2, step: 0.001 },
   emitVelMul: { min: 0, max: 5, step: 0.01 },

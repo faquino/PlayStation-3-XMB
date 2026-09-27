@@ -220,6 +220,9 @@ So:
   sequence the table still carries.
 - `music_1` is event 4 - see [Where the events come from](#the-parameters-as-the-ppu-holds-them).
 
+`particles-themes.js` plays the three sequences on the particle side, on top of the theme, as
+`sequence` names them - see [Modelled choices](#modelled-choices).
+
 ### Telling the sets apart in a capture
 
 Since a capture carries the corner colours as vertex constants and the particles' `glare` inside
@@ -1339,7 +1342,7 @@ the spline layer's wave, where the icons go when the selection moves, and the in
 |---|---|---|
 | `particles-reverse.js` | The update task, steps 1 to 8. The pool layout, free marker, life bounds and camera. The parameter block: its layout, the values at every offset, and how the PPU fills it, the flow grid and the noise included. The emitter and its random numbers. The controller's response: the D-pad's turn and kicks, the motion, the shake detectors. `PARTICLES_SPE.mnu`, as the PPU applies it, and its first factor's animation. The particles' fade, `_Color`. The icons' layout on screen, measured. | Where the wave's vertices fall and how fast they move; how the icons move; how often the XMB repeats a held direction; the pool's first orientations, uniform as the console's are after many generations. |
 | `particles.js` | Both passes, re-authored from the decompiled programs, fed with the `.mnu` values the tables above map, `PARTICLES_SPE.mnu` applied. `color_control` as the programs use it, and `_Color` from the system's fade. | `_Gamma` held at 1, its value in every savestate. The iridescent texture comes from the fit. |
-| `particles-themes.js` | The nine distinct theme sets, as their differences from the base. | Which set applies when: the day cycle above, with a four-hour smoothstep between neighbours. |
+| `particles-themes.js` | The nine distinct theme sets, as their differences from the base. The boot sequences: which set each step puts in, when, and over how long. | Which set applies when: the day cycle above, with a four-hour smoothstep between neighbours. The curve of a sequence's blends, taken to be the same smoothstep. |
 | `wave-surface-cpu.js` | | A CPU copy of the spline layer's wave vertex shader, so particles are born on the wave that is drawn. |
 | `xmb-input.js` | What it hands over: steps with the XMB's four directions, and the four sensors in the PPU's units. | The rest: the mouse and keyboard stand in for the controller. |
 
@@ -1398,6 +1401,18 @@ on each frame that passes its draw, simply keeps it that way.
   over `backgroundFadeMs`, the page's choice where the console's callers use 0 to 1000 ms.
   Headless it stays within 1e-15 of the firmware's curve, and in the browser the particles'
   light scales with it, to nothing when hidden. The wave does not fade: that part is not ported.
+- **Boot sequences.** `sequence` plays the XMB's start, a game's launch or another content's,
+  as [What puts each set in](#what-puts-each-set-in) reads them: each step blends from wherever
+  the parameters stand, and the start hands over to the theme at 11.5 seconds, once its blend
+  into the cycle is done. What is modelled:
+  - a blend's curve, which runs in `qglbase`: the day cycle's smoothstep;
+  - what follows a launch: the content takes the screen, and the page brings the XMB back
+    through its start at once, as the console does when the content quits;
+  - the pool. The XMB's start builds it again, empty and with every orientation the identity,
+    as the console's scene does, and the page does not pre-warm it. But the page's fills in
+    about five seconds, where the console's held 492 particles with its blend into the cycle
+    46 per cent done - its wave may come up still, which the spline layer's does not (not
+    followed). Only the particle side changes: the backdrop and the wave keep their settings.
 - **Flow grid.** Ported: 32 × 16 cells of signed bytes, sampled the way the task samples them,
   decayed by 0.98 a frame, and written by every icon that moves - see
   [The flow grid](#the-flow-grid). At rest it stays empty, as the console's does. What is

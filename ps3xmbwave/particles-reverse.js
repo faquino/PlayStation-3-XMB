@@ -369,6 +369,7 @@
     let count = 0;
     let stepCarry = 0;
     let warm = false;
+    let sequence = 'none'; // the boot sequence the settings name, which `particles-themes.js` plays
 
     // --- Verified: the update task (0x6ed0), one call per frame over the whole pool -------------------------------
     function runTask() {
@@ -861,6 +862,23 @@
       if (u >= 1) colorFade.running = false;
     }
 
+    // The XMB's start builds the scene again: its pool comes up empty, with every orientation the identity (0x5ef0c,
+    // 0x597bc), and emission fills it.
+    function rebuildPool() {
+      freeCount = 0;
+      for (let s = capacity - 1; s >= 0; s--) {
+        const o = s * STRIDE;
+        pool.fill(0, o, o + STRIDE);
+        pool[o + 3] = FREE;
+        pool[o + 11] = 1;
+        freeList[freeCount++] = s;
+      }
+      emission.picked.length = 0;
+      emission.due.length = 0;
+      emission.sweepLeft = 0;
+      count = 0;
+    }
+
     // The parameters with the factors as they stand, then the block, decaying the grid, then the icons' wind on top of
     // it (which of those two comes first within a frame on the console is not known), and the fades move on last.
     function step(settings, height, ev) {
@@ -903,6 +921,10 @@
       const height = Number(settings.videoOutput) || 1080;
       speEvent(settings.whatsNewBoard === 'open' ? 1 : 0);
       colorEvents(settings);
+      if (settings.sequence !== sequence) {
+        sequence = settings.sequence;
+        if (sequence === 'coldboot') rebuildPool();
+      }
       applySpe(settings, spe.value, height, effective);
       if (!wave.prevData || wave.prevData.length !== surface.data.length) {
         wave.prevData = new Float32Array(surface.data);
@@ -917,10 +939,11 @@
 
       gatherInput(input, dtSec);
 
-      // The emitter needs the wave to have moved, so the scene is filled on the second frame rather than the first.
+      // The emitter needs the wave to have moved, so the scene is filled on the second frame rather than the first -
+      // unless the XMB's start is playing, which fills it the way the console's does.
       if (!warm && wave.dtWave > 1e-4) {
         warm = true;
-        for (let i = 0; i < PREWARM_STEPS; i++) step(settings, height, noInput);
+        if (sequence !== 'coldboot') for (let i = 0; i < PREWARM_STEPS; i++) step(settings, height, noInput);
       }
 
       stepCarry = Math.min(stepCarry + dtSec * STEP_HZ, MAX_STEPS_PER_FRAME);
