@@ -922,9 +922,9 @@ The noise's two input terms:
   keeps in a ring at `+0x400`, times `rshake brw`, kept at `+0x604`. The vectors are how far
   the Sixaxis's accelerometer moved from one frame to the next.
 
-A byte at `+0xb4`, cleared by the constructor, collapses both life bounds to zero for one
-frame when set, and is cleared again: a way to kill every particle at once. What sets it is not
-traced.
+A byte at `+0xb4` collapses both life bounds to zero for one frame when set, and is cleared
+again: a way to kill every particle at once. **Nothing sets it**: the only code that writes it
+is the constructor and `0x31494` itself, both clearing it.
 
 ### The task's record, and the block it reads
 
@@ -947,9 +947,13 @@ loop uses:
 `0x200de680`, and holds the same values - force, drag, rotation, time step - down to a grid
 descriptor pointing at its own grid, `0x200de700`, which the second block carries too. The
 savestate stores the pair 768 bytes apart, having left out their empty grids. That reads as the PPU
-composing the first block and copying it whole into the second. The first half is verified now -
-`0x31494` writes the first block, see [How the block is filled](#how-the-block-is-filled) - and
-the copy is not found yet.
+composing the first block and copying it whole into the second, and both halves are verified
+now. `0x31494` writes the first block - see [How the block is filled](#how-the-block-is-filled) -
+and the block object's submit, `0x5ddc8` (and its twin at `0x6213c`), runs the pool's commands
+(`0x5cad0`) and then copies the first block into the second (`0x5ca00`, through the block's
+field-by-field copy, `0x599bc`) before it goes on to the rest of its work and flips its double
+buffer. So the task reads the block as the frame left it, with the frame's births already in the
+pool, which is the order the implementation keeps with a single block.
 
 ### The parameters, as the PPU holds them
 
@@ -1152,8 +1156,12 @@ the block object, at B+0x1328, which `0x5cad0` runs through later in the frame:
   zeroes its position and velocity, so life starts at 0;
 - type 1 (`0x5bbf4`) sets the position's x, y and z, type 2 (`0x5bbc0`) the velocity's, and
   type 4 (`0x5934c`) the aging rate, in the velocity's w;
-- type 3 (`0x59140`), which the emitter does not use, works on the velocity with a vector; what
-  it does is not read.
+- type 3 (`0x59140`) adds its vector to the velocity's x, y and z and leaves the aging rate in
+  w: an impulse. Nothing queues it. The emitter is the only code that writes commands, and it
+  writes types 0, 1, 2 and 4.
+
+The runner drops the frame's commands while a byte of the first block, at +2080, is set. The
+block's constructor clears it and its copy carries it over, and nothing else writes it.
 
 Nothing writes the orientation: a new particle keeps the quaternion its slot's last particle
 left.
@@ -1667,7 +1675,6 @@ The implementation models all of these:
 
 Also missing:
 
-- What copies the first block into the second, and what the pool commands' type 3 does.
 - Which of the XMB's actions open What's New's board in which mode, and so switch the first
   `PARTICLES_SPE.mnu` factor on - see [What's New's board](#whats-news-board). The board's
   side, and the factor's animation, are traced.
