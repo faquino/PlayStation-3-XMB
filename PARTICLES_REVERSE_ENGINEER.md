@@ -570,7 +570,7 @@ data, in one of two ways:
 
 It is the second. The parameter block carries the result - see
 [What the controller does to the block](#what-the-controller-does-to-the-block) - and
-`custom_render_plugin` computes it - see [How the block is filled](#how-the-block-is-filled).
+`custom_render_plugin` computes it - see [The controller](#the-controller).
 
 ## The update task
 
@@ -620,8 +620,10 @@ rate in w, and a rotation quaternion. **A free slot has position.w = -666.**
 4. **Field rotation.**
    - `vel += (c + R · (pos − c) − pos) / dt`.
    - c is the point at P+2096.
-   - R is the matrix at P+2112, rebuilt every frame from the quaternion at P+2176
-     (`FUN_000048b8`).
+   - R is the matrix at P+2112, rebuilt every frame from the rotation vector at P+2176
+     (`FUN_000048b8`): its length is the angle and its direction the axis
+     (`FUN_00004688`, vectormath's rotation). A vector shorter than 1e-5 gives the
+     identity, so a turn slower than 1e-5 radians a frame does not happen at all.
 5. **Integration:** `vel += (F − P[16] ⊙ vel) · dt`, then `pos += vel · dt`, with
    `dt = P[2224]`. These are vec4 operations, so life (pos.w) advances by the aging rate
    (vel.w).
@@ -672,9 +674,9 @@ head of the third: that head is zero in every capture.
 | 384 | flow grid descriptor | a pointer, then 32 and 16 | the task points it at the grid, P+128 |
 | 400, 448 | the same size as floats, then 32, 16, 31, 15 | | |
 | 512, 528 | `_LifeBoundsMin` / `Max` | (-10, -10, -12) / (10, 10, 7) | not in any `.mnu`; a constant in `custom_render_plugin` |
-| 560 | field centre | the origin | |
-| 576 | field rotation | the identity matrix | |
-| 640 | field quaternion | zero at rest | |
+| 560 | field centre | the origin | 2 units in front of the camera |
+| 576 | field rotation | the identity matrix | the rotation vector's matrix |
+| 640 | field rotation vector | zero at rest | the D-pad's turn and the shakes' |
 | 656 | noise offset | zero | the wind: `wind dir` normalised, × (`wind scale` + 10 × `wind scale 10`), both 0 |
 | 672 | flow strength, noise scale, `size middle`, spin rate | (1, 0.225311, 0.0536233, 2.74) | a constant 1; `brownian scale` plus two input terms, zero at rest; `size middle`; `spin time scale` |
 | 688 | time step | (0.0088883, 0.0088883, 0.0088883, 1) | `delta time`, and the 1 that ages a particle once per frame |
@@ -689,7 +691,7 @@ Reading that block settles several things:
 - **At rest the noise scale is `brownian scale` itself.** The two terms the PPU adds for the
   controller, one of them the `brownian` of `PARTICLES_UI.mnu` times a level, are zero then.
 - **The flow strength is 1**, not something small.
-- **The field turns about the origin**, and at rest its quaternion is zero and its matrix
+- **The field turns about the origin**, and at rest its rotation vector is zero and its matrix
   the identity.
 - **The flow grid is 32 x 16** over normalised coordinates, and the rectangle its matrices
   describe, 15.95 by 8.97, is exactly what the camera sees at a depth of 9 with a 53°
@@ -713,26 +715,25 @@ one while the XMB was being navigated sideways, against the one at rest:
 | shaking | -6.8e-05 | 0.030551 | 1.9e-07 | 1.493472, 6.63 times it |
 | navigating | -6.8e-05 | 0.030551 | 1.843731e-05 | 0.719822, 3.19 times it |
 
-- **Both raise the noise.** On their own, the two states fit
-  `brownian scale` × (1 + `rshake brw` × level) with the level at 0.75 and 0.29, which seemed
-  to leave the `brownian` of `PARTICLES_UI.mnu` out. The PPU's code says otherwise: it adds
-  two terms to `brownian scale`, a level between 0 and 1 times `brownian`, and the
-  controller's motion times `rshake brw` - see [How the block is filled](#how-the-block-is-filled).
-  The savestates add 1.268 and 0.495 to the resting value, one equation each for two
-  unknowns, so they cannot split them; but the level's term stops at 0.6, so while shaking
-  at least 0.67 of the 1.268 comes from the motion.
+- **Both raise the noise, and the particle object says by how much.** The PPU adds two terms
+  to `brownian scale`: a level between 0 and 1 times `brownian`, and the controller's motion
+  times `rshake brw` - see [How the block is filled](#how-the-block-is-filled). The block alone
+  cannot split them, but the particle object keeps both, and in the same two savestates:
+  - shaking, the level is 1 and the motion 0.0891, so 0.225311 + 0.6 + 0.0891 × 7.4992 =
+    1.4935;
+  - navigating, the level is 0.7206 and the motion 0.0083, so 0.225311 + 0.7206 × 0.6 +
+    0.0083 × 7.4992 = 0.7198.
 - **The field turns about y, and the slot at +640 holds a rotation vector, not a
   quaternion.** While navigating, the matrix at +576 carries ∓1.843731e-05 in its x-z
   corners, the same number the slot holds: a small-angle rotation about y, by a sixth of
-  `dpad rot max`. Shaking left it a hundred times smaller, so a shake is mostly noise.
+  `dpad rot max`. Shaking left it a hundred times smaller, below the 1e-5 under which the
+  field does not turn at all: a shake turns the field only as it starts.
 - **Navigating leaves the force and the drag alone.** A first reading of this savestate
   put both at zero; that was the savestate's layout, not the block - see
   [Navigating does not clear the force and the drag](#navigating-does-not-clear-the-force-and-the-drag).
 
-The implementation now uses the console's formula, spring and all, and follows the two
-measured numbers with the inputs it models: an icon step turns the field about y and kicks the
-spring, and 0.4 s later the noise is 3.17 times its rest against the 3.19 measured - see
-[Modelled choices](#modelled-choices).
+What writes these is traced in [The controller](#the-controller), and the implementation
+ports it.
 
 ### The pool, and what it says about emission
 
@@ -887,7 +888,9 @@ copy at B+0x1490. Every frame, `0x31494` writes the first block field by field:
 | +1792, M2 | what the camera sees at a distance of 9, at z = -7: 2 × 9 × `tanf`(fov / 2) = 8.97447 high, and the camera's aspect, 16 / 9, times that wide, 15.9546 |
 | +1856, M1 | M2 inverted, through a `qglbase` export |
 | +2048, +2064 | the life bounds, two vector constants at `0x940b0` and `0x940c0` |
-| +2176, rotation vector | zero, at the start of the update; the turn is written after it, by code not read yet |
+| +2096, field centre | 2 units in front of the camera, which is the origin, written by `0x2d02c` - see [The controller](#the-controller) |
+| +2112, field rotation | the rotation vector's matrix, or the identity below 1e-5, written by `0x2d02c`; the task rebuilds it the same way |
+| +2176, rotation vector | zero, at the start of the update, then the D-pad's turn and the shakes' - see [The controller](#the-controller) |
 | +2192, noise offset | a vector the object keeps at `+0x680`, plus `wind dir` normalised × (`wind scale` + 10 × `wind scale 10`) when `wind dir` is longer than 0.0001 |
 | +2208, flow strength | the object's `+0xc0`: 1, from its constructor, and written nowhere else |
 | +2212, noise scale | `brownian scale` + level × `brownian` + motion × `rshake brw`, below |
@@ -900,11 +903,12 @@ The noise's two input terms:
 - **The level** is a damped spring the object keeps at `+0x1d8`. Each frame its velocity
   becomes 0.6 times itself, less 0.004 times its position, plus an impulse, which is then
   cleared; the position moves by the velocity; and the level, at `+0x1d4`, is the position
-  clamped to [0, 1]. What writes the impulse is not traced yet.
+  clamped to [0, 1]. The D-pad and the shakes write the impulse - see
+  [The controller](#the-controller).
 - **The motion** comes from `0x2c758`, which the update calls while a byte at `+0x1004` is
   set, as the constructor leaves it: the length of the newest of up to 16 vectors the object
-  keeps in a ring at `+0x400`, times `rshake brw`, kept at `+0x604`. What fills the ring is not
-  traced yet.
+  keeps in a ring at `+0x400`, times `rshake brw`, kept at `+0x604`. The vectors are how far
+  the Sixaxis's accelerometer moved from one frame to the next.
 
 A byte at `+0xb4`, cleared by the constructor, collapses both life bounds to zero for one
 frame when set, and is cleared again: a way to kill every particle at once. What sets it is not
@@ -1039,6 +1043,100 @@ This replaces the modelled emitter on every count: one draw per attempt with the
 carried, from random points of the surface, in a cone around its normal, at `emit vel min` +
 `emit vel var` × U, flattened and renormalised, with a random orientation and no sweeps.
 
+### The controller
+
+**Verified** in `custom_render_plugin`, and against the particle object in the savestates.
+
+**How the input arrives.** The XMB does not hand the scene its buttons.
+
+- It calls the scene's event handler, `0x15330`. For every step the cursor takes, event 0/9
+  carries the step's direction, which the scene passes on to the particle object (`0x1b0f4`,
+  `0x2b548`): 0 left, 1 right, 2 up, 3 down.
+- The pad handler, `0x16818`, takes the first connected pad's four sensors - the
+  accelerometer's x, y and z, and the gyro - and passes them on as (raw − 511) / 512, clamped
+  to ±1 (`0x1b0c4`, `0x2b430`). A pad whose first sensor reads zero, one without them, is
+  skipped. In the savestates the controller lying still reads y at −0.2188: 112 below zero,
+  which is 1 g.
+
+**Every frame**, `0x31494` clears the rotation vector and then, before it steps the noise's
+spring, runs four things in this order:
+
+1. `0x2b2dc` puts the sensors' reading into a ring of 16 at `+0x200`, and its difference from
+   the last frame's into another at `+0x400`, the ring the motion reads.
+2. `0x2d02c`, the D-pad. It writes the field's centre, 2 units in front of the camera along
+   its view, which is the origin. If a step came in, with direction (dx, dy), it:
+   - sets the turn's axis to −dy times the camera's right axis plus dx times its up axis, with
+     x then scaled by `dpad scale y` and y by `dpad scale x`. With `dpad scale y` at 0, an up
+     or down step leaves the axis at zero, which stops any turn in progress;
+   - adds 0.03 (`+0x190`) to the turn's spring (`+0x198`);
+   - adds 0.04 (`+0x1d0`) times |dx `dpad scale x` − dy `dpad scale y`| to the noise's
+     spring: a sideways step kicks the noise, an up or down one does not.
+
+   The spring keeps 0.98 of its velocity a frame, and the field turns about the axis at
+   `dpad rot max` times that velocity, clamped to [0, 1]. Last, it builds the field's matrix
+   from the rotation vector, the identity if the vector is shorter than 1e-5.
+3. `0x2c758` takes the newest difference's length over x, y and z, times `rshake brw`: the
+   motion.
+4. `0x2c3e0`, the shakes. Two detectors watch the sensors, one the accelerometer's x
+   (`+0x700`) and one the gyro (`+0xb80`), each run by `0x2bcbc` and `0x2c27c`. Each frame a
+   detector:
+   - takes its sensor's last 16 differences, newest first, and sums them back into the
+     reading relative to each earlier frame;
+   - fits a least-squares line through those sums against their age, and adds up their
+     distances from it: how far the last quarter of a second was from a steady drift;
+   - averages that residual with the two before it, and takes the excess over
+     `dshake thresh`;
+   - kicks when the excess becomes non-zero, and only then, not while it stays so. The kick is
+     10 times the excess, negative if the gyro reads above zero at that moment and positive
+     otherwise, and doubled if it reverses the last kick within 119 frames;
+   - lets the kick fade by 0.6 a frame. While it lasts, the kick times `dshake rot imp` goes
+     into the detector's own spring, and its size times `dshake brw imp` into the noise's;
+   - keeps 0.8 of its spring's velocity a frame, and turns the field about the camera's up
+     axis at `dshake rot max` times that velocity, clamped to ±1.
+
+   The accelerometer's detector's turn counts `dshake x coeff` times, the gyro's
+   `dshake g coeff` times.
+
+The task rebuilds the field's matrix from the final vector, shakes included (`FUN_000048b8`).
+
+**What that means:**
+
+- **A single step does not turn the field.** 0.03 × `dpad rot max` is 3.5e-6 radians a
+  frame, under 1e-5. The spring has to pass 0.086 first, which takes four steps close
+  together. A held direction does it.
+- **A held direction steps every 8 frames** (inferred). The four captures taken holding one
+  read the turn at 0.176, 0.179, 0.185 and 0.191 times `dpad rot max`. A step every n frames
+  keeps the spring between 0.98^(n−1) × 0.03 / (1 − 0.98^n) and 0.03 / (1 − 0.98^n):
+  0.1745 to 0.2011 for n = 8, 0.1535 to 0.1804 for 9, and 0.2015 to 0.2274 for 7. Only 8
+  holds all four.
+- **Only sideways steps kick the noise**, by 0.04 each. A tap raises the noise by at most a
+  quarter, and a held direction drives the level to 1.
+- **A shake turns the field only as it starts**, and the turn is gone within a second. While
+  the shaking goes on, the noise carries it, through the motion and the level.
+
+**Checked against the savestates.** The particle object is in all of them, found by the
+constructor's 0.03 and 0.04, 64 bytes apart:
+
+- Navigating: the turn's spring is at 0.1581, which times `dpad rot max` is the block's
+  1.8437e-5, about +y. The last step went right.
+- Both: the noise scale splits into its terms - see
+  [What the controller does to the block](#what-the-controller-does-to-the-block).
+- Shaking: the two detectors sit where the constructor puts them, once the line the savestate
+  leaves out before them is accounted for. The residuals they keep, 0.72128 and 2.96818, are
+  what the 16 differences in the ring give when recomputed. The gyro's detector reads an
+  excess of 2.128, 51 frames after its last kick: the shaking had been going on for a while,
+  and the kick had faded.
+
+**Two more things the same code settles:**
+
+- The icon wind's T, the particle object's `+0x14`, is the frame's width over its height. The
+  resize method, `0x2b97c`, writes the width, the height and their ratio at `+0xc`, `+0x10`
+  and `+0x14`.
+- The two factors that weight `PARTICLES_SPE.mnu` are animations towards a target over a
+  duration. `0x2b6a8` starts the first, called from the same event handler, `0x15330`, and
+  `0x2b6dc` the second, through `0x1acb4`, from `0x1b348` and `0x1b490`. Which events those
+  are is not read.
+
 ### Ruled out
 
 - The `+0x830` and `+0x890` pairs in `qgl_gaia_app`, which match the parameter block's
@@ -1057,17 +1155,17 @@ carried, from random points of the surface, in a cone around its normal, at `emi
 
 The implementation ports what is verified as it is and models the rest, marked as modelled
 in the code. The PPU side is ported as far as it is traced - how the block is filled, the flow
-grid's decay and wind, the noise's formula and spring, the wind, the emitter - and what it needs
-from the XMB is modelled: where the console's wave mesh falls on the spline layer's wave, where
-the icons go when the selection moves, and what kicks the spring.
+grid's decay and wind, the noise's formula and spring, the wind, the emitter, the controller's
+response - and what it needs from the XMB is modelled: where the console's wave mesh falls on
+the spline layer's wave, where the icons go when the selection moves, and the input itself.
 
 | File | Verified | Modelled |
 |---|---|---|
-| `particles-reverse.js` | The update task, steps 1 to 8. The pool layout, free marker, life bounds and camera. The parameter block: its layout, the values at every offset, and how the PPU fills it, the flow grid and the noise included. The emitter and its random numbers. The icons' layout on screen, measured. | Where the wave's vertices fall and how fast they move; how the icons move; what kicks the noise's spring and what its motion term reads; the field's turn; the pool's first orientations. |
+| `particles-reverse.js` | The update task, steps 1 to 8. The pool layout, free marker, life bounds and camera. The parameter block: its layout, the values at every offset, and how the PPU fills it, the flow grid and the noise included. The emitter and its random numbers. The controller's response: the D-pad's turn and kicks, the motion, the shake detectors. The icons' layout on screen, measured. | Where the wave's vertices fall and how fast they move; how the icons move; how often the XMB repeats a held direction; the pool's first orientations. |
 | `particles.js` | Both passes, re-authored from the decompiled programs, fed with the `.mnu` values the tables above map. | `_Color` = `color_control` × (1, 1, 1) and `_Gamma` = 1. The iridescent texture comes from the fit. |
 | `particles-themes.js` | The nine distinct theme sets, as their differences from the base. | Which set applies when: the day cycle above, with a four-hour smoothstep between neighbours. |
 | `wave-surface-cpu.js` | | A CPU copy of the spline layer's wave vertex shader, so particles are born on the wave that is drawn. |
-| `xmb-input.js` | | All of it: the mouse and keyboard stand in for the controller. |
+| `xmb-input.js` | What it hands over: steps with the XMB's four directions, and the four sensors in the PPU's units. | The rest: the mouse and keyboard stand in for the controller. |
 
 The pool holds 2049 particles, the size read out of the savestate. Like the original it
 runs full, so emission waits on a free slot; the `welcome` set, which asks for 70 births
@@ -1105,8 +1203,8 @@ on each frame that passes its draw, simply keeps it that way.
   strength 1, and the field turns about the origin. The wind goes in as the noise offset,
   `wind dir` normalised × (`wind scale` + 10 × `wind scale 10`), which only `gameboot3/4` and
   `welcome_1/2` turn on. The noise scale is `brownian scale` + level × `brownian` + motion ×
-  `rshake brw`, with the level's spring as traced; what drives the spring and the motion is
-  modelled, under Input.
+  `rshake brw`, with the level's spring, and what drives it and the motion, as traced - see
+  [The controller](#the-controller).
 - **Flow grid.** Ported: 32 × 16 cells of signed bytes, sampled the way the task samples them,
   decayed by 0.98 a frame, and written by every icon that moves - see
   [The flow grid](#the-flow-grid). At rest it stays empty, as the console's does. What is
@@ -1127,38 +1225,41 @@ on each frame that passes its draw, simply keeps it that way.
     left of the selection and positive on its right, the shrinking icon's side and the
     growing one's. A step down writes the item column at +127, since items travel up to a
     third of the screen's height in a few frames.
-- **Input.**
-  - Icon steps are D-pad presses. A horizontal one yaws the field about its centre, at up
-    to `dpad rot max` per frame, scaled by `dpad scale x`. A vertical one pitches it,
-    scaled by `dpad scale y` (0). The rate decays by 0.85 per frame.
+- **Input.** The response is ported - see [The controller](#the-controller). What stands in
+  for the controller is modelled, in `xmb-input.js`:
+  - Steps are D-pad presses: the arrow keys, and the pointer crossing a virtual grid of 7 × 7
+    icons. They reach the system one a frame, the way the XMB sends them. A key the browser
+    starts repeating is held, and the system repeats it every 8 frames of its own, the rate the
+    captures' turn implies. Held for ten seconds, the turn settles between 0.1745 and 0.2010
+    times `dpad rot max`, where the four captures read 0.176 to 0.191.
   - Every step also moves the modelled icons, whose wind goes through the flow grid, above.
     Sideways steps raise wind as well as turning the field, as on the console: `icon wind
     scl x` being 0 means the wind has no x, not that sideways moves raise none.
+  - Dragging with the mouse moves a virtual Sixaxis. The drag's acceleration reads on the
+    accelerometer's x and y, through `mouseAccelToG` and 1 g = 112 of the PPU's units, and its
+    sideways speed reads on the gyro, through `mouseYawGain`. z stays at zero.
   - **Which way the field turns is measured.** Four captures, two taken holding right and two
     holding left, carry the rotation at +2.09e-5 and +2.16e-5 against -2.05e-5 and -2.23e-5:
     right is positive. With the particles six and a half units beyond the centre of the turn,
     that sweeps them left - the way the icons go. It also dates the savestate taken while
-    navigating: its +1.84e-5 was a step to the right. Headless, holding a direction for two
-    seconds, a step every 0.1 s, moves the drawn particles' mean by -1.85 in x for right and
-    +1.84 for left. Down and up move it by +0.05 and -0.04 in y: the wind acts only where
-    the icons move.
+    navigating: its +1.84e-5 was a step to the right.
+  - Headless, holding a direction for two seconds - a step, then after 30 frames one every 8 -
+    turns the field only from the fourth step on, and until 33 frames after the key is let
+    go. A second after that, the drawn particles' mean has moved by -0.34 in x for right and
+    +0.27 for left. A single tap does not turn the field at all. Down and up move the mean by
+    +0.06 and -0.04 in y: the wind acts only where the icons move.
   - The vertical sign follows from the traced rule. `dpad scale y` is 0, so the field does not
     turn when the selection goes up or down; only the wind moves, and a cell takes the sign of
     the icon's own motion on screen, which M2 turns into a force pointing the same way. So the
     wind pushes particles the way the icons move, and since pressing down scrolls the items up
     (inferred from how the XMB scrolls), down pushes them up.
-  - The accelerometer is tested as hypot(`dshake x coeff` × a_x, `dshake g coeff` × a_y)
-    against `dshake thresh`. Above it, two things happen:
-    - the field is stirred about y, the axis the savestates show, at up to
-      `dshake rot max` per frame, in the direction of the swing that started the shake;
-    - the noise's spring gets an impulse of `dshake brw imp` × (1 + the excess over the
-      threshold, relative to it).
-  - What else kicks the spring is not traced. Here a step kicks it by `stepNoiseImpulse`: at
-    its 0.4 the noise is 3.17 times its rest 0.4 s after a step, against the 3.19 the savestate
-    taken while navigating measured - which could as well have been hand motion.
-  - The motion term reads the adapter's acceleration, in g, times `shakeMotionGain`. At its
-    0.05, a shake just past the threshold puts the noise at about 6.6 times its rest, the
-    shaking savestate's 6.63.
+  - The same two seconds leave the noise at 3.16 times its rest as the key is let go, and 2.74
+    times 0.4 s later; the savestate taken while navigating read 3.19. A tap raises it to 1.25
+    times.
+  - A synthetic shake of the accelerometer's x and the gyro, ±0.4 of the PPU's units at 3 Hz,
+    holds the noise at 6.3 times its rest, against the shaking savestate's 6.63, and turns the
+    field for 20 frames as it starts, against the gyro's reading at that moment. At ±0.05
+    nothing is detected, and the motion alone raises the noise by a third.
 
 ### Against the console
 
@@ -1344,7 +1445,8 @@ with -1 to -8 and then +4 to +46: a step to the right, as its rotation says.
   - column ⌊(x + 1) / 2 × 32⌋ and row ⌊(y + 1) / 2 × 16⌋, each clamped to the grid;
   - bytes trunc(127 × clamp(10 × `icon wind` × (`icon wind scl x` × T × dx,
     `icon wind scl y` × dy, 0), -1, 1)), where (dx, dy) is the icon's motion on screen since
-    its last call and T a float the object keeps at `+0x14`, not traced;
+    its last call and T the frame's aspect, 16 / 9, which the object keeps at `+0x14` - see
+    [The controller](#the-controller);
   - with the firmware's 11.3877, 0 and 1, that is y = trunc(127 × clamp(113.877 × dy, -1, 1)),
     with x and z left at 0.
 - **The decay, `0x2c588`.** The update calls it every frame, halfway through building the
@@ -1384,9 +1486,10 @@ sitting in that cell from rest to the pool's median speed, 0.26, in seven frames
 would count 15.9546 / 127, but with `icon wind scl x` at 0 the writer leaves x at 0, as it
 always leaves z.
 
-Still open: how fast the icons move, which sets the values; T, which only matters while
-`icon wind scl x` is not 0; and whether, within a frame, the icons write before or after the
-update decays the grid.
+Still open: how fast the icons move, which sets the values, and whether, within a frame, the
+icons write before or after the update decays the grid. The scene reads each icon's place from
+the XMB's own icon objects, through virtual calls, so the easing lives in the XMB rather than in
+`custom_render_plugin`.
 
 Finding one's way around a savestate's local store takes one correction. Searching for 64 bytes
 of `particles.elf` at a known vaddr finds the copies of the task and gives each local store's
@@ -1423,10 +1526,10 @@ The implementation models all of these:
 
 - How the icons move, which sets the flow grid's values. The rule that writes the cells and
   where the icons sit are ported - see [The flow grid](#the-flow-grid) - and the easing
-  between places is modelled.
-- What feeds the noise's two input terms: the impulses that drive the level's spring, and the
-  vectors in the particle object's motion ring - see
-  [How the block is filled](#how-the-block-is-filled).
+  between places is modelled. The XMB moves them, not the scene.
+- When the XMB sends a step. Every step's effect is ported - see
+  [The controller](#the-controller) - and a held direction repeating every 8 frames is
+  inferred from the captures; how long the XMB waits before the first repeat is not known.
 - The wave the emitter reads. The spline layer's wave is not the console's: flatter, slower,
   and with the console's 128 × 128 mesh laid over it by hand - see
   [Modelled choices](#modelled-choices). That is the spline notes' open question, and it now
@@ -1434,9 +1537,10 @@ The implementation models all of these:
 
 Also missing:
 
-- What writes the field's rotation vector after the update clears it, what copies the first
-  block into the second, and what the pool commands' type 3 does.
-- What drives the two factors that weight `PARTICLES_SPE.mnu`'s offsets.
+- What copies the first block into the second, and what the pool commands' type 3 does.
+- Which events start the two factors that weight `PARTICLES_SPE.mnu`'s offsets: their
+  starters and the event handler that calls one of them are found - see
+  [The controller](#the-controller).
 - The code that generates `proc_iridescent`. The implementation uses the fit above.
 - What drives `black` and `bright`, and the order and timing of the `gameboot` and
   `welcome` stages - their values are all read, and under RPCS3 neither sequence can be

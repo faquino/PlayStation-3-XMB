@@ -1,7 +1,7 @@
 'use strict';
-// Particle simulation: a port of the SPU update task in `particles.elf` and of the PPU code that fills its block, plus
-// a modelled rest (emitter, icons, input). Exported as `window.PS3ParticlesReverse`; driven by `particles.js`, reads
-// `WaveSurfaceCPU`.
+// Particle simulation: a port of the SPU update task in `particles.elf` and of the PPU code that fills its block and
+// emits, plus a modelled rest (where the wave sits, how the icons move, when a held direction repeats). Exported as
+// `window.PS3ParticlesReverse`; driven by `particles.js`, reads `WaveSurfaceCPU` and polls the `xmb-input.js` adapter.
 
 (function () {
   // -----------------------------------------------------------------------------------------------------------------
@@ -31,6 +31,27 @@
   const SPRING_DAMP = 0.6; // 0x31494: the noise level's spring, velocity 0.6 v - 0.004 x + impulse
   const SPRING_PULL = 0.004;
   const WIND_MIN_LENGTH = 0.0001; // a shorter `wind dir` is dropped rather than normalised
+  // The field turns about the point 2 units in front of the camera, which 0x2d02c writes every frame: the origin.
+  const FIELD_CENTRE = [0, 0, 0];
+  // A turn smaller than this, in radians a frame, is no turn at all: the task rebuilds the field's matrix from its
+  // rotation vector as an axis and an angle, and below this it takes the identity (FUN_000048b8, and 0x2d02c alike).
+  const ROTATION_MIN = 1e-5;
+  // The D-pad (0x2d02c), with the constants the constructor (0x322b8) leaves. The XMB sends every step with its
+  // direction, in this order; a step adds DPAD_IMPULSE to a spring that keeps DPAD_DAMP of its velocity a frame, and
+  // the field turns at `dpad rot max` times that velocity, clamped to [0, 1]. A sideways step also kicks the noise.
+  const DPAD_DIRECTIONS = [[-1, 0], [1, 0], [0, 1], [0, -1]]; // left, right, up, down
+  const DPAD_IMPULSE = 0.03;
+  const DPAD_DAMP = 0.98;
+  const DPAD_NOISE_KICK = 0.04;
+  // The Sixaxis (0x2b2dc, 0x2bcbc, 0x2c27c): the PPU keeps the last SENSOR_RING differences of the sensors, and two
+  // detectors, one on the accelerometer's x and one on the gyro, watch them for shakes.
+  const SENSOR_RING = 16;
+  const SHAKE_DETECTORS = [[0, 'dshakeXCoeff'], [3, 'dshakeGCoeff']]; // sensor component, and the weight of its turn
+  const SHAKE_AVERAGE = 3; // a detector compares the mean of its last three residuals with `dshake thresh`
+  const SHAKE_KICK = 10; // a shake's kick per unit of excess
+  const SHAKE_REVERSAL = 119; // against the last one's direction within this many frames, it counts double
+  const SHAKE_PULSE_DECAY = 0.6; // the kick fades by this a frame
+  const SHAKE_DAMP = 0.8; // and the turn's spring keeps this of its velocity
   // The emitter, 0x30b80, draws from the wave's vertices: 128 lines of 128, as the captures' wave draw lays them out.
   const MESH_N = 128; // vertices along a line, column 0 at the right edge
   const MESH_M = 128; // lines
@@ -54,17 +75,20 @@
   const ITEM_ABOVE_Y = 0.778; // the one before it, above the row
   const ITEM_BELOW_Y = -0.259; // the one after it
   const ITEM_SPACING = 0.148;
+  // The wind writer weighs an icon's x motion by the particle object's +0x14, which its resize method (0x2b97c)
+  // sets to the frame's width over its height. x counts for nothing while `icon wind scl x` is 0.
+  const ICON_ASPECT = 16 / 9;
 
   // -----------------------------------------------------------------------------------------------------------------
-  // Modelled PPU side: where the console's wave mesh falls on the spline layer's wave, how the icons move, and what
-  // feeds the input response - none of it traced yet.
+  // Modelled: where the console's wave mesh falls on the spline layer's wave, and two things the XMB does outside the
+  // scene's code - move the icons, and repeat a held direction.
   // -----------------------------------------------------------------------------------------------------------------
-  const FIELD_CENTRE = [0, 0, 0]; // the origin, as the savestate shows
   const CATEGORIES = 10; // the modelled XMB's categories, and the items in each
   const ITEMS = 8;
-  // The wind writer's factor on x motion, the particle object's +0x14, is not traced; x counts for nothing while
-  // `icon wind scl x` is 0.
-  const ICON_T = 1;
+  // The XMB repeats a held direction every 8 frames: the captures taken holding one put the turn's spring between
+  // 0.176 and 0.191, which only a step every 8 frames keeps it in. How long it waits before the first repeat is not
+  // known; the adapter reports a direction as held once the browser starts repeating its key.
+  const REPEAT_FRAMES = 8;
   // The spline layer has no camera, so the wave is given a depth range and a point's height picks its depth inside
   // it. The range is the one that puts new particles where the console's pool has them: its just-born band sits at
   // view depth 7.57 / 8.55 / 9.07 (5th, 50th, 95th percentile), and this range matches the median and the width.
@@ -121,7 +145,7 @@
       boundsMin: new Float32Array(LIFE_MIN), // +2048
       boundsMax: new Float32Array(LIFE_MAX), // +2064
       fieldCentre: new Float32Array(FIELD_CENTRE), // +2096
-      fieldQuat: new Float32Array([0, 0, 0, 1]), // +2176, turned into the matrix at +2112 by the task
+      fieldRotation: new Float32Array(4), // +2176, a rotation vector, turned into the matrix at +2112 by the task
       noiseOffset: new Float32Array(4), // +2192, the wind
       flowStrength: 0, // +2208, 1 in the captures
       noiseScale: 0, // +2212, `brownian scale` at rest
@@ -130,12 +154,20 @@
     };
   }
 
-  // Row-major 3x3 rotation matrix of a unit quaternion (x, y, z, w), as FUN_000048b8 builds it.
-  function quatToMat3(q, m) {
-    const x = q[0], y = q[1], z = q[2], w = q[3];
-    m[0] = 1 - 2 * (y * y + z * z); m[1] = 2 * (x * y - w * z); m[2] = 2 * (x * z + w * y);
-    m[3] = 2 * (x * y + w * z); m[4] = 1 - 2 * (x * x + z * z); m[5] = 2 * (y * z - w * x);
-    m[6] = 2 * (x * z - w * y); m[7] = 2 * (y * z + w * x); m[8] = 1 - 2 * (x * x + y * y);
+  // Row-major 3x3 matrix of a rotation vector, as FUN_000048b8 builds it: its length is the angle and its direction
+  // the axis (vectormath's rotation, FUN_00004688), and a vector shorter than ROTATION_MIN gives the identity.
+  function rotationToMat3(r, m) {
+    const angle = Math.hypot(r[0], r[1], r[2]);
+    if (!(angle >= ROTATION_MIN)) {
+      m.fill(0);
+      m[0] = m[4] = m[8] = 1;
+      return;
+    }
+    const x = r[0] / angle, y = r[1] / angle, z = r[2] / angle;
+    const c = Math.cos(angle), s = Math.sin(angle), t = 1 - c;
+    m[0] = t * x * x + c; m[1] = t * x * y - s * z; m[2] = t * x * z + s * y;
+    m[3] = t * x * y + s * z; m[4] = t * y * y + c; m[5] = t * y * z - s * x;
+    m[6] = t * x * z - s * y; m[7] = t * y * z + s * x; m[8] = t * z * z + c;
   }
 
   function clampIndex(i, last) { return i < 0 ? 0 : i > last ? last : i; }
@@ -222,17 +254,32 @@
     const noise = new Uint32Array(3);
     const flowTmp = new Float32Array(3);
 
+    // The PPU's input state, as the particle object keeps it.
     const model = {
-      rotDpad: [0, 0, 0], // field angular velocity from icon steps, rad per step
-      rotShake: [0, 0, 0], // and from shaking the controller
-      stirSign: 1,
-      // The noise level's spring (0x31494): position, velocity, and the impulse the next step adds.
+      // The D-pad's turn (0x2d02c): the axis the last step set, and its spring.
+      dpadAxis: [0, 0, 0],
+      dpadVel: 0,
+      dpadImpulse: 0,
+      // The Sixaxis (0x2b2dc): the last reading, x, y and z of the accelerometer and the gyro, and the ring of its
+      // differences from one frame to the next, newest at `deltaAt`.
+      sensor: null,
+      deltas: new Float32Array(SENSOR_RING * 4),
+      deltaAt: 0,
+      detectors: SHAKE_DETECTORS.map(function (d) {
+        return {
+          component: d[0], coeff: d[1],
+          residuals: new Float32Array(SHAKE_AVERAGE), residualAt: 0,
+          excess: 0, sign: 1, pulse: 0, since: 0, vel: 0, impulse: 0,
+        };
+      }),
+      // The noise level's spring (0x31494): position, velocity, and the impulse the next frame adds.
       spring: 0,
       springVel: 0,
       impulse: 0,
       level: 0, // the position clamped to [0, 1]
-      motion: 0, // what the controller's newest motion vector measures
+      motion: 0, // the newest difference's length, times `rshake brw` (0x2c758)
     };
+    const shakeCum = new Float64Array(SENSOR_RING);
     // The modelled XMB: which category and which item in each is selected, and where the icons are on screen. Only
     // the selected category's items are drawn.
     const icons = {
@@ -259,9 +306,14 @@
     const wB = new Float32Array(4);
     const wD = new Float32Array(4);
     const evalTmp = new Float32Array(3);
-    const noInput = { stepsX: 0, stepsY: 0, accelX: 0, accelY: 0 };
-    // Input gathered since the last simulation step: frames above 60 Hz can run no step at all.
-    const pending = { stepsX: 0, stepsY: 0, accelX: 0, accelY: 0 };
+    // A frame's input: the D-pad step the XMB sent in it, if any (an index into DPAD_DIRECTIONS, or -1), and the
+    // Sixaxis's reading (null keeps the last one).
+    const noInput = { step: -1, sensor: null };
+    // Steps gathered since the last simulation step, one of them for each step, the direction held, and the newest
+    // reading.
+    const pendingSteps = [];
+    const frameInput = { step: -1, held: -1, sensor: null };
+    let sinceStep = REPEAT_FRAMES;
 
     const stats = { count: 0, emitted: 0, died: 0, steps: 0, level: 0, noiseScale: 0, fieldAngle: 0 };
     let count = 0;
@@ -273,7 +325,7 @@
       noise[0] = NOISE_SEEDS[0];
       noise[1] = NOISE_SEEDS[1];
       noise[2] = NOISE_SEEDS[2];
-      quatToMat3(P.fieldQuat, fieldRot);
+      rotationToMat3(P.fieldRotation, fieldRot);
       const M1 = P.toGrid;
       const M2 = P.fromGrid;
       const R = fieldRot;
@@ -436,7 +488,7 @@
       const row = clampIndex(Math.trunc((y + 1) * 0.5 * GRID_H), GRID_H - 1);
       const w = Math.fround(S.iconWind);
       const cell = (row * GRID_W + col) * 3;
-      P.grid[cell] = windByte(Math.fround(Math.fround(dx * ICON_T) * w) * S.iconWindSclX);
+      P.grid[cell] = windByte(Math.fround(Math.fround(dx * ICON_ASPECT) * w) * S.iconWindSclX);
       P.grid[cell + 1] = windByte(Math.fround(dy * w) * S.iconWindSclY);
       P.grid[cell + 2] = 0;
     }
@@ -447,9 +499,13 @@
     // `iconEaseSec`, is the modelled part: at 0.065 s, the first frame of a step writes about the strongest byte the
     // captures show along the row, 59.
     function moveIcons(S, ev) {
-      if (ev.stepsX) icons.category = Math.min(Math.max(icons.category + ev.stepsX, 0), CATEGORIES - 1);
+      if (ev.step >= 0) {
+        const dir = DPAD_DIRECTIONS[ev.step];
+        icons.category = Math.min(Math.max(icons.category + dir[0], 0), CATEGORIES - 1);
+        const i = icons.category;
+        icons.item[i] = Math.min(Math.max(icons.item[i] - dir[1], 0), ITEMS - 1); // down selects the next item
+      }
       const c = icons.category;
-      if (ev.stepsY) icons.item[c] = Math.min(Math.max(icons.item[c] + ev.stepsY, 0), ITEMS - 1);
       const k = 1 - Math.exp(-1 / (STEP_HZ * Math.max(S.iconEaseSec, 0.001)));
       for (let i = 0; i < CATEGORIES; i++) {
         icons.x[i] += (categoryTargetX(i, c) - icons.x[i]) * k;
@@ -468,8 +524,87 @@
       }
     }
 
-    // --- The parameter block, as 0x31494 fills it; what the input feeds into it is modelled -----------------------
-    function clampAbs(v, max) { return Math.max(-max, Math.min(max, v)); }
+    // --- Verified: the parameter block, as 0x31494 fills it, and the controller's part in it --------------------
+    function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+    // 0x2b2dc, at the top of every frame: the Sixaxis's reading goes into a ring, and its difference from the last
+    // frame's into another. The first reading only primes them - on the console the opening frames see a jump from
+    // zero, which here would land in the first frames the page shows.
+    const ZERO_SENSOR = [0, 0, 0, 0];
+    function readSensor(ev) {
+      const s = ev.sensor || model.sensor || ZERO_SENSOR;
+      if (!model.sensor) model.sensor = [s[0], s[1], s[2], s[3]];
+      model.deltaAt = (model.deltaAt + 1) % SENSOR_RING;
+      const o = model.deltaAt * 4;
+      for (let c = 0; c < 4; c++) {
+        model.deltas[o + c] = s[c] - model.sensor[c];
+        model.sensor[c] = s[c];
+      }
+    }
+
+    // 0x2d02c. A step sets the turn's axis: the camera's up axis if it goes sideways, its right axis if it goes up or
+    // down, each times its `dpad scale` - so with `dpad scale y` at 0 an up or down step leaves no axis at all, and
+    // stops a turn in progress. Every step adds DPAD_IMPULSE to the turn's spring, and a sideways one DPAD_NOISE_KICK
+    // to the noise's. Returns the turn's rate, in radians a frame.
+    function dpad(S, step) {
+      if (step >= 0) {
+        const dir = DPAD_DIRECTIONS[step];
+        model.dpadAxis[0] = -dir[1] * S.dpadScaleY; // the camera is unrotated: its right is x, its up is y
+        model.dpadAxis[1] = dir[0] * S.dpadScaleX;
+        model.dpadAxis[2] = 0;
+        model.dpadImpulse += DPAD_IMPULSE;
+        model.impulse += DPAD_NOISE_KICK * Math.abs(dir[0] * S.dpadScaleX - dir[1] * S.dpadScaleY);
+      }
+      model.dpadVel = model.dpadVel * DPAD_DAMP + model.dpadImpulse;
+      model.dpadImpulse = 0;
+      return S.dpadRotMax * clamp(model.dpadVel, 0, 1);
+    }
+
+    // 0x2bcbc and 0x2c27c, one shake detector. Its sensor's last 16 differences, newest first, are summed back into
+    // the reading relative to each earlier frame, a least-squares line goes through those sums against their age, and
+    // the residual is the sum of their distances from it: how far the last quarter of a second was from a steady
+    // drift. When the mean of the last three residuals goes past `dshake thresh`, the excess kicks the detector, ten
+    // times over, against the gyro's sign at that moment and doubled if it reverses the last kick within 119 frames.
+    // The kick fades by 0.6 a frame, and while it lasts it pushes the detector's spring by `dshake rot imp` and the
+    // noise's by `dshake brw imp`. Returns the turn, in radians a frame.
+    function detectShake(S, d) {
+      let sum = 0, sy = 0, sxy = 0;
+      for (let i = 0; i < SENSOR_RING; i++) {
+        sum += model.deltas[((model.deltaAt - i + SENSOR_RING) % SENSOR_RING) * 4 + d.component];
+        shakeCum[i] = sum;
+        sy += sum;
+        sxy += i * sum;
+      }
+      const n = SENSOR_RING, sx = n * (n - 1) / 2, sxx = (n - 1) * n * (2 * n - 1) / 6;
+      const den = sx * sx - n * sxx;
+      const a = (sx * sxy - sxx * sy) / den;
+      const b = (sx * sy - n * sxy) / den;
+      let residual = 0;
+      for (let i = 0; i < SENSOR_RING; i++) residual += Math.abs(shakeCum[i] - (a + b * i));
+      d.residuals[d.residualAt] = residual;
+      d.residualAt = (d.residualAt + 1) % SHAKE_AVERAGE;
+      let mean = 0;
+      for (let i = 0; i < SHAKE_AVERAGE; i++) mean += d.residuals[i];
+      const excess = Math.max(0, Math.abs(mean / SHAKE_AVERAGE) - S.dshakeThresh);
+
+      d.pulse *= SHAKE_PULSE_DECAY;
+      if (excess !== 0 && d.excess === 0) {
+        const sign = model.sensor[3] > 0 ? -1 : 1;
+        d.pulse = sign * excess * SHAKE_KICK;
+        if (d.sign * sign < 0 && d.since <= SHAKE_REVERSAL) d.pulse *= 2;
+        d.sign = sign;
+        d.since = 0;
+      }
+      d.since++;
+      d.excess = excess;
+      if (d.pulse !== 0) {
+        d.impulse += d.pulse * S.dshakeRotImp;
+        model.impulse += Math.abs(d.pulse * S.dshakeBrwImp);
+      }
+      d.vel = d.vel * SHAKE_DAMP + d.impulse;
+      d.impulse = 0;
+      return clamp(d.vel, -1, 1) * S.dshakeRotMax;
+    }
 
     function buildParams(S, ev) {
       // The force is `gravity` alone. The wind goes to the noise offset instead, which the task adds to the force
@@ -492,68 +627,35 @@
       P.flowStrength = S.flowStrength;
       decayGrid();
 
-      for (let a = 0; a < 3; a++) {
-        model.rotDpad[a] *= S.rotationDecay;
-        model.rotShake[a] *= S.rotationDecay;
+      // The controller, in the order 0x31494 runs it: the sensors' rings, the D-pad, the motion, the shakes. Their
+      // turns add up in the rotation vector, which starts every frame at zero. The shakes turn the field about the
+      // camera's up axis, weighted by `dshake x coeff` and `dshake g coeff`.
+      readSensor(ev);
+      const r = P.fieldRotation;
+      const dpadRate = dpad(S, ev.step);
+      r[0] = model.dpadAxis[0] * dpadRate;
+      r[1] = model.dpadAxis[1] * dpadRate;
+      r[2] = model.dpadAxis[2] * dpadRate;
+      r[3] = 0;
+      const o = model.deltaAt * 4;
+      model.motion = Math.hypot(model.deltas[o], model.deltas[o + 1], model.deltas[o + 2]) * S.rshakeBrw;
+      for (let i = 0; i < model.detectors.length; i++) {
+        const d = model.detectors[i];
+        r[1] += S[d.coeff] * detectShake(S, d);
       }
 
-      // Icon steps act as D-pad presses. A savestate taken while navigating the XMB shows the field turned about y
-      // by 1.84e-5, a sixth of `dpad rot max`, and the noise at 3.19 times its rest, both of them on their way down.
-      // Which way it turns is measured: four captures, two taken holding right and two holding left, carry the
-      // field's rotation as +2.09e-5 and +2.16e-5 against -2.05e-5 and -2.23e-5. Right is positive - the particles
-      // go the way the icons go, and the XMB scrolls those against the key. It also dates the savestate taken while
-      // navigating, whose +1.84e-5 was a step to the right. `dpad scale y` is 0 in the firmware, so only sideways
-      // steps turn the field.
-      // What kicks the noise's spring is not traced. Here a step kicks it by `stepNoiseImpulse`: at 0.4, the noise
-      // is 3.17 times its rest 0.4 s after a step, against the 3.19 that savestate measured.
-      if (ev.stepsX || ev.stepsY) {
-        model.rotDpad[1] = clampAbs(model.rotDpad[1] + ev.stepsX * S.dpadScaleX * S.dpadRotMax, S.dpadRotMax);
-        model.rotDpad[0] = clampAbs(model.rotDpad[0] - ev.stepsY * S.dpadScaleY * S.dpadRotMax, S.dpadRotMax);
-        model.impulse += S.stepNoiseImpulse * (Math.abs(ev.stepsX) + Math.abs(ev.stepsY));
-      }
-
-      // Shake detection on the accelerometer. A savestate taken while the controller was shaken shows the noise at
-      // 6.63 times its rest and next to no turn, so shaking is mostly noise: it stirs the field about the same y axis
-      // the D-pad uses, in the direction of the swing that started it, since kicks that followed each swing would
-      // cancel out, and it kicks the spring by `dshake brw imp`. The motion the noise also reads is the adapter's
-      // acceleration times `shakeMotionGain`: at 0.05, a shake just past the threshold puts the noise near that
-      // savestate's.
-      const shake = Math.hypot(S.dshakeXCoeff * ev.accelX, S.dshakeGCoeff * ev.accelY);
-      if (shake > S.dshakeThresh && S.dshakeThresh > 0) {
-        const excess = (shake - S.dshakeThresh) / S.dshakeThresh;
-        if (model.level < 0.05) model.stirSign = ev.accelX < 0 ? 1 : -1;
-        const kick = S.dshakeRotImp * S.dshakeRotMax * excess;
-        model.rotShake[1] = clampAbs(model.rotShake[1] + model.stirSign * kick, S.dshakeRotMax);
-        model.impulse += S.dshakeBrwImp * (1 + excess);
-      }
-      model.motion = Math.hypot(ev.accelX, ev.accelY) * S.shakeMotionGain;
-
-      const rx = model.rotDpad[0] + model.rotShake[0];
-      const ry = model.rotDpad[1] + model.rotShake[1];
-      const rz = model.rotDpad[2] + model.rotShake[2];
-      const angle = Math.hypot(rx, ry, rz);
-      if (angle > 1e-12) {
-        const k = Math.sin(angle * 0.5) / angle;
-        P.fieldQuat[0] = rx * k;
-        P.fieldQuat[1] = ry * k;
-        P.fieldQuat[2] = rz * k;
-        P.fieldQuat[3] = Math.cos(angle * 0.5);
-      } else {
-        P.fieldQuat[0] = P.fieldQuat[1] = P.fieldQuat[2] = 0;
-        P.fieldQuat[3] = 1;
-      }
-
-      // The noise scale is `brownian scale` + level x `brownian` + motion x `rshake brw`. The level is a damped
-      // spring: its velocity becomes 0.6 times itself, less 0.004 times its position, plus the impulse, and the
-      // level is its position clamped to [0, 1].
+      // The noise scale is `brownian scale` + level x `brownian` + the motion. The level is a damped spring: its
+      // velocity becomes 0.6 times itself, less 0.004 times its position, plus the impulses, and the level is its
+      // position clamped to [0, 1].
       model.springVel = SPRING_DAMP * model.springVel - SPRING_PULL * model.spring + model.impulse;
       model.impulse = 0;
       model.spring += model.springVel;
-      model.level = Math.min(Math.max(model.spring, 0), 1);
-      P.noiseScale = S.brownianScale + model.level * S.uiBrownian + model.motion * S.rshakeBrw;
+      model.level = clamp(model.spring, 0, 1);
+      P.noiseScale = S.brownianScale + model.level * S.uiBrownian + model.motion;
+      const angle = Math.hypot(r[0], r[1], r[2]);
       stats.level = model.level;
       stats.noiseScale = P.noiseScale;
-      stats.fieldAngle = angle;
+      stats.fieldAngle = angle >= ROTATION_MIN ? angle : 0;
     }
 
     // --- Verified: the emitter, as custom_render_plugin runs it once a frame (0x30b80) ---------------------------
@@ -666,15 +768,23 @@
       stats.steps++;
     }
 
+    // The XMB sends one step at a time, so steps that arrive together are handed out one a frame.
     function gatherInput(input, dtSec) {
       if (!input) return;
       const ev = input.poll(dtSec);
-      pending.stepsX += ev.stepsX;
-      pending.stepsY += ev.stepsY;
-      if (Math.hypot(ev.accelX, ev.accelY) >= Math.hypot(pending.accelX, pending.accelY)) {
-        pending.accelX = ev.accelX;
-        pending.accelY = ev.accelY;
-      }
+      for (let i = 0; i < ev.steps.length && pendingSteps.length < 8; i++) pendingSteps.push(ev.steps[i]);
+      frameInput.held = ev.held >= 0 ? ev.held : -1;
+      if (ev.sensor) frameInput.sensor = ev.sensor;
+    }
+
+    // This frame's step: the next one sent, or a held direction's repeat (modelled).
+    function nextStep() {
+      sinceStep++;
+      let dir = -1;
+      if (pendingSteps.length) dir = pendingSteps.shift();
+      else if (frameInput.held >= 0 && sinceStep >= REPEAT_FRAMES) dir = frameInput.held;
+      if (dir >= 0) sinceStep = 0;
+      return dir;
     }
 
     // Advances the system to the wave's current frame. `aspect` is the canvas aspect the camera will use.
@@ -698,13 +808,11 @@
         for (let i = 0; i < PREWARM_STEPS; i++) step(S, noInput);
       }
 
-      // Presses and shakes go to the first step.
       stepCarry = Math.min(stepCarry + dtSec * STEP_HZ, MAX_STEPS_PER_FRAME);
       while (stepCarry >= 1) {
         stepCarry -= 1;
-        step(S, pending);
-        pending.stepsX = pending.stepsY = 0;
-        pending.accelX = pending.accelY = 0;
+        frameInput.step = nextStep();
+        step(S, frameInput);
       }
 
       wave.prevData.set(surface.data);

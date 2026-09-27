@@ -80,10 +80,8 @@ window.PARTICLE_SETTINGS = {
   // --- Modelled PPU side and mouse adapter (not from the firmware) ----------------------------
   flowStrength: 1, // this one is the firmware's, the constant the PPU puts in the block
   iconEaseSec: 0.065, // how fast the modelled icons settle after a step
-  stepNoiseImpulse: 0.4, // the kick an icon step gives the noise level's spring
-  shakeMotionGain: 0.05, // the adapter's acceleration, in g, to the motion the noise reads
-  rotationDecay: 0.85,
-  mouseAccelToG: 0.04,
+  mouseAccelToG: 0.04, // the dragged controller's acceleration, screen heights per second squared, in g
+  mouseYawGain: 0.15, // and its sideways speed, screen heights per second, to the gyro's reading
 };
 
 window.PARTICLE_SETTINGS_META = {
@@ -157,8 +155,6 @@ window.PARTICLE_SETTINGS_META = {
   iconWindSclY: { min: 0, max: 2, step: 0.01 },
   flowStrength: { min: 0, max: 2, step: 0.0005 },
   iconEaseSec: { min: 0.005, max: 1, step: 0.005 },
-  stepNoiseImpulse: { min: 0, max: 2, step: 0.01 },
-  shakeMotionGain: { min: 0, max: 1, step: 0.001 },
-  rotationDecay: { min: 0, max: 0.999, step: 0.001 },
   mouseAccelToG: { min: 0, max: 0.2, step: 0.001 },
+  mouseYawGain: { min: 0, max: 1, step: 0.005 },
 };
