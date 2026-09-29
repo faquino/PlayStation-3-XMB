@@ -151,7 +151,7 @@ The walk and the two ramps are the measured ones. What stays modelled:
   `0x10900`. The law is the same, but there February has 28 days in every year, where
   `bgGradientForDate` counts leap years, and Theme Settings' Colour stops that date at noon on the
   1st of a month - see
-  [the particle notes](PARTICLES_REVERSE_ENGINEER.md#theme-settings-colour-stops-the-clock). A
+  [the particle notes](docs/particles/day-cycle.md#theme-settings-colour-stops-the-clock). A
   capture with a colour set, and one on the 29th of February of a leap year, would settle it.
 
 ## How to repeat the readings

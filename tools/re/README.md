@@ -53,8 +53,9 @@ savestate*), into `savestates/vsh.self/*.SAVESTAT.zst`. The file is a zstd strea
 `RPCS3SAV`, which Python 3.14 opens with `compression.zstd`, and it holds main memory and
 every SPU's local store. Searching the decompressed image for values you already know —
 a parameter as a float, a vector as a triple — finds the structure that holds them, which
-beats tracing the code that fills it. That is how the particle parameter block and the
-particle pool in `PARTICLES_REVERSE_ENGINEER.md` were read. Live fragment-shader uniforms
+beats tracing the code that fills it. That is how the particle
+[parameter block](../../docs/particles/parameter-block.md) and
+[pool](../../docs/particles/emitter.md#the-pool) were read. Live fragment-shader uniforms
 are in there too: the microcode keeps them inline, with each float's halves swapped, so
 searching for the constants beside them finds their current values.
 
@@ -70,6 +71,14 @@ the particle pool.
 right, but a distance measured across empty memory comes out 128 bytes short for each line left
 out - which is how the particle parameter block once read as a 768-byte structure, and how its
 force once read as zero. Measure layouts in a capture, which keeps memory whole.
+
+Finding one's way around a savestate's local store takes one correction. Searching for 64 bytes
+of `particles.elf` at a known vaddr finds the copies of the task and gives each local store's
+base in the file, and code and read-only data sit at that base plus their address; but every
+all-zero line the file leaves out brings what follows 128 bytes closer. The task's own data
+already sits 128 bytes early - the pointers its start-up stores at `0xb080` and `0xb180` read at
+`0xb000` and `0xb100` - which is what once put the block at `0xb180` instead of the `0xb200` the
+code loads it into.
 
 **A savestate also remembers what code ran.** Stacks keep the return addresses of recent calls,
 stale frames included, and `coverage.py` recognises the frames by their layout, places the module
@@ -103,6 +112,14 @@ measure a pipeline against.
 The cache only grows, which makes it a coverage recorder. To find the code behind a
 behaviour, copy `spu-safe-v1-tane.dat`, trigger the behaviour in RPCS3 (shake the
 controller, move across icons), then run `spu_cache.py match ... --since <the copy>`.
+
+## Getting the XMB where a reading needs it
+
+- **Another hour.** RPCS3's *Console time offset* moves the emulated clock without waiting for
+  the hour, which is how the day cycle's night window was measured.
+- **Music.** Getting music into the XMB under RPCS3 needs the media database rebuilt - dropping
+  files into `/dev_hdd0/music` leaves them invisible, because nothing scans that folder (RPCS3
+  issue #18601; deleting `/dev_hdd0/mms` forces the rebuild).
 
 ## How the tools were validated
 
