@@ -205,10 +205,12 @@ And what the handlers apply:
 So:
 
 - **`black` is where the scene starts.** Its start-up (`0x11d68`, in the plugin's vtable after
-  `0x4050`) applies `override/black` at once, so the XMB comes up with `global alpha` 0 until
-  the cold boot takes it to `coldboot1` and then, 4 seconds in, over 7.5 seconds into the
-  cycle - the opening the captures show, since `coldboot1` and `coldboot2` carry the same
-  `PARTICLES.mnu`. Event 10's code names `black` too.
+  `0x4050`) applies `override/black` at once, and right after it puts the cycle's set in over 5
+  seconds - see
+  [Theme Settings' Colour stops the clock](#theme-settings-colour-stops-the-clock); how the two
+  combine runs in `qglbase`. The cold boot then takes it to `coldboot1` at once and, 4 seconds
+  in, over 7.5 seconds into the cycle - the opening the captures show, since `coldboot1` and
+  `coldboot2` carry the same `PARTICLES.mnu`. Event 10's code names `black` too.
 - **Launching a game** takes the particles to `gameboot2` in a quarter of a second and, half a
   second in, to `gameboot3` over 1.25 seconds - `delta time` 0.08, nine times the base - until
   the game takes the screen at 2.8 seconds. **Other content** goes to `gameboot3` in 0.2
@@ -222,6 +224,59 @@ So:
 
 `particles-themes.js` plays the three sequences on the particle side, on top of the theme, as
 `sequence` names them - see [Modelled choices](#modelled-choices).
+
+### Theme Settings' Colour stops the clock
+
+**Verified** in `custom_render_plugin` and `sysconf_plugin`. The scene keeps the day cycle on the
+clock through `0x11c58`, which it calls three ways:
+
+- every second, from a 1000 ms timer its start-up sets (`0x12128`, calling `0x12284`), over 1
+  second;
+- once from the start-up itself, right after `black` goes in, over 5 seconds (`0x12138`);
+- from event 0, sub-event 6, over 1 second.
+
+It takes the clock's moment (`0x86b58`) or, while Theme Settings' Colour holds a month, noon on
+the 1st of that month, and hands it on with the same blend time to `0x11600`, which puts in the
+day cycle's set for that moment, and to `0x10900`. That one gives the particle object the time of
+day, as a fraction of 86400 seconds (`0x1adc8`), and works out how far the date is into its month,
+the day minus one over the month's length - the law the backdrop's `_MonthTime` follows, see
+`BACKGROUND_REVERSE_ENGINEER.md` - except that its table gives February 28 days in every year and
+the 29th counts as the 28th. Where that goes from there is not followed.
+
+`0x11c58` does nothing while one of the scene's own states, all in the struct at `0xa03a8`, holds
+the moment:
+
+- the cold boot, from `BootBG1` or `BootBG2` until `ShowGUI` lets go at 5.5 seconds;
+- a game's or another content's boot, events 2 and 3;
+- a moment Date and Time Settings is showing - sub-event 4, below;
+- a fade of sub-event 2 or 3, until a fade back has run its time: sub-event 2 sets a timer for it,
+  whose callback (`0x2e60`) lets go;
+- the music, event 4;
+- the first five seconds after the start-up, which the timer counts down (`+0x20`, set to 5).
+
+The cold boot's own handlers read the clock whatever the colour (`BootBG2`, `NormalBG` and
+`NormalBG2`), so a colour comes back only once `ShowGUI` has let go.
+
+**Sub-event 6 is Theme Settings' Colour.** The handler (`0x15b54`) keeps its argument at `+0x10`
+and calls `0x11c58` over 1 second. Colour is Theme Settings' second item (`msg_color`,
+`page_theme_config_color`), and its page (`0x11f50`) holds a value from 0 to 12: at 0 the scene
+follows the clock, and 1 to 12 it reads as months. `sysconf_plugin` sends the entry under the
+cursor half a second after it lands there (`0x12078` starts the timer again on every call, and
+`0x12174` sends), the one chosen when it is confirmed (`0x135e0`, which also writes it to registry
+key 0x5f), and the saved one again when the page is cancelled (`0x12474`). `system_plugin` sends
+it as it applies the theme, beside the brightness (`0x9340`).
+
+So any colour but 0 stops the scene's clock at noon on the 1st of its month, whatever the hour:
+the particles hold the `day` set, which the cycle keeps from 11:00 to 13:00. By the law above the
+backdrop should sit on that month's own daylight textures, with nothing of the next -
+`_MonthTime` 0 and `_NightDayBlend` 1 - which a capture taken with a colour set would confirm.
+Back at 0, the clock's moment comes in over a second. Nothing in `ps3xmbwave/` stands for the
+setting.
+
+**Sub-event 4 is Date and Time Settings.** `sysconf_plugin` sends it a pointer to the moment being
+set, and 0 when it is done (`0x7fc64`). With a pointer the handler (`0x15b0c`) holds the clock
+and, unless a colour is set, shows that moment over 1 second through `0x10900` and `0x11600`; with
+0 it lets the clock go again.
 
 ### Telling the sets apart in a capture
 
@@ -1079,8 +1134,9 @@ and every place they fetch the scene's interface is accounted for.
   whenever the focus moves (`0x554e4`, through the interface it keeps at `0x2deec0`, from the
   focus handlers `0x592c8`, `0x5c908` and `0x5dc80`), and `xmb_plugin` sends it too (`0x2638`)
   - see [The controller](#the-controller). Sub-events 2, 3 and 7 are the particles' fade - see
-  [The particles' fade](#the-particles-fade) - and 6 carries another Theme Settings value
-  (registry key 0x5f, not followed);
+  [The particles' fade](#the-particles-fade) - and 6 and 4 are Theme Settings' Colour and Date and
+  Time Settings, which set the moment the day cycle shows - see
+  [Theme Settings' Colour stops the clock](#theme-settings-colour-stops-the-clock);
 - event 1 is the cold boot (`page_coldboot`, `anim_coldboot2`, the cold-boot sounds), which
   `vsh.elf` sends with sub-events 0 and 5 (`0xcd628`, `0xcf31c`), and `explore_plugin` and the
   XMB's columns (`explore_category_*`) with 5;

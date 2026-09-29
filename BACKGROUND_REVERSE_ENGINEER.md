@@ -147,6 +147,12 @@ The walk and the two ramps are the measured ones. What stays modelled:
 - Whether the walk really is linear, or the Gaussian above shapes it.
 - What animates `_Alpha`, which decides how bright the backdrop actually lands.
 - The remaining uniforms of the 538-instruction program, which do more than blend four textures.
+- Whether `_MonthTime` is the position in the month that `custom_render_plugin` works out in
+  `0x10900`. The law is the same, but there February has 28 days in every year, where
+  `bgGradientForDate` counts leap years, and Theme Settings' Colour stops that date at noon on the
+  1st of a month - see
+  [the particle notes](PARTICLES_REVERSE_ENGINEER.md#theme-settings-colour-stops-the-clock). A
+  capture with a colour set, and one on the 29th of February of a leap year, would settle it.
 
 ## How to repeat the readings
 
