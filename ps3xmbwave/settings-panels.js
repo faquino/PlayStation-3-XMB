@@ -1,8 +1,9 @@
 'use strict';
-// Lightweight DOM control-panel factory that introspects settings objects into sliders/select/reset controls and marks
-// what was changed from the panel, which it lets be locked, and what something else set off its default. Shared by
-// spline + particle configs (`spline-settings.js`, `particles-settings.js`) and initialized from `index.html`, which
-// calls the returned `refresh()` when a theme or a sequence rewrites the settings and hands them the `locked` ones.
+// Lightweight DOM control-panel factory that introspects settings objects into sliders/select/reset controls, each
+// label carrying its meta's `help` as a tooltip, and marks what was changed from the panel, which it lets be locked,
+// and what something else set off its default. Shared by spline + particle configs (`spline-settings.js`,
+// `particles-settings.js`) and initialized from `index.html`, which calls the returned `refresh()` when a theme or a
+// sequence rewrites the settings and hands them the `locked` ones.
 
 (function () {
   // The padlock beside a value changed by hand: open, the theme and the sequences may still move it; closed, they
@@ -157,6 +158,7 @@
       const label = document.createElement('div');
       label.className = 'settings-label';
       label.textContent = humanizeKey(key);
+      if (meta.help) label.title = meta.help;
 
       const controls = document.createElement('div');
       controls.className = 'settings-controls';

@@ -88,11 +88,12 @@ The simulation files run under Node for headless checks with `globalThis.window 
 
 ### Settings and UI
 
-`settings-panels.js` generates panels by **introspecting the settings objects**: every finite numeric key becomes a slider, keys whose meta says `type: 'select'` become a dropdown, and keys missing from the meta map fall back to an inferred ±2× range. It snapshots the settings object at creation time to implement per-row Reset, marks the rows whose value was changed from the panel (in amber, with their Reset enabled, a count in the header and, for the settings its `lockable` option lists, a padlock that locks the value; the returned `locked` Set holds them) and the ones something else set off their defaults (in its colour: lilac for the theme, teal for a sequence), and mutates the live object in place — renderers read `settings.*` fresh on every frame, so no re-initialization or event wiring is needed.
+`settings-panels.js` generates panels by **introspecting the settings objects**: every finite numeric key becomes a slider, keys whose meta says `type: 'select'` become a dropdown, keys missing from the meta map fall back to an inferred ±2× range, and a meta's `help` becomes the label's tooltip. It snapshots the settings object at creation time to implement per-row Reset, marks the rows whose value was changed from the panel (in amber, with their Reset enabled, a count in the header and, for the settings its `lockable` option lists, a padlock that locks the value; the returned `locked` Set holds them) and the ones something else set off their defaults (in its colour: lilac for the theme, teal for a sequence), and mutates the live object in place — renderers read `settings.*` fresh on every frame, so no re-initialization or event wiring is needed.
 
 Consequences when adding a knob:
 
 - A new numeric key in `SPLINE_SETTINGS` / `PARTICLE_SETTINGS` gets a slider automatically; add a matching `*_SETTINGS_META` entry or the range will be nonsense.
+- Give that entry a `help`, which the panel shows as the label's tooltip: what the knob does, then, after a `\n`, where it comes from — the `.mnu` file and parameter name for a firmware one (`PARTICLES.mnu: emit vel min`), or where it acts for the others.
 - Wiring it to a shader needs three edits in the renderer: the `uniform` declaration in the GLSL string, the location lookup (the `waveU` map in `spline.js`, the `UNIFORMS` list in `particles.js`), and the `gl.uniform*` call (`render` in `spline.js`, `setUniforms` in `particles.js`).
 - Pipeline-only knobs (the `re*` family, `band*`, `travel*`) need no shader change — they are read inside `spline-reverse.js`.
 
