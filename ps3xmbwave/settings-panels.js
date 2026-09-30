@@ -1,10 +1,23 @@
 'use strict';
 // Lightweight DOM control-panel factory that introspects settings objects into sliders/select/reset controls and marks
-// what was changed from the panel, and what something else set off its default. Shared by spline + particle configs
-// (`spline-settings.js`, `particles-settings.js`) and initialized from `index.html`, which calls the returned
-// `refresh()` when a theme or a sequence rewrites the settings.
+// what was changed from the panel, which it lets be locked, and what something else set off its default. Shared by
+// spline + particle configs (`spline-settings.js`, `particles-settings.js`) and initialized from `index.html`, which
+// calls the returned `refresh()` when a theme or a sequence rewrites the settings and hands them the `locked` ones.
 
 (function () {
+  // The padlock beside a value changed by hand: open, the theme and the sequences may still move it; closed, they
+  // leave it alone.
+  const LOCK_OPEN = [
+    '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">',
+    '<rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>',
+    '<path d="M5 7V5a3 3 0 0 1 5.8-1.1" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
+  ].join('');
+  const LOCK_CLOSED = [
+    '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">',
+    '<rect x="3" y="7" width="10" height="7" rx="1.5" fill="currentColor"/>',
+    '<path d="M5 7V5a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
+  ].join('');
+
   function decimalsFromStep(step) {
     const s = String(step);
     const idx = s.indexOf('.');
@@ -63,6 +76,10 @@
     const rows = [];
     const modified = new Set();
     const external = {}; // for each writer, the settings it has set off their defaults
+    // The settings something else can write, whose value, once changed here, can be locked against it; and the ones
+    // locked, which the caller hands to that writer.
+    const lockable = new Set((options && options.lockable) || []);
+    const locked = new Set();
 
     const panel = document.createElement('div');
     panel.id = id;
@@ -145,9 +162,22 @@
       controls.className = 'settings-controls';
 
       const resetBtn = document.createElement('button');
-      resetBtn.className = 'settings-btn';
+      resetBtn.className = 'settings-btn settings-reset';
       resetBtn.type = 'button';
       resetBtn.textContent = 'Reset';
+
+      let lockBtn = null;
+      if (lockable.has(key)) {
+        lockBtn = document.createElement('button');
+        lockBtn.className = 'settings-btn settings-lock';
+        lockBtn.type = 'button';
+        lockBtn.setAttribute('aria-label', 'Lock ' + humanizeKey(key));
+        lockBtn.addEventListener('click', function () {
+          if (locked.has(key)) locked.delete(key);
+          else locked.add(key);
+          mark();
+        });
+      }
 
       let sync; // brings the control up to the setting
       let describe; // a value as the control would show it, for the tooltips
@@ -171,6 +201,19 @@
         else delete row.dataset.source;
         resetBtn.disabled = !mine;
         resetBtn.title = mine ? 'Back to ' + describe(initial[key]) : '';
+        if (lockBtn) {
+          if (!mine) locked.delete(key); // the lock goes with the mark
+          const on = locked.has(key);
+          lockBtn.hidden = !mine;
+          lockBtn.setAttribute('aria-pressed', String(on));
+          if (lockBtn.dataset.on !== String(on)) {
+            lockBtn.dataset.on = String(on);
+            lockBtn.innerHTML = on ? LOCK_CLOSED : LOCK_OPEN;
+          }
+          lockBtn.title = on
+            ? 'Locked: the theme and the sequences leave it alone'
+            : 'Lock it, and the theme and the sequences will leave it alone';
+        }
         if (mine) valueView.title = 'Changed from ' + describe(initial[key]);
         else valueView.title = from ? 'Default ' + describe(base[key]) : '';
         if (mine) modified.add(key);
@@ -270,8 +313,13 @@
       left.appendChild(label);
       left.appendChild(controls);
 
+      const actions = document.createElement('div');
+      actions.className = 'settings-actions';
+      if (lockBtn) actions.appendChild(lockBtn);
+      actions.appendChild(resetBtn);
+
       row.appendChild(left);
-      row.appendChild(resetBtn);
+      row.appendChild(actions);
       list.appendChild(row);
       rows.push({ key: key, sync: sync, mark: mark });
       mark();
@@ -311,6 +359,9 @@
         });
         showModifiedCount();
       },
+      // The settings whose value was changed here and locked, for whatever else writes them to leave alone. A live
+      // Set: a lock goes when its value is Reset or brought back by hand.
+      locked: locked,
     };
   };
 })();

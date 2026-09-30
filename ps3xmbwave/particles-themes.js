@@ -84,11 +84,41 @@ window.PARTICLE_THEME_OPTIONS = [
       if (TOUCHED.indexOf(name) === -1) TOUCHED.push(name);
     });
   });
+  // The settings a theme or a sequence can write, which the particle panel lets a value set by hand be locked on.
+  window.PARTICLE_THEME_KEYS = TOUCHED.slice();
 
   let base = null; // the firmware defaults, taken before the first theme is applied
   let appliedPair = null;
   let appliedMix = -1;
   let playing = null; // the sequence playing: its name, when it started, and the step it is on
+  // What the theme or the sequence last wrote into each setting, and what it would write now. The two differ only
+  // where a setting was locked when they moved it.
+  const written = {};
+  const aim = {};
+
+  // Writes a value the theme or the sequence has for a setting, if it moves the setting: one it leaves where it was
+  // keeps whatever it holds, a value set by hand included, and one locked in `keep` is left alone either way.
+  function put(settings, name, value, keep) {
+    aim[name] = value;
+    if (keep && keep.has(name)) return;
+    if (name in written && written[name] === value) return;
+    settings[name] = value;
+    written[name] = value;
+  }
+
+  // A setting that was locked and is back to what was last written into it - Reset puts that back - catches up with
+  // what the theme or the sequence has for it now. Returns true when it wrote.
+  function catchUp(settings, keep) {
+    let wrote = false;
+    TOUCHED.forEach(function (name) {
+      if (!(name in aim) || aim[name] === written[name] || settings[name] !== written[name]) return;
+      if (keep && keep.has(name)) return;
+      settings[name] = aim[name];
+      written[name] = aim[name];
+      wrote = true;
+    });
+    return wrote;
+  }
 
   function smoothstep(u) {
     const t = Math.min(Math.max(u, 0), 1);
@@ -121,7 +151,7 @@ window.PARTICLE_THEME_OPTIONS = [
 
   // Plays the sequence `settings.sequence` names, and hands over to the next one, or to the theme, when it is over.
   // Returns true when it wrote.
-  function playSequence(settings, theme, date) {
+  function playSequence(settings, theme, date, keep) {
     const clock = date ? date.getTime() : typeof performance !== 'undefined' ? performance.now() : Date.now();
     const now = clock / 1000;
     let wrote = false;
@@ -137,55 +167,58 @@ window.PARTICLE_THEME_OPTIONS = [
       wrote = true;
     }
 
-    // A step starts from where the one before it stood at the step's own time, whenever the next frame comes.
+    // A step starts from where the one before it stood at the step's own time, whenever the next frame comes: where
+    // the sequence had it, not where a value set by hand holds it.
     const seq = SEQUENCES[playing.name];
     const t = now - playing.start;
     while (playing.step + 1 < seq.steps.length && t >= seq.steps[playing.step + 1][0]) {
       const next = seq.steps[++playing.step];
-      if (playing.step > 0) writeStep(settings, theme, date, next[0]);
-      TOUCHED.forEach(function (name) { playing.from[name] = settings[name]; });
+      if (playing.step > 0) writeStep(settings, theme, date, next[0], keep);
+      TOUCHED.forEach(function (name) { playing.from[name] = name in aim ? aim[name] : settings[name]; });
       playing.at = next[0];
       playing.set = next[1];
       playing.blend = next[2];
     }
     if (playing.step < 0) return wrote;
-    writeStep(settings, theme, date, t);
+    writeStep(settings, theme, date, t, keep);
     return true;
   }
 
   // The step playing, `t` seconds into its sequence.
-  function writeStep(settings, theme, date, t) {
+  function writeStep(settings, theme, date, t, keep) {
     const mix = playing.blend > 0 ? smoothstep((t - playing.at) / playing.blend) : 1;
     const goal = playing.set === 'theme' ? themeBlend(theme, date) : { from: playing.set, to: playing.set, mix: 0 };
     TOUCHED.forEach(function (name) {
       const a = valueOf(name, goal.from);
       const b = a + (valueOf(name, goal.to) - a) * goal.mix;
-      settings[name] = playing.from[name] + (b - playing.from[name]) * mix;
+      put(settings, name, playing.from[name] + (b - playing.from[name]) * mix, keep);
     });
   }
 
   // Writes a theme into the live settings, or the day's blend of two when `theme` is 'auto', and plays the boot
-  // sequence `settings.sequence` names on top of it. The theme only writes when it or its blend has moved, so edits
-  // made by hand survive. Returns true when it wrote.
-  window.applyParticleTheme = function applyParticleTheme(settings, theme, date) {
+  // sequence `settings.sequence` names on top of it. The theme only writes when it or its blend has moved, and then
+  // only the settings it moves, so a value set by hand survives until the theme moves that very setting; one locked in
+  // `keep` (a Set of names, the particle panel's locks) survives that too, and once it is back to what was last
+  // written - Reset puts that back - it catches up at once. Returns true when it wrote.
+  window.applyParticleTheme = function applyParticleTheme(settings, theme, date, keep) {
     if (!base) {
       base = {};
       TOUCHED.forEach(function (name) { base[name] = settings[name]; });
     }
-    if (playSequence(settings, theme, date)) return true;
+    if (playSequence(settings, theme, date, keep)) return true;
     if (playing) return false;
 
     const c = themeBlend(theme, date);
     const pair = c.from + '>' + c.to;
     const step = Math.round(c.mix * 500) / 500;
-    if (pair === appliedPair && step === appliedMix) return false;
+    if (pair === appliedPair && step === appliedMix) return catchUp(settings, keep);
     appliedPair = pair;
     appliedMix = step;
 
     TOUCHED.forEach(function (name) {
       const a = valueOf(name, c.from);
       const b = valueOf(name, c.to);
-      settings[name] = a + (b - a) * step;
+      put(settings, name, a + (b - a) * step, keep);
     });
     return true;
   };

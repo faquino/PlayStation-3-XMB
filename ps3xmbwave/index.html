@@ -64,16 +64,21 @@
         title: 'Particles Controls',
         settings: window.PARTICLE_SETTINGS,
         meta: window.PARTICLE_SETTINGS_META,
+        // What the theme and the sequences write: a value changed by hand there can be locked against them.
+        lockable: window.PARTICLE_THEME_KEYS,
         position: { top: '12px', left: '12px' },
         showPosition: { top: '12px', left: '12px' },
       });
 
-      // The theme writes the firmware's own parameter set into the settings; on 'auto' it keeps up with the clock.
+      // The theme writes the firmware's own parameter set into the settings; on 'auto' it keeps up with the clock. It
+      // leaves alone what is locked from the panel.
       function syncParticleTheme() {
-        const wrote = window.applyParticleTheme(window.PARTICLE_SETTINGS, window.PARTICLE_SETTINGS.theme);
+        const settings = window.PARTICLE_SETTINGS;
+        const locks = particlesPanel ? particlesPanel.locked : null;
+        const wrote = window.applyParticleTheme(settings, settings.theme, undefined, locks);
         if (!wrote || !particlesPanel) return;
         // While a sequence plays, what is written is its own, and the panel colours it apart from the theme's.
-        particlesPanel.refresh(window.PARTICLE_SETTINGS.sequence === 'none' ? 'theme' : 'sequence');
+        particlesPanel.refresh(settings.sequence === 'none' ? 'theme' : 'sequence');
       }
 
       syncParticleTheme();

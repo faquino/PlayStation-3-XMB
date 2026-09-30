@@ -195,6 +195,30 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
 
 .settings-btn:disabled:hover { background: rgba(255, 255, 255, 0.12); }
 
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* The padlock beside a value changed from the panel, where a theme or a sequence can write it: open and dim, they may
+   still move it; closed and amber, they leave it alone. */
+.settings-lock {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 4px;
+  opacity: 0.6;
+}
+
+.settings-lock[hidden] { display: none; }
+
+.settings-lock[aria-pressed="true"] {
+  opacity: 1;
+  background: rgba(255, 194, 102, 0.22);
+  border-color: #ffc266;
+  color: #ffc266;
+}
+
 .settings-show-btn {
   position: fixed;
   z-index: 99;
