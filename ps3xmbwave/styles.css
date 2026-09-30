@@ -66,10 +66,23 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
   letter-spacing: 0.2px;
 }
 
+/* How many rows are marked as changed from the panel. */
+.settings-panel-count {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(255, 194, 102, 0.16);
+  color: #ffc266;
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+.settings-panel-count[hidden] { display: none; }
+
 .settings-panel-list {
   max-height: calc(100vh - 70px);
   overflow: auto;
-  padding: 6px 8px 8px;
+  padding: 6px 8px 8px 4px;
 }
 
 .settings-row {
@@ -77,11 +90,28 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
   grid-template-columns: 1fr auto;
   gap: 6px;
   align-items: center;
-  padding: 6px 2px;
+  padding: 6px 2px 6px 5px;
+  border-left: 3px solid transparent;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .settings-row:last-child { border-bottom: none; }
+
+/* A value changed from the panel. */
+.settings-row-modified {
+  border-left-color: #ffc266;
+  background: rgba(255, 194, 102, 0.07);
+}
+
+.settings-row-modified .settings-label {
+  color: #ffc266;
+  font-weight: 600;
+  opacity: 1;
+}
+
+.settings-row-modified .settings-value { color: #ffc266; }
+
+.settings-row-modified .settings-slider { accent-color: #ffc266; }
 
 .settings-label {
   font-size: 11px;
@@ -121,6 +151,13 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
 }
 
 .settings-btn:hover { background: rgba(255, 255, 255, 0.2); }
+
+.settings-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.settings-btn:disabled:hover { background: rgba(255, 255, 255, 0.12); }
 
 .settings-show-btn {
   position: fixed;

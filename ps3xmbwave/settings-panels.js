@@ -1,7 +1,7 @@
 'use strict';
-// Lightweight DOM control-panel factory that introspects settings objects into sliders/select/reset controls.
-// Shared by spline + particle configs (`spline-settings.js`, `particles-settings.js`) and initialized from
-// `index.html`, which calls the returned `refresh()` when a theme rewrites the settings.
+// Lightweight DOM control-panel factory that introspects settings objects into sliders/select/reset controls and marks
+// what was changed from the panel. Shared by spline + particle configs (`spline-settings.js`, `particles-settings.js`)
+// and initialized from `index.html`, which calls the returned `refresh()` when a theme rewrites the settings.
 
 (function () {
   function decimalsFromStep(step) {
@@ -49,8 +49,13 @@
     if (!id || !title || !settings || typeof settings !== 'object') return;
     if (document.getElementById(id)) return;
 
-    let originalSettings = Object.assign({}, settings);
-    const syncControls = [];
+    // What Reset returns to, setting by setting: the value the panel was made with, or the last one something other
+    // than the panel wrote (see refresh). A row whose setting differs from it has been changed here, and is marked.
+    const initial = Object.assign({}, settings);
+    // Each setting as the panel last left it, which tells refresh() what something else has written since.
+    const known = Object.assign({}, settings);
+    const rows = [];
+    const modified = new Set();
 
     const panel = document.createElement('div');
     panel.id = id;
@@ -64,6 +69,10 @@
     titleEl.className = 'settings-panel-title';
     titleEl.textContent = title;
 
+    const countEl = document.createElement('span');
+    countEl.className = 'settings-panel-count';
+    titleEl.appendChild(countEl);
+
     const hideBtn = document.createElement('button');
     hideBtn.className = 'settings-btn';
     hideBtn.type = 'button';
@@ -76,8 +85,15 @@
     showBtn.id = id + '-show';
     showBtn.className = 'settings-btn settings-show-btn';
     showBtn.type = 'button';
-    showBtn.textContent = 'Show ' + title;
     setPosition(showBtn, showPos || panelPos);
+
+    // The header, and the button that brings a hidden panel back, count the marked rows.
+    function showModifiedCount() {
+      const n = modified.size;
+      countEl.textContent = n + ' modified';
+      countEl.hidden = n === 0;
+      showBtn.textContent = 'Show ' + title + (n ? ' (' + n + ' modified)' : '');
+    }
 
     hideBtn.addEventListener('click', function () {
       panel.classList.add('hidden');
@@ -112,6 +128,31 @@
       resetBtn.type = 'button';
       resetBtn.textContent = 'Reset';
 
+      let sync; // brings the control up to the setting
+      let describe; // a value as the control would show it, for the tooltips
+
+      // A select writes strings, whatever type the setting started as.
+      function same(a, b) {
+        return isSelect ? String(a) === String(b) : a === b;
+      }
+
+      function mark() {
+        const changed = !same(settings[key], initial[key]);
+        row.classList.toggle('settings-row-modified', changed);
+        resetBtn.disabled = !changed;
+        label.title = changed ? 'Changed from ' + describe(initial[key]) : '';
+        resetBtn.title = changed ? 'Back to ' + describe(initial[key]) : '';
+        if (changed) modified.add(key);
+        else modified.delete(key);
+      }
+
+      // After the panel itself writes the setting.
+      function written() {
+        known[key] = settings[key];
+        mark();
+        showModifiedCount();
+      }
+
       if (isSelect) {
         const select = document.createElement('select');
         select.className = 'settings-select';
@@ -131,15 +172,20 @@
 
         select.addEventListener('change', function () {
           settings[key] = select.value;
+          written();
         });
 
         resetBtn.addEventListener('click', function () {
-          const original = originalSettings[key];
-          settings[key] = original;
-          select.value = String(original);
+          settings[key] = initial[key];
+          select.value = String(initial[key]);
+          written();
         });
 
-        syncControls.push(function () { select.value = String(settings[key]); });
+        sync = function () { select.value = String(settings[key]); };
+        describe = function (v) {
+          const opt = Array.prototype.find.call(select.options, function (o) { return o.value === String(v); });
+          return opt ? opt.textContent : String(v);
+        };
         controls.appendChild(select);
       } else {
         const numMeta = metaMap[key] || inferMeta(value);
@@ -163,19 +209,22 @@
         slider.addEventListener('input', function () {
           settings[key] = parseFloat(slider.value);
           valueEl.textContent = formatValue();
+          written();
         });
 
         resetBtn.addEventListener('click', function () {
-          const original = originalSettings[key];
-          settings[key] = original;
-          slider.value = String(original);
+          settings[key] = initial[key];
+          slider.value = String(initial[key]);
           valueEl.textContent = formatValue();
+          written();
         });
 
-        syncControls.push(function () {
+        sync = function () {
           slider.value = String(settings[key]);
           valueEl.textContent = formatValue();
-        });
+        };
+        // In full, since the slider's step can round away what tells the two apart.
+        describe = function (v) { return String(Number(Number(v).toPrecision(6))); };
         controls.appendChild(slider);
         controls.appendChild(valueEl);
       }
@@ -186,12 +235,15 @@
       row.appendChild(left);
       row.appendChild(resetBtn);
       list.appendChild(row);
+      rows.push({ key: key, sync: sync, mark: mark });
+      mark();
     });
 
     header.appendChild(titleEl);
     header.appendChild(hideBtn);
     panel.appendChild(header);
     panel.appendChild(list);
+    showModifiedCount();
 
     const root = getUiLayerRoot();
     const host = document.createElement('div');
@@ -202,11 +254,18 @@
     root.appendChild(host);
 
     return {
-      // Call after something other than the panel writes into the settings, such as a theme change: the controls
-      // catch up, and the values they land on become what Reset returns to.
+      // Call after something other than the panel writes into the settings, such as a theme change: the controls of
+      // the settings it wrote catch up, and the values they land on become what Reset returns to, unmarked. A setting
+      // changed from the panel and not written since keeps its mark, and Reset still returns it to what it was.
       refresh: function refresh() {
-        syncControls.forEach(function (sync) { sync(); });
-        originalSettings = Object.assign({}, settings);
+        rows.forEach(function (r) {
+          if (settings[r.key] === known[r.key]) return;
+          known[r.key] = settings[r.key];
+          initial[r.key] = settings[r.key];
+          r.sync();
+          r.mark();
+        });
+        showModifiedCount();
       },
     };
   };
