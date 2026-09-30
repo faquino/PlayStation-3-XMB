@@ -71,7 +71,9 @@
       // The theme writes the firmware's own parameter set into the settings; on 'auto' it keeps up with the clock.
       function syncParticleTheme() {
         const wrote = window.applyParticleTheme(window.PARTICLE_SETTINGS, window.PARTICLE_SETTINGS.theme);
-        if (wrote && particlesPanel) particlesPanel.refresh();
+        if (!wrote || !particlesPanel) return;
+        // While a sequence plays, what is written is its own, and the panel colours it apart from the theme's.
+        particlesPanel.refresh(window.PARTICLE_SETTINGS.sequence === 'none' ? 'theme' : 'sequence');
       }
 
       syncParticleTheme();

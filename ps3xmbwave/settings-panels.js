@@ -1,7 +1,8 @@
 'use strict';
 // Lightweight DOM control-panel factory that introspects settings objects into sliders/select/reset controls and marks
-// what was changed from the panel. Shared by spline + particle configs (`spline-settings.js`, `particles-settings.js`)
-// and initialized from `index.html`, which calls the returned `refresh()` when a theme rewrites the settings.
+// what was changed from the panel, and what something else set off its default. Shared by spline + particle configs
+// (`spline-settings.js`, `particles-settings.js`) and initialized from `index.html`, which calls the returned
+// `refresh()` when a theme or a sequence rewrites the settings.
 
 (function () {
   function decimalsFromStep(step) {
@@ -49,13 +50,19 @@
     if (!id || !title || !settings || typeof settings !== 'object') return;
     if (document.getElementById(id)) return;
 
+    // Each setting's default: its value when the panel was made, which `index.html` does before any theme is applied.
+    const base = Object.assign({}, settings);
     // What Reset returns to, setting by setting: the value the panel was made with, or the last one something other
     // than the panel wrote (see refresh). A row whose setting differs from it has been changed here, and is marked.
     const initial = Object.assign({}, settings);
     // Each setting as the panel last left it, which tells refresh() what something else has written since.
     const known = Object.assign({}, settings);
+    // Who writes the settings from outside the panel now, as refresh() was last told: the rows it has set off their
+    // defaults take its colour.
+    let writer = null;
     const rows = [];
     const modified = new Set();
+    const external = {}; // for each writer, the settings it has set off their defaults
 
     const panel = document.createElement('div');
     panel.id = id;
@@ -87,12 +94,26 @@
     showBtn.type = 'button';
     setPosition(showBtn, showPos || panelPos);
 
-    // The header, and the button that brings a hidden panel back, count the marked rows.
+    // The header counts the marked rows, with a pill for each colour; the button that brings a hidden panel back
+    // counts the ones changed here.
+    const externalPills = {};
     function showModifiedCount() {
       const n = modified.size;
       countEl.textContent = n + ' modified';
       countEl.hidden = n === 0;
       showBtn.textContent = 'Show ' + title + (n ? ' (' + n + ' modified)' : '');
+      Object.keys(external).forEach(function (name) {
+        let pill = externalPills[name];
+        if (!pill) {
+          pill = document.createElement('span');
+          pill.className = 'settings-panel-count settings-panel-count-external';
+          pill.dataset.source = name;
+          titleEl.appendChild(pill);
+          externalPills[name] = pill;
+        }
+        pill.textContent = external[name].size + ' by ' + name;
+        pill.hidden = external[name].size === 0;
+      });
     }
 
     hideBtn.addEventListener('click', function () {
@@ -130,20 +151,35 @@
 
       let sync; // brings the control up to the setting
       let describe; // a value as the control would show it, for the tooltips
+      let valueView; // what shows the value, and carries its tooltip: the number beside a slider, or the select
 
-      // A select writes strings, whatever type the setting started as.
+      // A select writes strings, whatever type the setting started as. Numbers are the same within a billionth: the
+      // end of a theme's blend, a + (b - a) x 1, can land a hair off b.
       function same(a, b) {
-        return isSelect ? String(a) === String(b) : a === b;
+        if (isSelect) return String(a) === String(b);
+        return Math.abs(a - b) <= 1e-9 * Math.max(Math.abs(a), Math.abs(b));
       }
 
+      // Amber if the value was changed here; if not, in the writer's colour where something else set it off its
+      // default.
       function mark() {
-        const changed = !same(settings[key], initial[key]);
-        row.classList.toggle('settings-row-modified', changed);
-        resetBtn.disabled = !changed;
-        label.title = changed ? 'Changed from ' + describe(initial[key]) : '';
-        resetBtn.title = changed ? 'Back to ' + describe(initial[key]) : '';
-        if (changed) modified.add(key);
+        const mine = !same(settings[key], initial[key]);
+        const from = !mine && !same(initial[key], base[key]) ? writer || 'outside' : null;
+        row.classList.toggle('settings-row-modified', mine);
+        row.classList.toggle('settings-row-external', from !== null);
+        if (from) row.dataset.source = from;
+        else delete row.dataset.source;
+        resetBtn.disabled = !mine;
+        resetBtn.title = mine ? 'Back to ' + describe(initial[key]) : '';
+        if (mine) valueView.title = 'Changed from ' + describe(initial[key]);
+        else valueView.title = from ? 'Default ' + describe(base[key]) : '';
+        if (mine) modified.add(key);
         else modified.delete(key);
+        Object.keys(external).forEach(function (name) { external[name].delete(key); });
+        if (from) {
+          if (!external[from]) external[from] = new Set();
+          external[from].add(key);
+        }
       }
 
       // After the panel itself writes the setting.
@@ -182,6 +218,7 @@
         });
 
         sync = function () { select.value = String(settings[key]); };
+        valueView = select;
         describe = function (v) {
           const opt = Array.prototype.find.call(select.options, function (o) { return o.value === String(v); });
           return opt ? opt.textContent : String(v);
@@ -223,6 +260,7 @@
           slider.value = String(settings[key]);
           valueEl.textContent = formatValue();
         };
+        valueView = valueEl;
         // In full, since the slider's step can round away what tells the two apart.
         describe = function (v) { return String(Number(Number(v).toPrecision(6))); };
         controls.appendChild(slider);
@@ -254,16 +292,22 @@
     root.appendChild(host);
 
     return {
-      // Call after something other than the panel writes into the settings, such as a theme change: the controls of
-      // the settings it wrote catch up, and the values they land on become what Reset returns to, unmarked. A setting
-      // changed from the panel and not written since keeps its mark, and Reset still returns it to what it was.
-      refresh: function refresh() {
+      // Call after something other than the panel writes into the settings, naming it (`source`, say 'theme'): the
+      // controls of the settings it wrote catch up, and the values they land on become what Reset returns to, in its
+      // colour where they differ from the defaults. A setting changed from the panel and not written since keeps its
+      // mark, and Reset still returns it to what it was. When the writer changes, every row set off its default takes
+      // the new one's colour: here the theme and the sequences write the same settings, often to the same values.
+      refresh: function refresh(source) {
+        const handover = (source || null) !== writer;
+        writer = source || null;
         rows.forEach(function (r) {
-          if (settings[r.key] === known[r.key]) return;
-          known[r.key] = settings[r.key];
-          initial[r.key] = settings[r.key];
-          r.sync();
-          r.mark();
+          const written = settings[r.key] !== known[r.key];
+          if (written) {
+            known[r.key] = settings[r.key];
+            initial[r.key] = settings[r.key];
+            r.sync();
+          }
+          if (written || handover) r.mark();
         });
         showModifiedCount();
       },
