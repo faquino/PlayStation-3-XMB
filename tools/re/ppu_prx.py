@@ -28,6 +28,7 @@ Usage:
   ppu_prx.py <file.prx> find-imm <value> [value...]      li/lis/addi/ori/cmpwi/mulli
   ppu_prx.py <file.prx> xref <address hex>               code that reaches an address
   ppu_prx.py <file.prx> strings [min length]
+  ppu_prx.py <file.prx> vars                            imported and exported variables
 """
 
 import argparse
@@ -250,6 +251,7 @@ def main(argv=None):
     p.add_argument('filter', nargs='?', default='', help='only imports whose name contains this')
     p = sub.add_parser('callers')
     p.add_argument('address', type=lambda s: int(s, 16))
+    sub.add_parser('vars', help='imported variables with the code patched with them, and exported ones')
     args = ap.parse_args(argv)
 
     prx = Prx(args.prx.read_bytes())
@@ -287,6 +289,19 @@ def main(argv=None):
                 sites = callers(prx, stub) if stub is not None else []
                 print('%-48s stub %s  called from %s' % (name, '0x%06x' % stub if stub else '?',
                                                          ', '.join('0x%06x' % s for s in sites) or '-'))
+        return 0
+    if args.cmd == 'vars':
+        # Accesses to these read as small absolute addresses here: the loader patches them from the import table.
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from nids import import_variables, export_variables
+        kinds = {1: 'word', 4: 'lo', 6: 'ha'}
+        for module, variables in import_variables(prx):
+            for n, refs in variables:
+                sites = ', '.join('%s@0x%06x%s' % (kinds.get(t, t), a, '%+#x' % d if d else '') for t, a, d in refs)
+                print('imports %s:%08x  %s' % (module, n, sites or '-'))
+        for lib, n, addr in export_variables(prx):
+            words = ' '.join('%08x' % prx.u32(addr + 4 * i) for i in range(4)) if 0 < addr < len(prx.mem) - 16 else '?'
+            print('exports %s:%08x  at 0x%06x, starting %s' % (lib, n, addr, words))
         return 0
     if args.cmd == 'xref':
         target = args.address

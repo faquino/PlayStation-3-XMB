@@ -18,7 +18,7 @@ index. Read it first, then only the topics the task needs - see
 |---|---|
 | [`firmware.md`](docs/particles/firmware.md) | `lines.qrc`, `particles.elf`, the `.mnu` parameters, the PPU modules, and why the scene is `custom_render_plugin` |
 | [`parameter-sets.md`](docs/particles/parameter-sets.md) | The override sets, what puts each one in (the boot sequences, the music), and how to tell them apart in a capture |
-| [`day-cycle.md`](docs/particles/day-cycle.md) | The four windows the day's sets blend over, and the scene's clock, which Theme Settings' Colour stops |
+| [`day-cycle.md`](docs/particles/day-cycle.md) | The day's schedule, how one set blends into another, and the scene's clock, which Theme Settings' Colour stops |
 | [`scene-events.md`](docs/particles/scene-events.md) | Who sends the scene its events; `PARTICLES_SPE.mnu`'s two factors, the fade on `_Color`, What's New's board |
 | [`shaders.md`](docs/particles/shaders.md) | The two passes: Cg interfaces, run-time uniforms, the decompiled programs, the iridescent texture, the camera |
 | [`spu-task.md`](docs/particles/spu-task.md) | `particles.elf`'s update step by step, the record it walks, the free-slot list, the vertex records |
@@ -38,7 +38,7 @@ What `ps3xmbwave/` ports as verified and what it models, file by file;
 |---|---|---|
 | `particles-reverse.js` | The update task, steps 1 to 8. The pool layout, free marker, life bounds and camera. The parameter block: its layout, the values at every offset, and how the PPU fills it, the flow grid and the noise included. The emitter and its random numbers. The controller's response: the D-pad's turn and kicks, the motion, the shake detectors. `PARTICLES_SPE.mnu`, as the PPU applies it, and its first factor's animation. The particles' fade, `_Color`. The icons' layout on screen, measured. | Where the wave's vertices fall and how fast they move; how the icons move; how often the XMB repeats a held direction; the pool's first orientations, uniform as the console's are after many generations. |
 | `particles.js` | Both passes, re-authored from the decompiled programs, fed with the `.mnu` values [`shaders.md`](docs/particles/shaders.md) maps to uniforms, `PARTICLES_SPE.mnu` applied. `color_control` as the programs use it, and `_Color` from the system's fade. | `_Gamma` held at 1, its value in every savestate. The iridescent texture comes from the fit. |
-| `particles-themes.js` | The nine distinct theme sets, as their differences from the base. The boot sequences: which set each step puts in, when, and over how long. The music, and Theme Settings' Colour. | Which set applies when: [the day cycle](docs/particles/day-cycle.md), with a four-hour smoothstep between neighbours. The curve of the other blends, taken to be the same smoothstep. |
+| `particles-themes.js` | The nine distinct theme sets, as their differences from the base. The boot sequences: which set each step puts in, when, and over how long. The music, and Theme Settings' Colour. [The day's schedule](docs/particles/day-cycle.md) and every blend's curve. | The clock's tick, taken at once. |
 | `wave-surface-cpu.js` | | A CPU copy of the spline layer's wave vertex shader, so particles are born on the wave that is drawn. |
 | `xmb-input.js` | What it hands over: steps with the XMB's four directions, and the four sensors in the PPU's units. | The rest: the mouse and keyboard stand in for the controller. |
 
@@ -68,10 +68,10 @@ Also missing:
 - `proc_iridescent` exactly. It is a file of the firmware's resources, not generated at run time, so
   the implementation stands in for it with [the
   fit](docs/particles/shaders.md#the-iridescent-texture).
-- `_Gamma`'s source - see [Uniform values at run
+- What `paf` keeps in the variables `_Gamma` comes from - see [Uniform values at run
   time](docs/particles/shaders.md#uniform-values-at-run-time).
-- The curve of the blend between sets, which runs in `qglbase`; what starts `anim_coldboot`, the
-  opening with the logo; and who sends events 2 and 3, a game's boot and another's.
+- What starts `anim_coldboot`, who sends events 2 and 3, and how a set put in at once takes hold
+  in [the cold boot's first 4 seconds](docs/particles/day-cycle.md#how-one-set-blends-into-another).
 
 ## Keeping these notes
 

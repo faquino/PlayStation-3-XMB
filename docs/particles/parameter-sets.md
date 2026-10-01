@@ -34,8 +34,10 @@ and back out to white.
 **Verified** in `custom_render_plugin` and its own `custom_render_plugin.rco`. The scene changes
 set on animation events. Its `.rco` holds four animations whose steps fire `native:/anim_...`
 events, and a table at `0x9cbc0` maps each event to a handler, which applies an
-`override/<set>` to each of the scene's layers with a blend time (`0x39728`; the blend itself
-runs in `qglbase`). Read from the `.rco`, with the fades of the logo left out:
+`override/<set>` to each of the scene's layers with a blend time (`0x39728`), a smoothstep from
+where the parameters stand - see [How one set blends into
+another](day-cycle.md#how-one-set-blends-into-another). Read from the `.rco`, with the fades of the
+logo left out:
 
 | Animation | Started by | Steps |
 |---|---|---|
@@ -222,12 +224,12 @@ from](scene-events.md#where-the-events-come-from) - and
 
 While the set is in or on its way out, the clock is held, so the hour does not move the scene.
 
-**The curve looks eased rather than straight**, on this argument: the particles trail the
+**The curve is eased**, a smoothstep, and the captures said so first: the particles trail the
 backdrop by 0.009017 in the first capture and 0.000875 in the second, a ratio of ten. A
 constant lag - the parameter block reaching the SPU a frame or two late, about a twentieth of
 a second here - opens a gap proportional to how fast the factor is moving, so on a straight
 line both gaps would be equal. A smoothstep's slope at those two points differs by 13.7 times.
-The argument rests on the lag being a constant time, so it is a lean, not a proof.
+The argument rests on the lag being a constant time; the code settles it.
 
 The wave moves in the same window, and its geometry says so: mean y over the 16384 vertices
 runs 0.536 with no music, 0.701 at the 15 per cent point, then 2.432 and 2.400 at the end -

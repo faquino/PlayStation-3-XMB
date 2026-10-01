@@ -55,10 +55,11 @@ savestate:
 - `_Color` is the scene's fade: to black when another module takes the screen, and to the
   brightness Theme Settings set - see [The particles' fade](scene-events.md#the-particles-fade).
 - `_Gamma` is set at once by the scene's update (`0x14578`, through `0x1b128` and `0x2b618`,
-  with a duration of zero) whenever the value it picks changes: one of two words of a small
-  structure, chosen by whether a third is above 0.05, which the code addresses at 0x8, 0xc
-  and 0x14 with no relocation - memory this disassembly cannot place. The same value goes to
-  the wave's renderer (`0x70bf8`). It is 1 in every savestate.
+  with a duration of zero) whenever the value it picks changes: the first word of `paf`'s
+  variable `59df89eb` when the word 12 bytes into it is above 0.05, and of `paf`'s `6fd42f46`
+  otherwise. The loader patches the two in from the import table, which is why they once read
+  as absolute addresses; what `paf` keeps in them is not followed. The same value goes to the
+  wave's renderer (`0x70bf8`). It is 1 in every savestate.
 
 Vertex uniforms live in constant registers and are not in the cache. Their values come
 from the RSX frame captures below; their meaning from the decompiled vertex shader.

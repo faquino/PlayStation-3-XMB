@@ -12,7 +12,7 @@ Extracted firmware assets must never be committed.
 | `spu_cache.py` | Matches RPCS3's SPU program cache (`spu-*.dat`) against an ELF: which of its code actually ran, and with `--since`, which code ran for the first time. |
 | `cgbin.py` | Reads compiled RSX Cg programs (`.vpo`/`.fpo`): parameter tables, register assignments, and the uniform values the XMB set at run time, read from RPCS3's shader cache. `--fc-table` maps the `_fetch_constant(n)` of RPCS3's decompiled fragment programs to those uniforms and literals. |
 | `rrc.py` | Reads RPCS3 RSX frame captures (`captures/*.rrc.gz`, Alt+C in the emulator): the draw calls of one frame, the vertex constants at each draw, and each draw's vertex buffers, decoded to CSV. |
-| `ppu_prx.py` | Loads decrypted PPU modules (PRX or executable), applies PRX relocations, finds the TOC, and disassembles with capstone. Also finds immediates, the code that reaches an address, and the callers of each named import. Needs `pip install capstone`. |
+| `ppu_prx.py` | Loads decrypted PPU modules (PRX or executable), applies PRX relocations, finds the TOC, and disassembles with capstone. Also finds immediates, the code that reaches an address, the callers of each named import, and the variables a module imports and exports. Needs `pip install capstone`. |
 | `whichset.py` | Names the parameter set an RSX capture was taken under, or the pair it was crossfading and how far along, by fitting the backdrop's four corner colours against every `override/`. Reads the particles' live `glare` from the same capture. |
 | `readblock.py` | Reads the particle task's 2304-byte parameter block out of RSX captures, at the offsets the task reads it: force, drag, the field's rotation, the noise scale, and the flow grid's non-empty cells. |
 | `coverage.py` | Finds where a PPU module sits in a savestate from the return addresses its stacks keep, and lists the module's call sites among them - which functions ran - and the ones only one savestate holds. So far only `vsh.elf` leaves any. |
@@ -45,6 +45,15 @@ python tools/re/rrc.py draws <capture.rrc.gz> --vpo re-work/lines/lib/particles/
 python tools/re/rrc.py consts <capture.rrc.gz> <draw> 455 13
 python tools/re/rrc.py buffer <capture.rrc.gz> <draw> -o re-work/particles.csv
 ```
+
+## Imported variables
+
+A module reaches the variables it imports from another - `qgl_base`'s blend mode, two of
+`paf`'s - through `lis`/`lwz` pairs the loader patches from the import table, not from the
+relocations, so in the disassembly they read as small absolute addresses (`0x30(r9)` off
+`lis r9, 0`). `ppu_prx.py <module> vars` lists the variables a module imports, with the
+instructions patched with each one's address, and those it exports, with where each lives and its
+first words - so, run on the exporting module, it gives a variable's starting value.
 
 ## Savestates
 

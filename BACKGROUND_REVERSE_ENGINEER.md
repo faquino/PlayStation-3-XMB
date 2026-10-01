@@ -147,6 +147,10 @@ The walk and the two ramps are the measured ones. What stays modelled:
 - Whether the two ramps sit at the same hours all year. Every reading of the evening one is from
   late September and the only one of the morning from late October, so a pair a season apart would
   settle it.
+- Whether the ramps are straight. `custom_render_plugin`'s `0x52ad8`, which sets the month's
+  textures and `_MonthTime`, also builds a value from two smoothsteps (`0x3e980`) of the time of
+  day, between edges it keeps at +0x2dc to +0x2e8 of an object - most likely `_NightDayBlend`,
+  which would make the ramps eased rather than straight. Not followed.
 - Whether the walk really is linear, or the Gaussian above shapes it.
 - What animates `_Alpha`, which decides how bright the backdrop actually lands.
 - The remaining uniforms of the 538-instruction program, which do more than blend four textures.

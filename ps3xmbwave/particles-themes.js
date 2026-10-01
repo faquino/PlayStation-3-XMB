@@ -49,9 +49,11 @@ window.PARTICLE_THEME_OPTIONS = [
 ];
 
 (function () {
-  // The day runs on four-hour smoothsteps that start every six hours, each followed by two hours of one set. All
-  // four are measured, from frame captures and savestates: night into dawn from 01:00, dawn into day from 07:00,
-  // day into dusk from 13:00, and dusk into night from 19:00.
+  // The day runs on four-hour smoothsteps that start every six hours, each followed by two hours of one set: night
+  // into dawn from 01:00, dawn into day from 07:00, day into dusk from 13:00, and dusk into night from 19:00. The
+  // scene keeps them as a table of times and sets (0x9c98c), takes how far into its window the moment is, a straight
+  // line, and blends the window's two sets by that much with the smoothstep below (0x11600, 0x39d6c). All four are
+  // measured too, from frame captures and savestates.
   const CYCLE = [
     { from: 'night', to: 'yoake', start: 1, end: 5 },
     { from: 'yoake', to: 'day', start: 7, end: 11 },
@@ -63,7 +65,9 @@ window.PARTICLE_THEME_OPTIONS = [
   // the notes): each step puts a set in at a time into the sequence, blended over its own time from wherever the
   // parameters stand (0x39728). 'theme' is the set `theme` gives, the day cycle's on 'auto'. A launch ends as the
   // content takes the screen, and the XMB then comes back through its start, as the console's does when the content
-  // quits. The curve of a blend between two sets runs in qglbase and is not traced: here it is the day's smoothstep.
+  // quits. Every blend between two sets is a smoothstep over its time: qgl_base's blend mode, which the scene leaves
+  // at 2 (0x1e8c8), bar the cold boot's first 4 s, where coldboot2 comes in by an exponential approach - with the same
+  // particles as coldboot1, so the page leaves it out.
   const SEQUENCES = {
     // anim_coldboot2, which event 1 starts: BootBG2 at 0, coldboot1 at once (and coldboot2, whose particles are the
     // same, over 3 s); NormalBG2 at 4 s, the cycle's set over 7.5 s. The scene starts in black, and coldboot1 is black
@@ -298,8 +302,7 @@ window.PARTICLE_THEME_OPTIONS = [
     appliedPair = pair;
     appliedMix = step;
 
-    // A change of set eases in from where the parameters stood; the curve, which runs in qglbase, is not traced, and
-    // here it is the day's smoothstep.
+    // A change of set eases in from where the parameters stood, on qgl_base's smoothstep (0x1e8c8).
     const k = fade ? smoothstep((now - fade.start) / fade.seconds) : 1;
     let wrote = false;
     TOUCHED.forEach(function (name) {

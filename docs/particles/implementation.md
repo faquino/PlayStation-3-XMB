@@ -72,7 +72,8 @@ on each frame that passes its draw, simply keeps it that way.
   as [What puts each set in](parameter-sets.md#what-puts-each-set-in) reads them: each step blends from wherever
   the parameters stand, and the start hands over to the theme at 11.5 seconds, once its blend
   into the cycle is done. What is modelled:
-  - a blend's curve, which runs in `qglbase`: the day cycle's smoothstep;
+  - the cold boot's first 4 seconds, where the console puts `coldboot2` in by an exponential
+    approach: its particles are `coldboot1`'s, so the page leaves it out;
   - what follows a launch: the content takes the screen, and the page brings the XMB back
     through its start at once, as the console does when the content quits;
   - the pool. The XMB's start builds it again, empty and with every orientation the identity,
@@ -86,7 +87,7 @@ on each frame that passes its draw, simply keeps it that way.
   clock](day-cycle.md#theme-settings-colour-stops-the-clock) for the `auto` theme and, through
   `xmbSceneDate`, the backdrop's Auto gradient. Headless, each step lands on the firmware's sets.
   What is modelled:
-  - a blend's curve, the day cycle's smoothstep, and the clock's next tick, taken at once;
+  - the clock's next tick, taken at once;
   - the backdrop: that `0x10900`'s moment is what `_MonthTime` and `_NightDayBlend` read, which
     puts it on the month's own daytime gradient, at once;
   - what holds the clock: only the music and a sequence, not a boot's tail, the fades or the first

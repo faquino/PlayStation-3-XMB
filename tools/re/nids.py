@@ -13,6 +13,12 @@ Import stubs (.lib.stub entries) are 0x2c bytes, big-endian:
   table, function slot table, variable NID table, variable slot table, TLS NID table,
   TLS slot table.
 
+A variable's slot points to a list of 12-byte references, {u32 type, u32 address, u32
+addend}, ended by a zero type: every place the loader patches with the variable's address
+plus the addend (type 1 a word, 4 the low half, 6 the high half adjusted). The relocations
+do not carry them, so until the loader runs those accesses read as small absolute
+addresses.
+
 Usage:
   nids.py <module.prx|.elf>            list imports, naming the NIDs it knows
   nids.py --nid <name> [name...]       print NIDs for names
@@ -149,6 +155,60 @@ def import_stubs(prx):
             if not name or len(name) < 3:
                 continue
             yield name, [(prx.u32(nid_t + 4 * i), slot_t + 4 * i) for i in range(nf)]
+
+
+def import_variables(prx):
+    """Yield (module name, [(nid, [(type, address, addend)])]) for the variables each .lib.stub entry imports."""
+    for seg in prx.segments[:2]:
+        for a in range(seg['vaddr'], seg['vaddr'] + seg['filesz'] - 0x2c, 4):
+            if prx.mem[a] != 0x2c:
+                continue
+            nv = struct.unpack_from('>H', prx.mem, a + 8)[0]
+            name_p, _, _, vnid_t, vref_t = struct.unpack_from('>5I', prx.mem, a + 0x10)
+            if not (0 < nv < 3000 and 0 < vnid_t < len(prx.mem) and 0 < vref_t < len(prx.mem)):
+                continue
+            name = prx.cstring(name_p) if 0 < name_p < len(prx.mem) else None
+            if not name or len(name) < 3:
+                continue
+            variables = []
+            for i in range(nv):
+                refs, r = [], prx.u32(vref_t + 4 * i)
+                while 0 < r < len(prx.mem) - 12 and prx.u32(r):
+                    refs.append((prx.u32(r), prx.u32(r + 4), prx.u32(r + 8)))
+                    r += 12
+                variables.append((prx.u32(vnid_t + 4 * i), refs))
+            yield name, variables
+
+
+def module_info(prx):
+    """(name, export table start, end) of the module info record: u16 attributes, u16 version, a 28-byte name, then
+    the TOC and the bounds of the export (0x1c-byte entries) and import (0x2c-byte entries) tables."""
+    size = len(prx.mem)
+    for a in range(prx.code['vaddr'], prx.code['vaddr'] + prx.code['filesz'] - 52, 4):
+        raw = bytes(prx.mem[a + 4:a + 32])
+        name = raw.split(b'\0')[0]
+        if len(name) < 3 or not all(32 < c < 127 for c in name) or any(raw[len(name):]):
+            continue
+        _, e0, e1, i0, i1 = struct.unpack_from('>5I', prx.mem, a + 32)
+        if 0 < e0 < e1 <= size and 0 < i0 <= i1 <= size and (e1 - e0) % 0x1c == 0 and (i1 - i0) % 0x2c == 0:
+            return name.decode(), e0, e1
+    return None
+
+
+def export_variables(prx):
+    """Yield (library, nid, address) for every variable the module exports."""
+    info = module_info(prx)
+    if not info:
+        return
+    _, a, end = info
+    while a < end:
+        size = prx.mem[a]
+        nf, nv = struct.unpack_from('>HH', prx.mem, a + 6)
+        name_p, nid_t, addr_t = struct.unpack_from('>3I', prx.mem, a + 0x10)
+        lib = (prx.cstring(name_p) if name_p else None) or '(module)'
+        for i in range(nf, nf + nv):
+            yield lib, prx.u32(nid_t + 4 * i), prx.u32(addr_t + 4 * i)
+        a += size or 0x1c
 
 
 def main(argv=None):

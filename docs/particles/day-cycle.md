@@ -1,4 +1,4 @@
-# The day cycle: four windows, and the clock that walks them
+# The day cycle: its schedule, the blend between sets, and the clock
 
 Part of the [particle notes](../../PARTICLES_REVERSE_ENGINEER.md). What each set carries, and how to
 tell them apart in a capture, is in [Parameter
@@ -6,8 +6,13 @@ sets](parameter-sets.md#telling-the-sets-apart-in-a-capture).
 
 ## Themes blend over hours
 
-**Measured.** The cycle's four sets - `yoake` (dawn), `day`, `higure` (dusk) and `night` - follow
-the hour, each blending into the next along a smoothstep.
+**Verified** in `custom_render_plugin`, and measured. The cycle's four sets - `yoake` (dawn),
+`day`, `higure` (dusk) and `night` - follow the hour, each blending into the next along a
+smoothstep. The scene keeps the schedule as a table of times and sets (`0x9c98c`): night at 00:00
+and 01:00, `yoake` at 05:00 and 07:00, `day` at 11:00 and 13:00, `higure` at 17:00 and 19:00, night
+at 23:00 and 24:00. `0x11600` finds the stretch the moment falls in and how far into it the moment
+is, a straight line; where the stretch's two sets differ it blends them by that much with the
+smoothstep below (`0x39d6c`), and where they are the same it puts that set in.
 
 The transitions start at 07:00, 13:00 and 19:00, four hours each, **every six hours**,
 with two hours of one set in between, which puts the fourth at 01:00 and gives the holds it
@@ -24,6 +29,34 @@ All four windows are measured, and against the six measured moments the cycle la
 0.07%.
 
 How each window was measured is in [history](history.md#how-the-day-cycle-was-measured).
+
+## How one set blends into another
+
+**Verified** in `custom_render_plugin` and `qglbase`. Each parameter of a set is an object of the
+scene's own (`0x225a4` makes the floats) that keeps five values: its default, where it stands, its
+target, where its blend started, and a spare. Putting a set in with a blend time (`0x39728`)
+hands the parameters the set's values as targets, copies where each stands to where its blend
+starts (`0x38304`, through `qgl_base`'s `b95a43ec`), and opens a window on the layer's clock from
+now to now plus the blend time. Every frame the clock moves on by the frame's time (`0x3a06c`,
+from `paf`'s `873c6688`), and `qgl_base` hands each parameter the window and the clock, whose
+blend (`0x1e8c8`) puts it at, with t how far through the window the clock is:
+
+- `from + (target - from) × (3t² - 2t³)` under mode 2;
+- `from + (target - from) × t` under mode 0;
+- 1% more of the way to its target each frame, whatever the window, under mode 1;
+- its target at once under any other.
+
+The mode is a variable `qgl_base` exports (`ce5d9f19`), which starts at 2, and mode 1's 1% is
+another (`202298a3`). Only the cold boot moves it: `BootBG1` and `BootBG2` set 1, and `NormalBG`
+and `NormalBG2`, 4 seconds in, set 2 back; the day's blend of two sets (`0x39d6c`) sets 2 for its
+own sake and puts the mode back. So every change of set is a smoothstep over its time from
+wherever the parameters stand, bar the cold boot's first 4 seconds, where `coldboot2` comes in by
+the exponential approach - its particles are `coldboot1`'s.
+
+A set put in at once resets each parameter to its default and hands its values over as where the
+blend starts rather than as targets (`0x5245c`), which mode 1 does not read. How `coldboot1`
+takes hold in those 4 seconds is not settled: the method that stores the values, the parameters'
+table's +0x1c, is not relocated in the decrypted module.
 
 ## Theme Settings' Colour stops the clock
 
