@@ -25,7 +25,7 @@ it first, then only the topics the task needs - see [Keeping these notes](#keepi
 | [`output.md`](docs/wave/output.md) | The wave as the RSX draws it: the two buffers, the 128 × 128 mesh, its normal and texture coordinates, the draw's uniforms |
 | [`spu-task.md`](docs/wave/spu-task.md) | `spline.elf` step by step: three DMAs in, a free-form deformation, a matrix, and the bicubic B-spline surface over 19 × 19 control points that is the wave |
 | [`inputs.md`](docs/wave/inputs.md) | What the PPU sends the task: the job's parameters, the matrix, the grid of 19 lines, the deformation's lattice |
-| [`lines.md`](docs/wave/lines.md) | The PPU's simulation of the 19 lines: the object, the 60 Hz steps, the springs, the noise, the anchored ends, and the shaping of what the task receives |
+| [`lines.md`](docs/wave/lines.md) | The PPU's simulation of the 19 lines: the object, the baked state each cold boot resets them to, the 60 Hz steps, the springs, the noise, the anchored ends, and the shaping of what the task receives |
 | [`ffd.md`](docs/wave/ffd.md) | The deformation's lattice: `ffd_shader1.fpo` on the GPU, its formula and clock, and how the PPU turns its output into the lattice |
 | [`implementation.md`](docs/wave/implementation.md) | What `ps3xmbwave/` models, and how it compares with the console |
 | [`history.md`](docs/wave/history.md) | Superseded readings, closed investigations and dead ends, for reopening a question |
@@ -49,10 +49,11 @@ wave on screen:
 
 - **The FFD's other programs.** `ffd_alpha_blend.fpo`, drawn every frame after `ffd_shader1`,
   and `ffd_shader0`, 2 and 3, which no set picks - see [The draws](docs/wave/ffd.md#the-draws).
-- **The lines' start.** Where the constructor puts the points before the first step, and what
-  `0x47af0` does when the clock wraps at 10 - see [The lines](docs/wave/lines.md). The springs and
-  the noise are read in the code but not checked yet: running the lines from their start to a
-  savestate's step count would check them.
+- **The clock's wrap.** What `0x47af0` does when the lines' clock passes 10 and starts again,
+  about every 14 minutes at night's `TIMESTEP`, and with the time a reset hands it - see [A
+  step](docs/wave/lines.md#a-step) and [The time](docs/wave/ffd.md#the-time). No savestate has run
+  that long since a cold boot. Also what, beyond the cold boot's ramp of `PERTURBATION`, keeps a run
+  from the reset from landing on a savestate - see [From the start](docs/wave/lines.md#from-the-start).
 - **The shading.** `lines1.fpo`, with its `_Stripes` and `_FresLUT` textures and `_Spacing` and
   `_Thinness`. Also where `FALLOFF` goes, since no uniform of the two programs is named for it,
   and `_Gamma`, which the scene sends the wave's renderer too (`0x70bf8`).

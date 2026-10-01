@@ -31,7 +31,11 @@ the functions are named as in upstream's reading,
 `LINE1.mnu`'s `FFD SCALE1`, `FFD SCALE2` and `FFD OFFSET` - see [What the job
 carries](inputs.md#what-the-job-carries):
 
-- u = (p - `FFD OFFSET`) / `FFD SCALE1`, and q = clamp(u, 0, 0.999) × (8, 4, 4);
+- u = (p - `FFD OFFSET`) / `FFD SCALE1`, and q = clamp(u, 0, 0.999) × (8, 4, 4). The division
+  takes the SPU's estimate of the reciprocal, `frest` then `fi` (`FUN_00003440`), with no step to
+  refine it, so u comes out a little off: by +5.3e-5, -9.4e-5 and -1.19e-4 of itself along x, y and
+  z for the day cycle's (5.67726, 1.00077, 1), fitted in the savestates. Nothing on screen shows
+  it, but undoing the deformation to that precision needs it - see [A step](lines.md#a-step);
 - the integer part of q picks a cell of the lattice, and its fraction f gives each axis the cubic
   B-spline's weights, the basis matrix at `0xd5c0` times (f³, f², f, 1);
 - the lattice holds 11 × 7 × 7 points, the one at (i, j, k) at `0xb380` + 16 (i + 11 (j + 7 k));

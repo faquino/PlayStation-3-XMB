@@ -2,8 +2,8 @@
 
 Part of the [wave notes](../../WAVE_REVERSE_ENGINEER.md): how `custom_render_plugin` moves the 19
 lines whose points become [the task's grid](inputs.md#the-grid). The object and its code are read
-in the module; the savestate of 22 September at 22:55 holds the object, which puts it at
-`0x20401b90`, and checks every formula marked verified below.
+in the module. Every savestate holds the object at `0x20401b90`, its arrays at the same addresses,
+and checks the formulas marked verified below.
 
 ## The object
 
@@ -26,6 +26,23 @@ behind a descriptor of 0x30 bytes - a count, 361, then a pointer:
 | +0x2d4 | the noise's counter |
 
 The arrays at +0x70, +0x100 and +0x130 are not used by anything below.
+
+## The start
+
+**Verified.** `0x4e624` resets the lines from one of three states baked into the module. It sets
+A0 to the state's points, with w = 1, and A6 to its velocities, with w = 0; A2 and A3 become copies
+of the points; the clock, the smoothed clock, the accumulator and the noise's counter go to 0. The
+scene only ever asks for the second state (`0x50da8`): 361 points at `0x97c18`, then 361
+velocities at `0x98d04`, three floats each. The other two, at `0x95a40` and `0x99df0`, go unused.
+Before zeroing the clock, `0x4e624` hands `0x47af0` a time that goes with the state, 98.62 for the
+second (not followed).
+
+The renderer resets its lines when it is set up (`0x576e4`) and from `0x56fe0`, which the scene
+reaches through `0x1b05c` from the cold boot's `BootBG1` and `BootBG2` handlers (`0xfa38`,
+`0x110dc`) - see [What puts each set in](../particles/parameter-sets.md#what-puts-each-set-in). So
+the lines start afresh with every cold boot. Every savestate agrees: its noise counter is an exact
+multiple of 1083, 1235 to 6335 steps, and its clock what that many steps of `TIMESTEP` × 0.0001
+add up to.
 
 ## Each frame
 
@@ -51,20 +68,39 @@ The arrays at +0x70, +0x100 and +0x130 are not used by anything below.
    springs across the lines make the 19 lines one sheet, stretched and bent like cloth.
 4. **Noise.** Each point's v then gains `PERTURBATION` × (h(n + 1), h(n + 2), h(n + 3), 0), the
    counter n moving on by 3, where h(n) = 1 - (y & 0x7fffffff) / 2^30 with x = (n << 13) ^ n and
-   y = x (x² 15731 + 789221) + 1376312589 (`0x4ab04`), in 32-bit integers.
-5. **Integration**, verified: p gains v × `TIMESTEP` × 0.0001, then v loses v × `DAMPING` ×
-   `TIMESTEP`.
-6. **The ends** (`0x4bce4`), verified. The smoothed clock t moves a tenth of the way to the clock.
-   Then on each line r, from 0 to 18:
+   y = x (x² 15731 + 789221) + 1376312589 (`0x4ab04`), in 32-bit integers. The points take their
+   turn line by line, so point i of a step draws three values starting at 1083 × the step + 3i + 1.
+5. **Integration**: p gains v × `TIMESTEP` × 0.0001, then v loses v × `DAMPING` × `TIMESTEP`.
+6. **The ends** (`0x4bce4`). The smoothed clock t moves a tenth of the way to the clock. Then on
+   each line r, from 0 to 18:
    - the first point's v gains (`TIMESTEP` × 0.02, 0, 0), a pull outwards;
    - the last point, column 18, is set to (0, `END Y` × (0.5 sin(11 (r / 19 + t)) + 0.5),
      `END Z` × 0.5 (cos(15 (r / 19 + t)) + 1), 1), and its v to 0.
 
-Steps 3 and 4 are read in the code; the savestate cannot check them, holding one step's state.
-It does check the counting: its noise counter, 2375019, is 1083 × 2193, three draws for each of
-361 points in each of 2193 steps, and its clock, 0.438606, is 2193 × `TIMESTEP` × 0.0001 at night's
-`TIMESTEP` of 2. The counter starts at 0 when the object is built, so the lines are deterministic
-from their start.
+**Verified**, one step at a time, in the savestates. A savestate holds A2, A3 and A6, which
+check the integration and the ends. For the springs and the noise it needs the velocity going
+into the last step, and `spline.elf`'s local store gives it: its grid is A0 a frame back, which
+undone through the matrix and [the deformation](spu-task.md#the-deformation) gives A2 a step back.
+What the last step added to that velocity, less the springs, is the noise: to a median of 0.02
+to 0.03, against noise of 0.058 rms, and with a correlation of 0.76 to 0.86 in the four savestates
+whose accumulator, below 0.45, keeps the check precise. Drawing the noise one value or one step
+off, reversing its lanes, or leaving out either kind of spring all fit worse in each of them.
+
+## From the start
+
+Running the steps from the reset to a savestate's count gets the lines' shape but not their detail:
+the points end 0.005 apart on average after 1235 steps and 0.02 after 2193. Part of the reason is
+the cold boot, which moves `PERTURBATION` while they run (inferred). `coldboot1`'s is 0, and the
+runs fit best when it starts there at the reset and moves 1% of the way to `coldboot2`'s 0.0998587
+each step, as blend mode 1 does each frame at 60 frames a second, until the day cycle's set takes
+over at 4 seconds - see [How one set blends into
+another](../particles/day-cycle.md#how-one-set-blends-into-another). With the full value from the
+reset the points end 0.033 apart after 1235 steps, and with a smoothstep over 3 seconds 0.009.
+
+What is left is not traced. The lines magnify any difference - 1e-6 added to one velocity grows to
+3.5e-5 by step 2193 and 0.08 by step 6000 - but starting the ramp a step later moves the points by
+only 3e-4 at step 1235, a fifteenth of what is left. The boot's frame pacing, which no savestate
+records, is a candidate.
 
 ## What the task receives
 

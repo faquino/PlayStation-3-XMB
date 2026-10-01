@@ -109,6 +109,18 @@ out. The B-spline basis matrix the task builds at `0xd5c0`, `be2aaaaa 3effffff b
 anchors the data. When two local stores hold the task, the one whose grid reproduces a wave buffer
 is the one that ran last - see [The SPU task](../../docs/wave/spu-task.md).
 
+**A savestate holds one step of a simulation, and the task downstream holds the frame before.**
+The wave's lines object turns up by its 19 and 19 at +0x2c and the count 361 in its descriptors
+at +0x40, +0xa0, +0xd0 and +0x160; its arrays follow it, the velocities 0x2d00 bytes early because
+the two unused arrays before them are all zero. Their points before and after the last step and
+their velocities after it check the integration, but not the forces, which need the velocity going
+into the step. `spline.elf`'s local store supplies it: its grid, undone through the matrix and the
+deformation, is the lines' grid a frame back - see [A step](../../docs/wave/lines.md#a-step).
+Undoing a task's arithmetic that closely means reproducing its estimates too: until the
+deformation's reciprocal estimate was fitted, its error of about 1e-4 made the forces look wrong by
+several times the noise. And the closer the accumulator is to 1, the closer the frame back sits to
+the step, so the check is sharpest in savestates with a low one.
+
 **A savestate also remembers what code ran.** Stacks keep the return addresses of recent calls,
 stale frames included, and `coverage.py` recognises the frames by their layout, places the module
 by voting (each saved return address, paired with each `bl`, votes for a load address) and lists

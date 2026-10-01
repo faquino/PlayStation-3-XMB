@@ -62,7 +62,10 @@ the exponential approach - its particles are `coldboot1`'s.
 A set put in at once resets each parameter to its default and hands its values over as where the
 blend starts rather than as targets (`0x5245c`), which mode 1 does not read. How `coldboot1`
 takes hold in those 4 seconds is not settled: the method that stores the values, the parameters'
-table's +0x1c, is not relocated in the decrypted module.
+table's +0x1c, is not relocated in the decrypted module. The wave's lines suggest it takes hold at
+once (inferred): their state in the savestates fits best a `PERTURBATION` that starts from
+`coldboot1`'s 0 as `BootBG2` resets them and moves 1% of the way to `coldboot2`'s each step - see
+[From the start](../wave/lines.md#from-the-start).
 
 ## Theme Settings' Colour stops the clock
 
