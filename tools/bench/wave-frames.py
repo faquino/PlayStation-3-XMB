@@ -15,8 +15,13 @@ are entirely zero, but no line of these buffers is.
 Writes, under --out:
   <source>.f32   the frames as little-endian float32, frames x 16384 vertices x 8 (position, normal)
   index.json     one entry per source: its kind, when it was taken, its frames, the particles' live
-                 glare, and for a capture the parameter set whichset.py names from the backdrop and
-                 the uniforms the wave was drawn with
+                 glare, the lattice's time, and for a capture the parameter set whichset.py names from
+                 the backdrop and the uniforms the wave was drawn with
+
+The lattice's time is ffd_shader1's live _Time, ten times the lines' clock a step back - see
+docs/wave/ffd.md - which says how long the lines have run since the cold boot reset them. A
+savestate holds one copy of the program; a capture also holds the copies earlier captures of the
+same session left, and its own is the latest, so the largest.
 
 Running it again on a source replaces that source's entry and keeps the others.
 
@@ -54,7 +59,13 @@ def to_floats(blob):
     return values
 
 
-def capture_frames(path, lines1, sets, glare_program):
+def lattice_time(program, memory):
+    """ffd_shader1's live _Time: the latest copy, the clock only moving on within a session."""
+    values = whichset.live_uniform(program, memory, '_Time')
+    return max(values) if values else None
+
+
+def capture_frames(path, lines1, sets, glare_program, ffd_program):
     raw = gzip.open(path).read()
     cap = rrc.Capture(raw)
     draws = list(cap.draws())
@@ -76,6 +87,7 @@ def capture_frames(path, lines1, sets, glare_program):
         'buffers': ['0x%x' % (pos & 0x7fffffff)],
         'set': whichset.describe(*fits[0]) if fits else None,
         'glare': whichset.live_uniform(glare_program, raw, '_Glare'),
+        'time': lattice_time(ffd_program, raw),
         'uniforms': {name: wave['consts'][slot][0] for slot, name in UNIFORMS.items() if slot in wave['consts']},
     }, [to_floats(blob)]
 
@@ -108,7 +120,7 @@ def find_buffers(image):
     return sorted(runs)
 
 
-def savestate_frames(path, glare_program):
+def savestate_frames(path, glare_program, ffd_program):
     image = path.read_bytes()
     if path.suffix == '.zst':
         from compression import zstd
@@ -130,6 +142,7 @@ def savestate_frames(path, glare_program):
         'buffers': ['memory order %d' % k for k in range(len(frames))],
         'set': None,
         'glare': whichset.live_uniform(glare_program, image, '_Glare'),
+        'time': lattice_time(ffd_program, image),
         'uniforms': {},
     }, frames
 
@@ -155,13 +168,15 @@ def main(argv=None):
     lines1 = list(struct.unpack('>%dI' % (len(vpo) // 4), vpo))
     sets = whichset.load_sets(args.lines)
     glare_program = cgbin.CgProgram((args.lines / 'lib/particles/particles_second.fpo').read_bytes())
+    ffd_program = cgbin.CgProgram((args.lines / 'lib/moyou/ffd_shader1.fpo').read_bytes())
 
     args.out.mkdir(parents=True, exist_ok=True)
     index_path = args.out / 'index.json'
     index = json.loads(index_path.read_text()) if index_path.exists() else {}
     for path in args.sources:
         is_capture = path.name.endswith('.rrc.gz')
-        found = capture_frames(path, lines1, sets, glare_program) if is_capture else savestate_frames(path, glare_program)
+        found = (capture_frames(path, lines1, sets, glare_program, ffd_program) if is_capture
+                 else savestate_frames(path, glare_program, ffd_program))
         name = source_name(path)
         if found is None:
             print('%s: no wave' % path.name)
@@ -174,8 +189,9 @@ def main(argv=None):
                     frame.byteswap()
                 frame.tofile(out)
         index[name] = entry
-        print('%s: %d frame(s), set %s, glare %s' % (path.name, len(frames), entry['set'],
-                                                     ', '.join('%.6f' % g for g in entry['glare']) or '-'))
+        print('%s: %d frame(s), set %s, glare %s, time %s' % (
+            path.name, len(frames), entry['set'], ', '.join('%.6f' % g for g in entry['glare']) or '-',
+            '%.5f' % entry['time'] if entry['time'] is not None else '-'))
     index_path.write_text(json.dumps(dict(sorted(index.items())), indent=1) + '\n')
 
 

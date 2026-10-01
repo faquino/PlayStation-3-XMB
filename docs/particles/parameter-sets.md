@@ -21,9 +21,9 @@ Each `override/<theme>/PARTICLES.mnu` is a complete parameter set. Differences f
 | `welcome_1/2` | 31 changes, including `emit per frame` 70.5765 |
 
 **The numbering is a sequence, not a duplicate.** `welcome_1` and `welcome_2` carry the same
-`PARTICLES.mnu`, and so do `coldboot1` and `coldboot2`, which is why only one of each is in
-`particles-themes.js` - but their other three files differ, so the console is walking a chain of
-stages. `welcome_1` opens at a 158.7 degree field of view with a corner colour of (0.34, 1.16,
+`PARTICLES.mnu`, and so do `coldboot1` and `coldboot2`, which is why only one of each is on the
+particle side of `scene-themes.js` - but their other files differ, so the console is walking a
+chain of stages. `welcome_1` opens at a 158.7 degree field of view with a corner colour of (0.34, 1.16,
 10); `welcome_2` closes at 81.24 with (0.12, 6.24, 8.93). Both run `EXPOSURE` 3.404 against the
 base 1.05. `gameboot1` to `gameboot5` walk from a white corner through two black stages - the
 third and fourth being the ones that touch the particles, the fourth with `global alpha` 0 -
@@ -79,7 +79,7 @@ So:
 - `music_1` is event 4 - see [Where the events come
   from](scene-events.md#where-the-events-come-from).
 
-`particles-themes.js` plays the three sequences on the particle side, on top of the theme, as
+`scene-themes.js` plays the three sequences on the particles and the wave, on top of the theme, as
 `sequence` names them - see [Modelled choices](implementation.md#modelled-choices).
 
 ## The XMB starts by fading out of `coldboot1`
@@ -98,13 +98,16 @@ lands on the same answer three times, to within 6e-7, which is float noise:
 
 The particles' `glare` agrees on where it comes from: 0.201367 in the first two, which is
 `coldboot1`'s value where the cycle at that hour would be holding `higure`'s 0.18748 - and
-0.18748 exactly in the last two. But it does not agree on when: it was still sitting on the
-coldboot value with the backdrop 84 per cent of the way across, and read 0.188132, 95 per cent,
-where the backdrop was at 99.6. At boot the particle side trails the backdrop by much more than
-the twentieth of a second it trailed by during the music change.
+0.18748 exactly in the last two. It holds the coldboot value through the first two because what
+the backdrop measures there is the approach to `coldboot2`, whose particles are `coldboot1`'s: the
+wave's uniforms put those captures 61 and 184 frames after `BootBG2` - see [How one set blends
+into another](day-cycle.md#how-one-set-blends-into-another). In the third, 0.188132 is 95.3 per
+cent of the way to `higure`'s, where the backdrop and the wave are at 96.3.
 
 **And the pool fills from empty.** The draws carry 492 particles, then 1317, then 2019 and
-about 2020 from there on. The console opens the XMB with nothing in the air and lets emission
+about 2020 from there on - 73, 205 and 405 of the lines' steps after the reset, by the lattice's
+time, where the page's pool, emptied as its start begins, holds 444 to 524, 1286 to 1449 and about
+2030 over three seeds. The console opens the XMB with nothing in the air and lets emission
 fill it; `ps3xmbwave/` instead pre-warms 300 steps on its first frame, so the page opens full.
 That is a deliberate difference, not a missing piece.
 
@@ -224,19 +227,15 @@ from](scene-events.md#where-the-events-come-from) - and
 
 While the set is in or on its way out, the clock is held, so the hour does not move the scene.
 
-**The curve is eased**, a smoothstep, and the captures said so first: the particles trail the
-backdrop by 0.009017 in the first capture and 0.000875 in the second, a ratio of ten. A
-constant lag - the parameter block reaching the SPU a frame or two late, about a twentieth of
-a second here - opens a gap proportional to how fast the factor is moving, so on a straight
-line both gaps would be equal. A smoothstep's slope at those two points differs by 13.7 times.
-The argument rests on the lag being a constant time; the code settles it.
+**The curve is eased**, a smoothstep, as the code says; the particles trail the backdrop by
+0.009017 in the first capture and 0.000875 in the second, the ratio of a smoothstep's slopes there
+behind a constant lag.
 
 The wave moves in the same window, and its geometry says so: mean y over the 16384 vertices
 runs 0.536 with no music, 0.701 at the 15 per cent point, then 2.432 and 2.400 at the end -
 against 2.406 in a capture taken ten minutes later with everything settled.
 
-`ps3xmbwave/` applies only the particle column of that table, as `musicPlayback` starts and
-stops the music - see [Modelled choices](implementation.md#modelled-choices). The rest - the
-wave's place and tilt, the tone mapper, the backdrop without a month in it - waits for the
-wave's own pass, where an override mechanism for `LINE1.mnu`, `HDR.mnu` and `BACKGROUND.mnu`
-would carry all the hidden sets at once, not just this one.
+`ps3xmbwave/` applies the particle and the wave columns of that table, as `musicPlayback` starts
+and stops the music - see [Modelled choices](implementation.md#modelled-choices) - and every
+other set's `LINE1.mnu` with its `PARTICLES.mnu`. The tone mapper and the backdrop without a month
+in it, `HDR.mnu` and `BACKGROUND.mnu`, are not applied.

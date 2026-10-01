@@ -351,7 +351,7 @@
     let count = 0;
     let stepCarry = 0;
     let warm = false;
-    let sequence = 'none'; // the boot sequence the settings name, which `particles-themes.js` plays
+    let sequence = 'none'; // the boot sequence the settings name, which `scene-themes.js` plays
 
     // --- Verified: the update task (0x6ed0), one call per frame over the whole pool -------------------------------
     function runTask() {

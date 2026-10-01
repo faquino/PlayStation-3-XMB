@@ -150,9 +150,16 @@ to CSV. **A savestate holds both of the wave's buffers, a frame apart,** which a
 give. They are found by what the camera does to a projected point: z = 1.0002 w - 0.20002 at
 every vertex. `tools/bench/wave-frames.py` extracts the wave from both kinds of file into
 `re-work/wave-frames/`, naming each capture's set, for `tools/bench/wave.js` - see
-[What the console draws](../../docs/wave/output.md). That is the console's output, not the
-`b300`/`b380` inputs the [wave notes](../../WAVE_REVERSE_ENGINEER.md#still-missing) still want,
-but it is ground truth to measure a pipeline against.
+[What the console draws](../../docs/wave/output.md).
+
+**`ffd_shader1`'s live `_Time` dates a source.** Ten times the lines' clock a step back, it says how
+many steps they have run since the cold boot reset them - see [The
+time](../../docs/wave/ffd.md#the-time) - and `wave-frames.py` records it. A savestate holds one copy
+of the program; a capture, as with the parameter block, also keeps the copies of the captures before
+it in the session, and its own is the latest, so the largest. Within a change of set, the wave's
+`_Brightness`, `_MipmapBias` and `_Fresnel`, which its draw carries as vertex constants, say how far
+the blend had got - see [How one set blends into
+another](../../docs/particles/day-cycle.md#how-one-set-blends-into-another).
 
 The cache only grows, which makes it a coverage recorder. To find the code behind a
 behaviour, copy `spu-safe-v1-tane.dat`, trigger the behaviour in RPCS3 (shake the

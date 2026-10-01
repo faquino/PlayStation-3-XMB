@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 // Headless bench for the particle system: runs the simulation over the wave wave-reverse.js builds, under night's
-// LINE1.mnu as the resting savestate was, and prints what its pool and its drawn particles look like, beside the same
-// measurements read off the console.
+// LINE1.mnu (scene-themes.js) as the resting savestate was, and prints what its pool and its drawn particles look
+// like, beside the same measurements read off the console.
 //
 // The console's column is not a target to hit exactly - the pool is one moment of one savestate and the captures are
 // two frames - but a change to the simulation should move it towards them and must not move the drawn metrics away.
@@ -20,8 +20,7 @@ const path = require('path');
 const DIR = path.join(__dirname, '..', '..', 'ps3xmbwave');
 // The load order index.html uses; each file reads the globals the ones before it export.
 const FILES = ['background-gradients-night.js', 'background-gradients-day.js', 'spline-settings.js',
-  'particles-themes.js', 'particles-settings.js', 'wave-reverse.js', 'particles-reverse.js'];
-const SETS = require('./line-sets.js');
+  'scene-themes.js', 'particles-settings.js', 'wave-reverse.js', 'particles-reverse.js'];
 
 const ASPECT = 16 / 9;
 const STEP_HZ = 60;
@@ -90,7 +89,7 @@ function three(values, digits) {
 }
 
 function simulate(seconds, seed) {
-  const S = Object.assign({}, window.SPLINE_SETTINGS, SETS.night);
+  const S = Object.assign({}, window.SPLINE_SETTINGS, window.WAVE_THEMES.night);
   const PS = window.PARTICLE_SETTINGS;
   const wave = window.PS3WaveReverse.createWave();
   const surface = { settings: S, wave, mesh: wave.mesh, aspect: ASPECT };

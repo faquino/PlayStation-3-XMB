@@ -40,8 +40,9 @@ What `ps3xmbwave/` ports as verified and what it models, file by file;
 | File | Verified | Modelled |
 |---|---|---|
 | `wave-reverse.js` | The lines, from their 60 Hz steps to the grid the task receives; the lattice; the deformation, the matrix and the B-spline surface, into the 128 × 128 mesh `spline.elf` writes; its texture coordinates and index buffer. Each checked against the savestates. | The lines' start, made by running them; at most four steps a frame; the deformation divides exactly. |
-| `spline.js` | `lines1.vpo` and `lines1.fpo`, re-authored, and the additive blend. | `_Stripes` and `_FresLUT`, fitted; `_Encode` and the passes after the wave, as one gain, `exposure`. |
+| `spline.js` | `lines1.vpo` and `lines1.fpo`, re-authored, and the additive blend. The lines start afresh as the XMB's start begins. | `_Stripes` and `_FresLUT`, fitted; `_Encode` and the passes after the wave, as one gain, `exposure`. |
 | `spline-settings.js` | `LINE1.mnu`'s parameters under their own names, with the base set's values. | `exposure`. |
+| `scene-themes.js` | Every set's `LINE1.mnu`, as its differences from the base, put in as the particles' sets are: the day cycle, the boot sequences, the music. The cold boot's ramp, checked against the captures. | The blends' windows on the page's seconds. |
 
 ## Still missing
 
@@ -53,12 +54,14 @@ wave on screen:
   `HDR.mnu` probably drives them (inferred). Also where `_Stripes` and `_Encode` are made, where
   `FALLOFF` goes, since no uniform of the two programs is named for it, and `_Gamma`, which the
   scene sends the wave's renderer too (`0x70bf8`).
-- **The sets.** Every override carries its own `LINE1.mnu`, and the music's moves the wave up and
-  forward - see [The music set](docs/particles/parameter-sets.md#the-music-set). The day cycle
-  blends the wave's set by the particles' factor - see [Themes blend over
-  hours](docs/particles/day-cycle.md#themes-blend-over-hours) - and the cold boot resets the lines
-  and holds their noise back - see [From the start](docs/wave/lines.md#from-the-start). The page
-  runs the base set.
+- **The lines' start and pace.** Run from the reset under the console's sets, the page's lines
+  stay slower, lower and longer than the console's, and its wave sits lower and deeper - see
+  [Against the console](docs/wave/implementation.md#against-the-console). The start it makes is
+  wider than the console's baked one; whether the pace comes from the start alone is open.
+- **The blends' clock.** Under RPCS3 the sets' blends ran 2.4 to 2.7 times ahead of the lines'
+  steps, where the code moves both by the frame's time - see [How one set blends into
+  another](docs/particles/day-cycle.md#how-one-set-blends-into-another). `HDR.mnu`'s and
+  `BACKGROUND.mnu`'s sets wait for the passes after the wave and the backdrop.
 - **The FFD's other programs.** `ffd_alpha_blend.fpo`, drawn every frame after `ffd_shader1`,
   and `ffd_shader0`, 2 and 3, which no set picks - see [The draws](docs/wave/ffd.md#the-draws).
 - **The clock's wrap.** What `0x47af0` does when the lines' clock passes 10 and starts again,

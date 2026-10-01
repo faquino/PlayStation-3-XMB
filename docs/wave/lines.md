@@ -90,17 +90,19 @@ off, reversing its lanes, or leaving out either kind of spring all fit worse in 
 
 Running the steps from the reset to a savestate's count gets the lines' shape but not their detail:
 the points end 0.005 apart on average after 1235 steps and 0.02 after 2193. Part of the reason is
-the cold boot, which moves `PERTURBATION` while they run (inferred). `coldboot1`'s is 0, and the
-runs fit best when it starts there at the reset and moves 1% of the way to `coldboot2`'s 0.0998587
-each step, as blend mode 1 does each frame at 60 frames a second, until the day cycle's set takes
-over at 4 seconds - see [How one set blends into
-another](../particles/day-cycle.md#how-one-set-blends-into-another). With the full value from the
-reset the points end 0.033 apart after 1235 steps, and with a smoothstep over 3 seconds 0.009.
+the cold boot, which moves `PERTURBATION` while they run. **Verified** in the boot's captures:
+`coldboot1` goes in at once as `BootBG2` resets the lines, its `PERTURBATION` 0, then blend mode 1
+takes it 1% of the way to `coldboot2`'s 0.0998587 each frame, until the day cycle's set comes in
+over 7.5 seconds at 4 - see [How one set blends into
+another](../particles/day-cycle.md#how-one-set-blends-into-another). The runs fit best that way,
+moving it once a step: with the full value from the reset the points end 0.033 apart after 1235
+steps, and with a smoothstep over 3 seconds 0.009.
 
 What is left is not traced. The lines magnify any difference - 1e-6 added to one velocity grows to
 3.5e-5 by step 2193 and 0.08 by step 6000 - but starting the ramp a step later moves the points by
 only 3e-4 at step 1235, a fifteenth of what is left. The boot's frame pacing, which no savestate
-records, is a candidate.
+records, is a candidate: in the captures the ramp's first 61 and 184 frames took 73 and 205
+steps.
 
 ## What the task receives
 

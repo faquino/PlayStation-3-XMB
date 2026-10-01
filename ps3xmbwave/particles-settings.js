@@ -2,12 +2,14 @@
 // Particle parameters: firmware defaults from PARTICLES.mnu and PARTICLES_UI.mnu, plus the console's state the
 // particles are drawn under and the knobs of the modelled PPU side. Consumed by `particles.js`, `particles-reverse.js`
 // and `xmb-input.js`; sliders from `settings-panels.js`, which shows each meta's `help` as its label's tooltip.
-// Reads `PARTICLE_THEME_OPTIONS` (`particles-themes.js`) at load time for the theme dropdown.
+// Reads `PARTICLE_THEME_OPTIONS` (`scene-themes.js`) at load time for the theme dropdown. The theme, the sequence,
+// the music and Theme Settings are the whole scene's state: `scene-themes.js` writes the wave's sets by them too.
 
 window.PARTICLE_SETTINGS = {
-  // Theme parameter set from `particles-themes.js`; 'base' is the firmware's own PARTICLES.mnu below.
+  // The scene's parameter set, from `scene-themes.js`; 'base' is the firmware's own PARTICLES.mnu below, and
+  // LINE1.mnu.
   theme: 'auto',
-  // A boot sequence played on top of the theme (`particles-themes.js`): the XMB's start, or a game's or other
+  // A boot sequence played on top of the theme (`scene-themes.js`): the XMB's start, or a game's or other
   // content's launch, after which the XMB starts again. It returns to 'none' when it is over.
   sequence: 'none',
 
@@ -86,8 +88,8 @@ window.PARTICLE_SETTINGS = {
   // What's New's board (wboard_plugin) opening its list: over 2 s the particles speed up and glint more
   // (PARTICLES_SPE.mnu), and closing it takes them back
   whatsNewBoard: 'closed',
-  // Music playing in the XMB: the particles go to the music set over 5.5 s and hold it whatever the hour; when it
-  // stops, to the base set over 5.5 s and then back to the theme (`particles-themes.js`)
+  // Music playing in the XMB: the scene goes to the music set over 5.5 s and holds it whatever the hour; when it
+  // stops, to the base set over 5.5 s and then back to the theme (`scene-themes.js`)
   musicPlayback: 'stopped',
   // Theme Settings > Background > Brightness, Normal to -5: the particles drawn at 1 - 0.15 per step, faded to over 1 s
   themeBrightness: '0',
@@ -107,9 +109,10 @@ window.PARTICLE_SETTINGS = {
 window.PARTICLE_SETTINGS_META = {
   theme: {
     type: 'select', options: window.PARTICLE_THEME_OPTIONS,
-    help: "Which parameter set the particles run on: one of the firmware's theme sets, Base for PARTICLES.mnu " +
-      'itself, or Auto, which blends dawn, day, dusk and night with the clock.\n' +
-      'Firmware override sets, played by particles-themes.js',
+    help: "Which parameter set the scene runs on, the particles and the wave alike: one of the firmware's theme " +
+      'sets, Base for PARTICLES.mnu and LINE1.mnu themselves, or Auto, which blends dawn, day, dusk and night with ' +
+      'the clock.\n' +
+      'Firmware override sets, played by scene-themes.js',
   },
   sequence: {
     type: 'select',
@@ -118,8 +121,8 @@ window.PARTICLE_SETTINGS_META = {
       { value: 'gameboot', label: 'Game launch' }, { value: 'otherboot', label: 'Other launch' },
     ],
     help: "Plays one of the XMB's boot sequences over the theme: its start, a game's launch or another content's. It " +
-      'goes back to None when it is over.\n' +
-      "The scene's own .rco animations, played by particles-themes.js",
+      "goes back to None when it is over. The XMB's start begins the wave's lines afresh.\n" +
+      "The scene's own .rco animations, played by scene-themes.js",
   },
 
   emitVelMin: {
@@ -490,8 +493,9 @@ window.PARTICLE_SETTINGS_META = {
   },
   musicPlayback: {
     type: 'select', options: [{ value: 'stopped', label: 'Stopped' }, { value: 'playing', label: 'Playing' }],
-    help: 'Music playing in the XMB: the particles go to the music set over 5.5 s and hold it whatever the hour. ' +
-      'When it stops they go to the base set (PARTICLES.mnu) over 5.5 s, then back to the theme over 1 s.\n' +
+    help: 'Music playing in the XMB: the particles and the wave go to the music set over 5.5 s and hold it ' +
+      'whatever the hour, the wave rising and coming forward. When it stops they go to the base set ' +
+      '(PARTICLES.mnu, LINE1.mnu) over 5.5 s, then back to the theme over 1 s.\n' +
       "Console state: the scene's music event (event 4)",
   },
   themeBrightness: {
@@ -515,7 +519,7 @@ window.PARTICLE_SETTINGS_META = {
     ],
     help: "Theme Settings' Colour: a month stops the scene's clock at noon on the 1st of that month, whatever the " +
       "date and hour, so the Auto theme holds the day set and the backdrop's Auto gradient that month's daytime " +
-      'colour. Original lets the clock run. The particles take a change over 1 s.\n' +
+      'colour. Original lets the clock run. The particles and the wave take a change over 1 s.\n' +
       'Console state: Theme Settings (registry key 0x5f)',
   },
   xmbBackground: {

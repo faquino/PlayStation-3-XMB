@@ -12,7 +12,7 @@
   <script src="background-gradients-night.js"></script>
   <script src="background-gradients-day.js"></script>
   <script src="spline-settings.js"></script>
-  <script src="particles-themes.js"></script>
+  <script src="scene-themes.js"></script>
   <script src="particles-settings.js"></script>
   <script src="settings-panels.js"></script>
   <script src="wave-reverse.js"></script>
@@ -49,11 +49,14 @@
       window.addEventListener('resize', resize);
       resize();
 
-      window.createSettingsPanel({
+      const splinePanel = window.createSettingsPanel({
         id: 'spline-panel',
         title: 'Spline Controls',
         settings: window.SPLINE_SETTINGS,
         meta: window.SPLINE_SETTINGS_META,
+        // What the theme and the sequences write into the wave: a value changed by hand there can be locked
+        // against them.
+        lockable: window.WAVE_THEME_KEYS,
         position: { top: '12px', right: '12px' },
         showPosition: { top: '12px', right: '12px' },
       });
@@ -69,17 +72,21 @@
         showPosition: { top: '12px', left: '12px' },
       });
 
-      // The theme writes the firmware's own parameter set into the settings; on 'auto' it keeps up with the clock. It
-      // leaves alone what is locked from the panel.
-      function syncParticleTheme() {
-        const settings = window.PARTICLE_SETTINGS;
-        const locks = particlesPanel ? particlesPanel.locked : null;
-        const writer = window.applyParticleTheme(settings, settings.theme, undefined, locks);
-        // It names who wrote - the theme, the music or a sequence - and the panel colours each apart.
-        if (writer && particlesPanel) particlesPanel.refresh(writer);
+      // The theme writes the firmware's own parameter sets into the particles' and the wave's settings; on 'auto' it
+      // keeps up with the clock. The particle panel holds the scene's state it follows, and it leaves alone what is
+      // locked from either panel.
+      function syncThemes() {
+        const scene = window.PARTICLE_SETTINGS;
+        const writers = window.applySceneThemes(scene, {
+          particles: { settings: scene, keep: particlesPanel ? particlesPanel.locked : null },
+          wave: { settings: window.SPLINE_SETTINGS, keep: splinePanel ? splinePanel.locked : null },
+        });
+        // It names who wrote - the theme, the music or a sequence - and each panel colours them apart.
+        if (writers.particles && particlesPanel) particlesPanel.refresh(writers.particles);
+        if (writers.wave && splinePanel) splinePanel.refresh(writers.wave);
       }
 
-      syncParticleTheme();
+      syncThemes();
 
       const splineLayer = window.createSplineLayer(gl, canvas);
       const input = window.createXmbInput(canvas, window.PARTICLE_SETTINGS);
@@ -94,9 +101,11 @@
 
         splineTimeSec += dtSec;
 
-        syncParticleTheme();
-        // The backdrop shows the moment the scene's clock does, which Theme Settings' Colour can stop.
-        splineLayer.render(splineTimeSec, window.xmbSceneDate(window.PARTICLE_SETTINGS.themeColor));
+        syncThemes();
+        // The backdrop shows the moment the scene's clock does, which Theme Settings' Colour can stop, and the wave
+        // starts its lines afresh as the XMB's start begins.
+        const scene = window.PARTICLE_SETTINGS;
+        splineLayer.render(splineTimeSec, window.xmbSceneDate(scene.themeColor), scene.sequence);
         // The particles are emitted from the wave just drawn, so they share its clock.
         particlesLayer.render(splineTimeSec, dtSec);
         requestAnimationFrame(frame);

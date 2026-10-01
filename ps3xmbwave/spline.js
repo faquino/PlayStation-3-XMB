@@ -301,10 +301,17 @@
 
     const surface = { settings, wave, mesh: wave.mesh, aspect: 16 / 9 };
     let lastTime = null;
+    let lastSequence = 'none';
 
-    function render(timeSec, date) {
+    // `date` is the moment the scene's clock shows, and `sequence` the boot sequence playing: the XMB's start resets
+    // the lines, as the cold boot's handlers do (0x1b05c).
+    function render(timeSec, date, sequence) {
       const dtSec = lastTime === null ? 0 : Math.max(0, timeSec - lastTime);
       lastTime = timeSec;
+      if (sequence !== undefined && sequence !== lastSequence) {
+        lastSequence = sequence;
+        if (sequence === 'coldboot') wave.reset();
+      }
       surface.aspect = canvas.width / Math.max(1, canvas.height);
       wave.update(settings, dtSec, surface.aspect);
       window.__PS3_WAVE_STATE = wave.state;

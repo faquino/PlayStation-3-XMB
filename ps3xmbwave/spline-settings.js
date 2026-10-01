@@ -1,6 +1,7 @@
 'use strict';
 // The backdrop's and the wave's settings: LINE1.mnu's parameters under their own names, with the firmware's values.
-// Read by `spline.js` and `wave-reverse.js`, and shown by `settings-panels.js`; declarative only, no runtime logic.
+// Read by `spline.js` and `wave-reverse.js`, written by `scene-themes.js` as the scene's set moves, and shown by
+// `settings-panels.js`; declarative only, no runtime logic.
 
 window.SPLINE_SETTINGS = {
   gradientPreset: 'auto',
@@ -12,7 +13,8 @@ window.SPLINE_SETTINGS = {
   gradientTopMul: 0.09,
   gradientBotMul: 0.62,
 
-  // LINE1.mnu, the base set. The keys are its parameters' names in camelCase.
+  // LINE1.mnu, the base set, which the scene's sets are differences from. The keys are its parameters' names in
+  // camelCase.
   damping: 0.0001,
   length: 0.306001,
   tension: 0.25,

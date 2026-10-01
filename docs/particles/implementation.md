@@ -52,21 +52,22 @@ on each frame that passes its draw, simply keeps it that way.
   Headless it stays within 1e-15 of the firmware's curve, and in the browser the particles'
   light scales with it, to nothing when hidden. The wave does not fade: that part is not ported.
 - **Boot sequences.** `sequence` plays the XMB's start, a game's launch or another content's,
-  as [What puts each set in](parameter-sets.md#what-puts-each-set-in) reads them: each step blends from wherever
-  the parameters stand, and the start hands over to the theme at 11.5 seconds, once its blend
-  into the cycle is done. What is modelled:
-  - the cold boot's first 4 seconds, where the console puts `coldboot2` in by an exponential
-    approach: its particles are `coldboot1`'s, so the page leaves it out;
+  on the particles and the wave, as [What puts each set in](parameter-sets.md#what-puts-each-set-in)
+  reads them: each step blends from wherever the parameters stand, the cold boot's first 4
+  seconds by mode 1's 1% a frame, which leaves the particles where `coldboot1` put them, and the
+  start hands over to the theme at 11.5 seconds, once its blend into the cycle is done. What is
+  modelled:
+  - mode 1's frames, taken at 60 a second;
   - what follows a launch: the content takes the screen, and the page brings the XMB back
     through its start at once, as the console does when the content quits;
   - the pool. The XMB's start builds it again, empty and with every orientation the identity,
-    as the console's scene does, and the page does not pre-warm it. But the page's fills in
-    about five seconds, where the console's held 492 particles with its blend into the cycle
-    46 per cent done - its wave may come up still (not followed). Only the particle side changes:
-    the backdrop and the wave keep their settings, and the wave is not reset as the console's is -
-    see [The start](../wave/lines.md#the-start).
+    as the console's scene does, and the page does not pre-warm it. It fills as the console's
+    does - see [The XMB starts by fading out of
+    `coldboot1`](parameter-sets.md#the-xmb-starts-by-fading-out-of-coldboot1). The wave's lines
+    start afresh too, as the console's do - see [The start](../wave/lines.md#the-start); the
+    backdrop keeps its settings.
 - **The music and the scene's clock.** `musicPlayback` plays [the music's way in and
-  out](parameter-sets.md#the-music-set) on the particle side, and `themeColor` stands for Theme
+  out](parameter-sets.md#the-music-set) on the particles and the wave, and `themeColor` stands for Theme
   Settings' Colour, which [stops the scene's
   clock](day-cycle.md#theme-settings-colour-stops-the-clock) for the `auto` theme and, through
   `xmbSceneDate`, the backdrop's Auto gradient. Headless, each step lands on the firmware's sets.

@@ -38,7 +38,7 @@ What `ps3xmbwave/` ports as verified and what it models, file by file;
 |---|---|---|
 | `particles-reverse.js` | The update task, steps 1 to 8. The pool layout, free marker, life bounds and camera. The parameter block: its layout, the values at every offset, and how the PPU fills it, the flow grid and the noise included. The emitter and its random numbers, on the vertices of the wave `wave-reverse.js` builds. The controller's response: the D-pad's turn and kicks, the motion, the shake detectors. `PARTICLES_SPE.mnu`, as the PPU applies it, and its first factor's animation. The particles' fade, `_Color`. The icons' layout on screen, measured. | How the icons move; how often the XMB repeats a held direction; the pool's first orientations, uniform as the console's are after many generations. |
 | `particles.js` | Both passes, re-authored from the decompiled programs, fed with the `.mnu` values [`shaders.md`](docs/particles/shaders.md) maps to uniforms, `PARTICLES_SPE.mnu` applied. `color_control` as the programs use it, and `_Color` from the system's fade. | `_Gamma` held at 1, its value in every savestate. The iridescent texture comes from the fit. |
-| `particles-themes.js` | The nine distinct theme sets, as their differences from the base. The boot sequences: which set each step puts in, when, and over how long. The music, and Theme Settings' Colour. [The day's schedule](docs/particles/day-cycle.md) and every blend's curve. | The clock's tick, taken at once. |
+| `scene-themes.js` | The nine distinct theme sets, as their differences from the base, and every set's `LINE1.mnu` for the wave. The boot sequences: which set each step puts in, when, and over how long. The music, and Theme Settings' Colour. [The day's schedule](docs/particles/day-cycle.md) and every blend's curve. | The clock's tick, taken at once; the blends' windows on the page's seconds - see [How one set blends into another](docs/particles/day-cycle.md#how-one-set-blends-into-another). |
 | `xmb-input.js` | What it hands over: steps with the XMB's four directions, and the four sensors in the PPU's units. | The rest: the mouse and keyboard stand in for the controller. |
 
 ## Still missing
@@ -65,8 +65,9 @@ Also missing:
   fit](docs/particles/shaders.md#the-iridescent-texture).
 - What `paf` keeps in the variables `_Gamma` comes from - see [Uniform values at run
   time](docs/particles/shaders.md#uniform-values-at-run-time).
-- What starts `anim_coldboot`, who sends events 2 and 3, and how a set put in at once takes hold
-  in [the cold boot's first 4 seconds](docs/particles/day-cycle.md#how-one-set-blends-into-another).
+- What starts `anim_coldboot`, who sends events 2 and 3, and which clock the sets' blends keep:
+  under RPCS3 they ran 2.4 to 2.7 times ahead of the wave's lines - see [How one set blends into
+  another](docs/particles/day-cycle.md#how-one-set-blends-into-another).
 
 ## Keeping these notes
 

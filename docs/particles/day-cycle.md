@@ -60,12 +60,26 @@ wherever the parameters stand, bar the cold boot's first 4 seconds, where `coldb
 the exponential approach - its particles are `coldboot1`'s.
 
 A set put in at once resets each parameter to its default and hands its values over as where the
-blend starts rather than as targets (`0x5245c`), which mode 1 does not read. How `coldboot1`
-takes hold in those 4 seconds is not settled: the method that stores the values, the parameters'
-table's +0x1c, is not relocated in the decrypted module. The wave's lines suggest it takes hold at
-once (inferred): their state in the savestates fits best a `PERTURBATION` that starts from
-`coldboot1`'s 0 as `BootBG2` resets them and moves 1% of the way to `coldboot2`'s each step - see
-[From the start](../wave/lines.md#from-the-start).
+blend starts rather than as targets (`0x5245c`), which mode 1 does not read. **`coldboot1` takes
+hold at once all the same, measured.** Mode 1 moves a parameter by (target - where it stands) ×
+0.01 each time it is blended, and puts it on the target once that move is small enough
+(`0x1ea04`). In the four captures taken in the cold boot's first 4 seconds, the wave's
+`BRIGHTNESS`, `MIPMAP BIAS` and `FRESNEL`, which differ between the two sets, are `coldboot1`'s
+with 0.99^n of the way to `coldboot2`'s still to go: n is 61 and 184 in one boot, 64 and 220 in
+another, whole numbers to within 0.001 and the same for the three, and the backdrop's corners give
+the same factor. In the capture of 18:22:52 they agree again, on `NormalBG2` having come 228
+frames in and on its smoothstep being 96.286 per cent of the way to the cycle's set.
+
+**The windows' clock is not settled.** The layer's clock moves on by the frame's time
+(`0x3a06c`), the same time the scene hands the wave's lines through the layer's update
+(`0x14820`), and the lines step 60 times a second of it - so a 7.5-second blend should last 450
+of their steps. Under RPCS3 it does not. The lattice's time, which counts the lines' steps - see
+[The time](../wave/ffd.md#the-time) - puts the capture of 18:22:52 406 steps after the reset, where
+the blend's progress needs about 650; and the two captures that caught the music coming in are 90
+steps apart, where the 5.5-second smoothstep moved through 245 frames' worth. Both blends ran 2.4
+to 2.7 times ahead of the lines. In the cold boot's first 4 seconds the two agree instead: the
+lines stepped 73 and 205 times by frames 61 and 184, as frames of a fiftieth to a fifty-fifth of
+a second give. `ps3xmbwave/` keeps both on the page's seconds.
 
 ## Theme Settings' Colour stops the clock
 

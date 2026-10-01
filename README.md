@@ -20,7 +20,7 @@ While this is inspired by the official PlayStation 3 XMB background wave design,
 
 ## Current Features (new implementation in `ps3xmbwave`)
 
-- **Reverse-engineered wave**: `wave-reverse.js` builds the wave the way the console does - the PPU's simulation of 19 lines, the GPU's deformation lattice and the SPU's B-spline surface - into the console's own 128 × 128 mesh, and `spline.js` draws it with the XMB's line programs re-authored in GLSL.
+- **Reverse-engineered wave**: `wave-reverse.js` builds the wave the way the console does - the PPU's simulation of 19 lines, the GPU's deformation lattice and the SPU's B-spline surface - into the console's own 128 × 128 mesh, and `spline.js` draws it with the XMB's line programs re-authored in GLSL. The firmware's parameter sets move it as they move the particles: through the day, the XMB's start, a game's launch and the music.
 - **WebGL2 renderer**: Pure WebGL2 rendering path (background + spline mesh + particles), no framework dependency.
 - **Day/Night monthly gradient presets**: 12 month presets with day/night variants are available in the UI, plus a fallback "Original (RGB Sliders)" mode. The default is `Auto (date and time)`, which does what the console does: it walks from this month's colour to next month's across the month and mixes the day and night tables by the hour.
 - **Live control panels**: Separate spline and particle panels with per-setting sliders/selects and reset buttons.
@@ -31,7 +31,7 @@ While this is inspired by the official PlayStation 3 XMB background wave design,
 
 - Day/night gradients are now integrated as actual presets, but they're not perfect like in the .dds files, so this issue is partially solved.
 - Sparkles run the console's own update task now, and a headless bench (`tools/bench/particles.js`) compares their pool with one read out of a savestate. What is left is the PPU side that feeds it - the emitter and the flow field are still modelled - and they drift about twice as fast as the console's late in life.
-- The wave's geometry is the console's own now, checked piece by piece against savestates. What is left is its look - some thirty post-processing passes run after it on the console and are not traced yet, so a single exposure stands in for them - and following the day cycle's parameter sets.
+- The wave's geometry is the console's own now, checked piece by piece against savestates. What is left is its look - some thirty post-processing passes run after it on the console and are not traced yet, so a single exposure stands in for them - and the pace of its lines, which run a little slower and lower than the console's.
 
 ## Local Development
 
@@ -85,8 +85,8 @@ npm run start
 - **Wave source**: the console's 128 × 128 mesh, built on the CPU each frame by `wave-reverse.js` and uploaded as a vertex buffer.
 
 ### Reverse-engineered wave status
-- **What is implemented**: the lines' simulation, the deformation lattice, the free-form deformation, the camera and the B-spline surface, with the line programs' shading - see [WAVE_REVERSE_ENGINEER.md](WAVE_REVERSE_ENGINEER.md).
-- **What is still missing**: the post-processing passes that follow the wave, and the day cycle's parameter sets for it.
+- **What is implemented**: the lines' simulation, the deformation lattice, the free-form deformation, the camera and the B-spline surface, with the line programs' shading, and the firmware's `LINE1.mnu` sets - see [WAVE_REVERSE_ENGINEER.md](WAVE_REVERSE_ENGINEER.md).
+- **What is still missing**: the post-processing passes that follow the wave, and why its lines run slower than the console's.
 
 ## Contributing
 
@@ -112,7 +112,7 @@ This project is open source and available under the [MIT License](LICENSE).
 
 ## TODO
 
-- Trace the post-processing passes that follow the wave, and have the wave follow the day cycle's `LINE1.mnu` sets.
+- Trace the post-processing passes that follow the wave, and find why the wave's lines run slower than the console's.
 - Find what makes the sparkles drift twice as fast as the console's late in life; the notes list six causes already ruled out.
 - Keep tuning wave calmness and flow cadence to better match real hardware captures. I realise the waves have sharp edges, when the real thing is like a water wave (just realised it!)
 - Validate month day/night gradients against more references and tighten remaining color/angle drift.
