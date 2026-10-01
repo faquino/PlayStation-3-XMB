@@ -102,6 +102,13 @@ already sits 128 bytes early - the pointers its start-up stores at `0xb080` and 
 `0xb000` and `0xb100` - which is what once put the block at `0xb180` instead of the `0xb200` the
 code loads it into.
 
+`spline.elf`'s local store takes the same correction. Its code turns up twice: the copy with an
+ELF header 256 bytes before the code is the file itself, in main memory, and the other is a local
+store. There everything from `0x9b80` sits 128 bytes early, the zero line at `0x9b80` being left
+out. The B-spline basis matrix the task builds at `0xd5c0`, `be2aaaaa 3effffff beffffff 3e2aaaaa`,
+anchors the data. When two local stores hold the task, the one whose grid reproduces a wave buffer
+is the one that ran last - see [The SPU task](../../docs/wave/spu-task.md).
+
 **A savestate also remembers what code ran.** Stacks keep the return addresses of recent calls,
 stale frames included, and `coverage.py` recognises the frames by their layout, places the module
 by voting (each saved return address, paired with each `bl`, votes for a load address) and lists

@@ -22,7 +22,11 @@ it first, then only the topics the task needs - see [Keeping these notes](#keepi
 
 | File | What it covers |
 |---|---|
-| [`output.md`](docs/wave/output.md) | The wave as the RSX draws it: the two buffers, the 128 × 128 mesh, its normal and texture coordinates, the bicubic B-spline patch it points to, the draw's uniforms |
+| [`output.md`](docs/wave/output.md) | The wave as the RSX draws it: the two buffers, the 128 × 128 mesh, its normal and texture coordinates, the draw's uniforms |
+| [`spu-task.md`](docs/wave/spu-task.md) | `spline.elf` step by step: three DMAs in, a free-form deformation, a matrix, and the bicubic B-spline surface over 19 × 19 control points that is the wave |
+| [`inputs.md`](docs/wave/inputs.md) | What the PPU sends the task: the job's parameters, the matrix, the grid of 19 lines, the deformation's lattice |
+| [`lines.md`](docs/wave/lines.md) | The PPU's simulation of the 19 lines: the object, the 60 Hz steps, the springs, the noise, the anchored ends, and the shaping of what the task receives |
+| [`ffd.md`](docs/wave/ffd.md) | The deformation's lattice: `ffd_shader1.fpo` on the GPU, its formula and clock, and how the PPU turns its output into the lattice |
 | [`implementation.md`](docs/wave/implementation.md) | What `ps3xmbwave/` models, and how it compares with the console |
 | [`history.md`](docs/wave/history.md) | Superseded readings, closed investigations and dead ends, for reopening a question |
 
@@ -43,19 +47,12 @@ What `ps3xmbwave/` ports as verified and what it models, file by file;
 The implementation models all of these. They are listed roughly by how much each one changes the
 wave on screen:
 
-- **The control points.** If the mesh's reading holds, a 19 × 19 grid of points drives the wave
-  every frame - see [A bicubic B-spline
-  patch](docs/wave/output.md#a-bicubic-b-spline-patch). Still needed: `b300` (16 floats) and `b380`
-  (`0x2200` bytes) as they arrive, and the code in `custom_render_plugin` that fills them from
-  `LINE1.mnu`'s `DAMPING`, `TENSION`, `LENGTH`, `TIMESTEP`, `PERTURBATION`, `END` and free-form
-  deformation.
-- **The kernel.** Whether `spline.elf` evaluates that patch, and what upstream's executor for `b380`
-  does - see [b380 and the descriptor
-  executor](SPLINE_REVERSE_ENGINEER.md#b380-and-the-descriptor-executor).
-- **The placement.** `POS`, `ANG` and `ANG ROT` place and turn the wave, and the camera projects
-  it. The vertices arrive in clip space, so this happens before the RSX, on the PPU or the SPU.
-- **The time.** How fast the wave's clock runs: `TIMESTEP` is 4 in the base set and 2 in the day
-  cycle's. A savestate's two buffers are taken as 1/60 s apart, and which one is newer is not known.
+- **The FFD's other programs.** `ffd_alpha_blend.fpo`, drawn every frame after `ffd_shader1`,
+  and `ffd_shader0`, 2 and 3, which no set picks - see [The draws](docs/wave/ffd.md#the-draws).
+- **The lines' start.** Where the constructor puts the points before the first step, and what
+  `0x47af0` does when the clock wraps at 10 - see [The lines](docs/wave/lines.md). The springs and
+  the noise are read in the code but not checked yet: running the lines from their start to a
+  savestate's step count would check them.
 - **The shading.** `lines1.fpo`, with its `_Stripes` and `_FresLUT` textures and `_Spacing` and
   `_Thinness`. Also where `FALLOFF` goes, since no uniform of the two programs is named for it,
   and `_Gamma`, which the scene sends the wave's renderer too (`0x70bf8`).

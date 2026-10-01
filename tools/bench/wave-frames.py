@@ -5,7 +5,8 @@ spline.elf writes the wave into one of two buffers, io 0x500000 and 0x580000, as
 vertices one line after the other, and lines1.vpo draws it from there. A vertex is 32 bytes: its
 position, already projected by the XMB's camera (w is the view depth), then an unnormalised
 normal. A capture holds the buffer its frame drew. A savestate holds both, a frame apart, which is
-what gives the wave's speed; which of the two is the newer is not known.
+what gives the wave's speed. Which of the two is the newer the task's local store says - see
+docs/wave/output.md - and is not recorded here.
 
 The buffers are found in a savestate by what the camera does to a point: near 0.1 and far 1000 make
 z = 1.0002 w - 0.20002 for every vertex. A savestate leaves out the 128-byte lines of memory that

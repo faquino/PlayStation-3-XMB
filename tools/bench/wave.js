@@ -209,7 +209,8 @@ function readConsole(dir, cam) {
     const these = [];
     for (let k = 0; k < entry.frames; k++) these.push(consoleFrame(floats, k * VERTICES * RECORD_FLOATS, cam));
     frames.push(...these);
-    // A savestate's two buffers are a frame apart; which is the newer is not known, and no figure here needs it.
+    // A savestate's two buffers are a frame apart. The task's local store says which is the newer (docs/wave/output.md),
+    // but no figure here needs it.
     if (these.length === 2) steps.push(these);
     used[entry.kind]++;
   }
