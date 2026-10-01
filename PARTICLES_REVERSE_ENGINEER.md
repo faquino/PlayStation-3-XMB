@@ -54,8 +54,8 @@ The implementation models all of these:
   frames is inferred from the captures; how long the XMB waits before the first repeat is not known.
 - The wave the emitter reads. The spline layer's wave is not the console's: flatter, slower, and
   with the console's 128 × 128 mesh laid over it by hand - see [Modelled
-  choices](docs/particles/implementation.md#modelled-choices). That is the spline notes' open
-  question, and it now sets the newborns' speeds.
+  choices](docs/particles/implementation.md#modelled-choices). That is the [wave
+  notes'](WAVE_REVERSE_ENGINEER.md) open question, and it now sets the newborns' speeds.
 
 Also missing:
 
@@ -75,22 +75,7 @@ Also missing:
 
 ## Keeping these notes
 
-- **Read narrowly.** This index first, then the topics the task needs. To find an address, a
-  function or a parameter, search for it (`grep -rn 0x2dde4 docs/particles`) rather than reading
-  every file. [`history.md`](docs/particles/history.md) is for reopening a closed question.
-- **Write what is known now.** A finding goes into its topic, and a reading it overturns is
-  corrected where it stands, not answered by a new section further down. How it was found (which
-  captures, at what time, the leads that failed) goes in the commit message, and in `history.md`
-  only if it is worth keeping beside the notes.
-- **Close the loop here.** When a question opens or closes, update [Status](#status) and
-  [Still missing](#still-missing) in the same commit.
-- **Retire what is superseded.** A reading that no longer holds leaves its topic; git keeps it. A
-  dead end that would save someone the search gets a line under
-  [Ruled out](docs/particles/history.md#ruled-out).
-- **Mind the size.** Keep this index under 8 KB and each topic under 15 KB. A topic that outgrows
-  it is split by subject, and the new file goes into [Topics](#topics).
-- **Don't restate the code.** Constants and their addresses are commented in `ps3xmbwave/`, and
-  the bench's figures live only in `implementation.md`, replaced when it runs again rather than
-  added to.
-- **Methods go with the tools.** How to read savestates and captures, and how to get RPCS3 where
-  a reading needs it, is in [`tools/re/README.md`](tools/re/README.md).
+The rules for the three sets of notes are in [CLAUDE.md](CLAUDE.md#keeping-the-notes). They make
+these notes the home of what the scene shares - the camera, the parameter sets, the day cycle and
+the scene's events - for the [wave's](WAVE_REVERSE_ENGINEER.md) and the
+[backdrop's](BACKGROUND_REVERSE_ENGINEER.md) notes too.

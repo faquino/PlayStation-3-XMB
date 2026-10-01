@@ -68,6 +68,19 @@ beats tracing the code that fills it. That is how the particle
 are in there too: the microcode keeps them inline, with each float's halves swapped, so
 searching for the constants beside them finds their current values.
 
+**The backdrop's uniforms were read that way** - see [What the uniforms
+read](../../docs/background/uniforms.md). `cgbin.py` finds `back_colours0.fpo` among RPCS3's
+cached shaders and maps its constants:
+
+```bash
+python tools/re/cgbin.py re-work/lines/lib/moyou/back_colours0.fpo --find-in <raw dir>
+python tools/re/cgbin.py re-work/lines/lib/moyou/back_colours0.fpo --fc-table <raw dir>/<hash>.fp
+```
+
+and, for the live values, find that microcode in a decompressed savestate by a stretch of it that
+holds no constant slots, then read the slots at the offsets the parameter table gives.
+`whichset.py`'s `live_uniform` does that for one uniform.
+
 **A frame capture carries the same uniforms, and does not hang the emulator.** Creating a
 savestate of the running XMB tends to leave RPCS3 stuck and needing to be killed, while
 Alt+C writes its capture and carries on. The capture holds the fragment microcode with the
@@ -112,11 +125,15 @@ bounds and reads it at the task's own offsets, the flow grid included. Captures 
 carrying the blocks of those before it, so a single capture gives a handful of recent values - the
 one its own memory map points at is current, and `readblock.py` marks the rest as old.
 
-A capture also holds the wave's finished geometry, which is worth knowing before the wave's
-own pass: `draws --vpo .../lines1.vpo` finds it (draw 4 in every capture so far, 16384
-vertices), and `buffer` writes position, uv and normal per vertex to CSV. That is the console's
-output, not the `b300`/`b380` inputs the spline notes still want, but it is ground truth to
-measure a pipeline against.
+A capture also holds the wave's finished geometry: `draws --vpo .../lines1.vpo` finds it (draw 4
+in every capture so far, 16384 vertices), and `buffer` writes position, uv and normal per vertex
+to CSV. **A savestate holds both of the wave's buffers, a frame apart,** which a capture cannot
+give. They are found by what the camera does to a projected point: z = 1.0002 w - 0.20002 at
+every vertex. `tools/bench/wave-frames.py` extracts the wave from both kinds of file into
+`re-work/wave-frames/`, naming each capture's set, for `tools/bench/wave.js` - see
+[What the console draws](../../docs/wave/output.md). That is the console's output, not the
+`b300`/`b380` inputs the [wave notes](../../WAVE_REVERSE_ENGINEER.md#still-missing) still want,
+but it is ground truth to measure a pipeline against.
 
 The cache only grows, which makes it a coverage recorder. To find the code behind a
 behaviour, copy `spu-safe-v1-tane.dat`, trigger the behaviour in RPCS3 (shake the

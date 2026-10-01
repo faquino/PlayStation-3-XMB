@@ -983,5 +983,6 @@
     OUT_STRIDE,
     WAVE_DEPTH_NEAR,
     WAVE_DEPTH_FAR,
+    WAVE_SPEED_GAIN,
   };
 })();

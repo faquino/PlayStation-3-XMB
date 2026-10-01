@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-WebGL2 recreation of the PlayStation 3 XMB background wave ("spline") and sparkle particles. The active implementation in `ps3xmbwave/` is driven by CPU-side pipelines reverse-engineered from the PS3's SPU tasks: `spline.elf` for the wave and `particles.elf` for the particles. `SPLINE_REVERSE_ENGINEER.md`, `PARTICLES_REVERSE_ENGINEER.md` and `BACKGROUND_REVERSE_ENGINEER.md` are the sources of truth for that reverse engineering and document what is traced vs. still synthetic. The particle notes are split by topic under `docs/particles/`, and `PARTICLES_REVERSE_ENGINEER.md` is their index: read it first, then only the topics the task needs, and follow its *Keeping these notes* rules when you add to them.
+WebGL2 recreation of the PlayStation 3 XMB background wave ("spline") and sparkle particles. The active implementation in `ps3xmbwave/` is driven by CPU-side pipelines reverse-engineered from the PS3's SPU tasks: `spline.elf` for the wave and `particles.elf` for the particles. `WAVE_REVERSE_ENGINEER.md`, `PARTICLES_REVERSE_ENGINEER.md` and `BACKGROUND_REVERSE_ENGINEER.md` are the sources of truth for that reverse engineering and document what is traced vs. still synthetic. Each is an index over topics split out under `docs/wave/`, `docs/particles/` and `docs/background/`; [Keeping the notes](#keeping-the-notes) says how to read them and add to them. `SPLINE_REVERSE_ENGINEER.md` is upstream's Ghidra reading of `spline.elf`, which `spline-reverse.js` ports: it is not edited, and what the wave pass confirms or overturns in it goes into the wave notes.
 
 ## Commands
 
@@ -21,9 +21,10 @@ Each of the three folders also has its own `docker-compose.yml` (nginx, read-onl
 
 ```bash
 node tools/bench/particles.js --seconds 30 --runs 3 --seed 1
+node tools/bench/wave.js --seconds 120 --every 2
 ```
 
-The one bench there is: it runs the particle simulation headless over the spline layer's wave and prints its pool and its drawn particles beside the same measurements read off the console — a savestate's pool and two RSX frame captures. Use it before and after touching the emitter or where the wave sits. It needs no firmware — the console's column is recorded inside it, and `tools/bench/pool-from-savestate.py` regenerates that column from a savestate if a better one turns up.
+The two benches. `particles.js` runs the particle simulation headless over the spline layer's wave and prints its pool and its drawn particles beside the same measurements read off the console — a savestate's pool and two RSX frame captures. Use it before and after touching the emitter or where the wave sits. `wave.js` measures the spline layer's wave as it is drawn — its band on screen, its depth, how fast it moves — beside the console's own wave, the meshes `spline.elf` wrote in the captures and savestates. Use it before and after touching the wave. Neither needs firmware — the console's column is recorded inside each. `tools/bench/pool-from-savestate.py` regenerates the particle column from a savestate. For the wave, `tools/bench/wave-frames.py` extracts the console's meshes into `re-work/wave-frames/` and `wave.js --console re-work/wave-frames` measures them again.
 
 **There is no build step, no test suite, and no working lint setup.** Both tool scripts glob only the repo root: `npm run lint` (`eslint *.js`) matches no files and there is no eslint config, and `npm run format` (`prettier --write *.js *.html *.md`) only ever rewrites the root Markdown files (`README.md`, `SPLINE_REVERSE_ENGINEER.md`, this file) — it never reaches `ps3xmbwave/` or `dds/`. Don't rely on either as a verification gate. Verification is visual: serve the repo and look at the canvas, plus the browser console for shader compile/link errors (both renderers throw on failure). A caution when checking an edit that way: browsers hold on to the `.js` files hard here, and a forced reload does not always shift them — loading the page from `http://127.0.0.1:8000/` instead of `http://localhost:8000/` is a different origin with an empty cache, which does.
 
@@ -33,7 +34,7 @@ The one bench there is: it runs the particle simulation headless over the spline
 
 `ps3xmbwave/` uses no bundler and no ES modules. Everything communicates through `window`: the data files (`*-settings.js`, `background-gradients-*.js`) are plain top-level `window.X = {...}` assignments, and every other file is an IIFE that exports onto it. `index.html` loads them with plain `<script>` tags in an order that matters:
 
-1. `background-gradients-night.js`, then `background-gradients-day.js` — the day file's trailing IIFE **merges both** month tables into `window.BG_GRADIENT_PRESETS` and `window.BG_GRADIENT_PRESET_OPTIONS` (keys `MM_day` / `MM_night`, plus a `default` legacy entry and an `auto` one), and exports `window.bgGradientForDate`, which `spline.js` calls each frame under `auto`. The XMB walks from one month's texture to the next across the month rather than switching on the 1st, which is what that function reproduces; `BACKGROUND_REVERSE_ENGINEER.md` has the measurements.
+1. `background-gradients-night.js`, then `background-gradients-day.js` — the day file's trailing IIFE **merges both** month tables into `window.BG_GRADIENT_PRESETS` and `window.BG_GRADIENT_PRESET_OPTIONS` (keys `MM_day` / `MM_night`, plus a `default` legacy entry and an `auto` one), and exports `window.bgGradientForDate`, which `spline.js` calls each frame under `auto`. The XMB walks from one month's texture to the next across the month rather than switching on the 1st, which is what that function reproduces; `docs/background/uniforms.md` has the measurements.
 2. `spline-settings.js` — reads `BG_GRADIENT_PRESET_OPTIONS` **at load time** to build the preset dropdown, so it must come after both gradient files.
 3. `particles-themes.js`, then `particles-settings.js` — same pattern: the settings file reads `PARTICLE_THEME_OPTIONS` at load time for its theme dropdown.
 4. `settings-panels.js`, `spline-reverse.js`, `wave-surface-cpu.js`, `particles-reverse.js`, `xmb-input.js`, then `spline.js` / `particles.js`.
@@ -58,7 +59,7 @@ Stage order inside the pipeline mirrors the ELF flow documented in `SPLINE_REVER
 
 `buildRuntimeInputs` (settings → synthetic `b300`, 16 floats) → `buildSplineTable` (synthetic `b380` descriptor bytes → 361 × vec4 table, blended by `b300` then normalized through `NORM_A`/`NORM_B` and `tanh`) → `runKernel` (8 iterations × 8 stored vec4s, matching the `0x400`-stride store layout of `FUN_000045c0`, then temporally smoothed) → per-row B-spline evaluation over 28 control points into the texture.
 
-Constants in this file are not arbitrary: `PS3.TABLE_ENTRY_COUNT` (`0x169`), `STORE_OFFSETS_BYTES`, `OUTPUT_STRIDE_BYTES`, `R37_WORDS`, the `19 * (word >> 4) + (word & 0xF)` index math, and `NORM_A`/`NORM_B` all come from traced addresses. If you change them, reconcile with `SPLINE_REVERSE_ENGINEER.md` (and update that doc) rather than tuning them as free parameters.
+Constants in this file are not arbitrary: `PS3.TABLE_ENTRY_COUNT` (`0x169`), `STORE_OFFSETS_BYTES`, `OUTPUT_STRIDE_BYTES`, `R37_WORDS`, the `19 * (word >> 4) + (word & 0xF)` index math, and `NORM_A`/`NORM_B` all come from traced addresses. If you change them, reconcile with `SPLINE_REVERSE_ENGINEER.md` rather than tuning them as free parameters, and record the change in the wave notes, not in upstream's file.
 
 `settings.rePipelineBlend` cross-fades each control point between the reverse-engineered core and the older hand-tuned "legacy" wave sum, so `0` reproduces the guesswork look and `1` is pure RE pipeline. The `b300`/`b380` inputs are synthesized from UI settings because real runtime payloads have never been captured — that is the known gap for 1:1 output. `spline.js` stashes the pipeline's intermediates on `window.__PS3_REVERSE_STATE` each frame for console inspection.
 
@@ -84,7 +85,7 @@ The simulation steps at a fixed 60 Hz, because the task's semantics are per fram
 
 The system polls it once per frame and hands the steps to the simulation one per step, as the XMB sends them.
 
-The simulation files run under Node for headless checks with `globalThis.window = globalThis` and an indirect `eval` of each file in load order. Don't use a `vm` context: global lookups there make it about 30× slower. `tools/bench/particles.js` is that harness: it compares the pool against the console's, slot for slot in the task's own record layout, which is why `createSystem` takes an optional `seed` and the system exposes `pool`, `stride` and `free`.
+The simulation files run under Node for headless checks with `globalThis.window = globalThis` and an indirect `eval` of each file in load order. Don't use a `vm` context: global lookups there make it about 30× slower. `tools/bench/particles.js` is that harness: it compares the pool against the console's, slot for slot in the task's own record layout, which is why `createSystem` takes an optional `seed` and the system exposes `pool`, `stride` and `free`. `tools/bench/wave.js` loads the same files to measure the wave.
 
 ### Settings and UI
 
@@ -103,7 +104,7 @@ Consequences when adding a knob:
 
 ### `tools/re/` — reverse-engineering tooling
 
-Python tools (standard library only, except `ppu_prx.py`, which needs capstone) that read the user's own PS3 firmware (for example an RPCS3 install): a `.qrc` extractor, an SPU disassembler, a matcher that uses RPCS3's SPU cache to show which code actually ran, a Cg binary (`.vpo`/`.fpo`) inspector that recovers uniform values from RPCS3's shader cache and maps the constants of RPCS3's decompiled fragment programs back to uniforms, a reader for RPCS3 RSX frame captures (vertex constants and vertex buffers per draw call), and a PPU module loader and disassembler. `tools/re/README.md` has the workflow. They write into `re-work/`, which is gitignored — **firmware files (ELFs, `.qrc` contents, textures, decompiled shaders) must never be committed**. `PARTICLES_REVERSE_ENGINEER.md` (an index into `docs/particles/`) and `BACKGROUND_REVERSE_ENGINEER.md` are the particle system's and the backdrop's counterparts of the spline notes.
+Python tools (standard library only, except `ppu_prx.py`, which needs capstone) that read the user's own PS3 firmware (for example an RPCS3 install): a `.qrc` extractor, an SPU disassembler, a matcher that uses RPCS3's SPU cache to show which code actually ran, a Cg binary (`.vpo`/`.fpo`) inspector that recovers uniform values from RPCS3's shader cache and maps the constants of RPCS3's decompiled fragment programs back to uniforms, a reader for RPCS3 RSX frame captures (vertex constants and vertex buffers per draw call), and a PPU module loader and disassembler. `tools/re/README.md` has the workflow. They write into `re-work/`, which is gitignored — **firmware files (ELFs, `.qrc` contents, textures, decompiled shaders) must never be committed**. `WAVE_REVERSE_ENGINEER.md` (an index into `docs/wave/`), `PARTICLES_REVERSE_ENGINEER.md` (an index into `docs/particles/`) and `BACKGROUND_REVERSE_ENGINEER.md` (an index into `docs/background/`) are what the tools have found about the wave, the particle system and the backdrop.
 
 ### `dds/` — gradient extraction tool
 
@@ -115,3 +116,16 @@ Standalone browser tool (ES modules) used to produce the month presets. `dds-rea
 - Every `ps3xmbwave/` file except the two `background-gradients-*.js` data tables opens with a two-line header comment stating what it produces and which files consume it — keep this up to date when dependencies shift.
 - Settings files are declarative only: no runtime logic in `*-settings.js`.
 - `old-research/` is a frozen archive (uses regl + stats.js). Don't refactor it or import from it; it exists for reference only.
+
+## Keeping the notes
+
+The wave's, the particles' and the backdrop's notes are built the same way: an index at the root (`WAVE_REVERSE_ENGINEER.md`, `PARTICLES_REVERSE_ENGINEER.md`, `BACKGROUND_REVERSE_ENGINEER.md`) with *Topics*, *Status* and *Still missing*, over topic files in `docs/wave/`, `docs/particles/` or `docs/background/`, one of which, `history.md`, holds what everyday work does not need. These rules apply to all three; each index's own *Keeping these notes* adds what is particular to it.
+
+- **Read narrowly.** The index first, then the topics the task needs. To find an address, a function or a parameter, search for it (`grep -rn 0x2dde4 docs/`) rather than reading every file. `history.md` is for reopening a closed question.
+- **Write what is known now.** A finding goes into its topic, and a reading it overturns is corrected where it stands, not answered by a new section further down. How it was found (which captures, at what time, the leads that failed) goes in the commit message, and in `history.md` only if it is worth keeping beside the notes.
+- **Close the loop in the index.** When a question opens or closes, update the index's *Status* and *Still missing* in the same commit.
+- **Retire what is superseded.** A reading that no longer holds leaves its topic; git keeps it. A dead end that would save someone the search gets a line under *Ruled out* in `history.md`.
+- **Keep the scene's shared ground in one place.** The camera, the parameter sets, the day cycle and the scene's events belong to the whole scene, and the particle notes describe them. What any pass finds about them goes there; the wave's and the backdrop's notes link to it and keep only what concerns them alone.
+- **Mind the size.** Keep each index under 8 KB and each topic under 15 KB. A topic that outgrows it is split by subject, and the new file goes into the index's *Topics*.
+- **Don't restate the code.** Constants and their addresses are commented in `ps3xmbwave/`, and a bench's figures live only in its notes' `implementation.md`, replaced when it runs again rather than added to.
+- **Methods go with the tools.** How to read savestates and captures, and how to get RPCS3 where a reading needs it, is in `tools/re/README.md`.

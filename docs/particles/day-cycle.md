@@ -28,6 +28,12 @@ implies: dawn from 05:00, day from 11:00, dusk from 17:00, night from 23:00.
 All four windows are measured, and against the six measured moments the cycle lands within
 0.07%.
 
+**The wave's set moves by the same factor.** The wave's draw carries three of `LINE1.mnu`'s
+values - see [The draw's uniforms](../wave/output.md#the-draws-uniforms). In each of the ten
+resting captures they fit a blend of two of the cycle's sets to within 7e-8, by the factor the
+particles' `glare` gives in the same capture, to four decimals. 21 September at 20:18 is `higure`
+0.2527 of the way to night by both, and 24 September at 22:00 is 0.8464 by both.
+
 How each window was measured is in [history](history.md#how-the-day-cycle-was-measured).
 
 ## How one set blends into another
@@ -73,8 +79,8 @@ the 1st of that month, and hands it on with the same blend time to `0x11600`, wh
 day cycle's set for that moment, and to `0x10900`. That one gives the particle object the time of
 day, as a fraction of 86400 seconds (`0x1adc8`), and works out how far the date is into its month,
 the day minus one over the month's length - the law the backdrop's `_MonthTime` follows, see
-`BACKGROUND_REVERSE_ENGINEER.md` - except that its table gives February 28 days in every year and
-the 29th counts as the 28th. Where that goes from there is not followed.
+[What the uniforms read](../background/uniforms.md) - except that its table gives February 28
+days in every year and the 29th counts as the 28th. Where that goes from there is not followed.
 
 `0x11c58` does nothing while one of the scene's own states, all in the struct at `0xa03a8`, holds
 the moment:

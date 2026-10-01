@@ -95,6 +95,24 @@ def corners_of(draws):
     return out
 
 
+def best_fits(draws, sets):
+    """Every pair of sets fitted to the frame's backdrop, best first; None if the frame has none."""
+    readings = corners_of(draws)
+    if not readings:
+        return None
+    return min((fit(m, sets) for m in readings), key=lambda f: f[0][0])
+
+
+def describe(worst, a_name, b_name, factor):
+    """One fit as text: the set, or the pair a crossfade is between and how far along it is."""
+    if a_name == b_name or factor < 1e-6:
+        return a_name
+    if factor > 1 - 1e-6:
+        return b_name
+    # one frame cannot say which way the crossfade is running, so name both ends
+    return 'between %s and %s, %.4f towards %s' % (a_name, b_name, factor, b_name)
+
+
 def live_uniform(program, memory, name):
     """A fragment program's live values for one uniform, oldest copy first.
 
@@ -147,21 +165,13 @@ def main(argv=None):
         raw = gzip.open(path).read()
         capture = rrc.Capture(raw)
         draws = list(capture.draws())
-        readings = corners_of(draws)
+        best = best_fits(draws, sets)
         print('%s  %d draws' % (path.name, len(draws)))
-        if not readings:
+        if best is None:
             print('    no backdrop draw: this frame does not run the lines scene')
             continue
-        best = min((fit(m, sets) for m in readings), key=lambda f: f[0][0])
-        for worst, a_name, b_name, factor in best[:3 if args.all else 1]:
-            if a_name == b_name or factor < 1e-6:
-                print('    %-40s residual %.1g' % (a_name, worst))
-            elif factor > 1 - 1e-6:
-                print('    %-40s residual %.1g' % (b_name, worst))
-            else:
-                # one frame cannot say which way the crossfade is running, so name both ends
-                print('    %-40s residual %.1g'
-                      % ('between %s and %s, %.4f towards %s' % (a_name, b_name, factor, b_name), worst))
+        for row in best[:3 if args.all else 1]:
+            print('    %-40s residual %.1g' % (describe(*row), row[0]))
         glare = live_uniform(glare_program, raw, '_Glare')
         if glare:
             named = {name: g for name, (_, g) in sets.items() if g is not None}

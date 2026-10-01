@@ -40,6 +40,8 @@ on each frame that passes its draw, simply keeps it that way.
     0.081 / 0.258 / 0.491 in xy against the console's 0.081 / 0.262 / 0.517 - but leaves the
     newborns at a median 0.232 against 0.276; 4.5 brings the newborns to 0.263 and late life
     to 0.299. No one factor fits both, because the wave's speeds are distributed differently.
+    The console's own wave moves at a median 0.365 in these units - see
+    [its bench](../wave/implementation.md).
   - The generator starts its counter at the seed; the console's is shared by all that draw
     from it. The pool starts with random orientations, which births then pass on, and it is
     filled on the second frame, once the wave has moved. The console builds its pool with
