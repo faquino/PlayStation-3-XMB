@@ -1,20 +1,18 @@
 #!/usr/bin/env node
 'use strict';
-// Headless bench for the wave: measures the spline layer's wave as spline.js draws it, over a run, and prints it
-// beside the same measurements taken on the console's own wave - the meshes spline.elf wrote, as the RSX captures and
-// the savestates hold them.
+// Headless bench for the wave: measures the wave wave-reverse.js builds, over a run, beside the same measurements taken
+// on the console's own wave - the meshes spline.elf wrote, as the RSX captures and the savestates hold them.
 //
-// Both are measured on the screen, in 16:9 normalised device coordinates, and in the XMB's camera space. The console's
-// vertices arrive projected, so they give both; the spline layer draws with no camera, so its wave is given the depth
-// the particles give it (WAVE_DEPTH_NEAR to WAVE_DEPTH_FAR in particles-reverse.js) to be measured in space. A savestate
-// holds two frames of the wave, one after the other, which is where the console's speeds come from: a frame is taken
-// as 1/60 s, the XMB's rate under RPCS3.
+// Both are measured the same way, from meshes in clip space: on the screen, in 16:9 normalised device coordinates, and
+// in the XMB's camera space. A savestate holds two frames of the wave, one after the other, which is where the
+// console's speeds come from: a frame is taken as 1/60 s, the XMB's rate under RPCS3.
 //
 // The console's column is the resting XMB under the day cycle. A capture of a boot sequence or of the music's set is
 // left out, since both move the wave; whichset.py names a capture's set from its backdrop, and a savestate has no
-// draw to name it by, so LEFT_OUT lists the savestates known to be under another set.
+// draw to name it by, so LEFT_OUT lists the savestates known to be under another set. The page runs on LINE1.mnu's
+// base set, so the bench runs it under one of the day cycle's, `--set` (night by default), from line-sets.js.
 //
-// Usage: node tools/bench/wave.js [--seconds 120] [--every 2] [--console re-work/wave-frames]
+// Usage: node tools/bench/wave.js [--seconds 120] [--every 2] [--set night] [--console re-work/wave-frames]
 //
 // --console measures the console's column again from the frames tools/bench/wave-frames.py extracts, and prints it as
 // the CONSOLE literal below, to paste in when captures or savestates are added.
@@ -25,15 +23,15 @@ const path = require('path');
 const DIR = path.join(__dirname, '..', '..', 'ps3xmbwave');
 // The load order index.html uses; each file reads the globals the ones before it export.
 const FILES = ['background-gradients-night.js', 'background-gradients-day.js', 'spline-settings.js',
-  'particles-themes.js', 'particles-settings.js', 'spline-reverse.js', 'wave-surface-cpu.js',
-  'particles-reverse.js'];
+  'particles-themes.js', 'particles-settings.js', 'wave-reverse.js', 'particles-reverse.js'];
 
 const ASPECT = 16 / 9;
 const STEP_HZ = 60;
-const WAVE_GRID = 100; // the mesh spline.js draws
-const WARM_UP = 5; // seconds the spline layer runs before it is measured, for its temporal smoothing to settle
+const WARM_UP = 5; // seconds the wave runs before it is measured
 const VERTICES = 128 * 128;
 const RECORD_FLOATS = 8; // position, then the unnormalised normal
+
+const SETS = require('./line-sets.js');
 
 const LEFT_OUT = {
   'vsh.self_1_8': 'taken with a track playing, under music_1 (docs/particles/parameter-sets.md)',
@@ -79,7 +77,8 @@ function emptyFrame(n) {
     vz: new Float64Array(n) };
 }
 
-// The console's: clip-space positions, so the screen is x / w and camera space undoes the projection.
+// A mesh in clip space, the console's or wave-reverse.js's: the screen is x / w, and camera space undoes the
+// projection.
 function consoleFrame(floats, offset, cam) {
   const f = emptyFrame(VERTICES);
   for (let i = 0; i < VERTICES; i++) {
@@ -90,29 +89,6 @@ function consoleFrame(floats, offset, cam) {
     f.vx[i] = floats[o] / cam.p00;
     f.vy[i] = floats[o + 1] / cam.p11;
     f.vz[i] = -w;
-  }
-  return f;
-}
-
-// The spline layer's, at the grid spline.js draws: its clip space is the screen, and its depth coordinate picks a depth
-// in the band the particles put the wave in, on the camera's ray through the point - waveToWorld in particles-reverse.js.
-function splineFrame(settings, data, w, h, t, cam) {
-  const RE = window.PS3ParticlesReverse;
-  const f = emptyFrame(WAVE_GRID * WAVE_GRID);
-  const out = new Float32Array(3);
-  for (let j = 0; j < WAVE_GRID; j++) {
-    for (let i = 0; i < WAVE_GRID; i++) {
-      const k = j * WAVE_GRID + i;
-      const gx = (i / (WAVE_GRID - 1)) * 2 - 1;
-      const gz = (j / (WAVE_GRID - 1)) * 2 - 1;
-      window.WaveSurfaceCPU.evaluate(settings, data, w, h, gx, gz, t, out);
-      const d = RE.WAVE_DEPTH_NEAR + (out[2] + 1) * 0.5 * (RE.WAVE_DEPTH_FAR - RE.WAVE_DEPTH_NEAR);
-      f.x[k] = out[0];
-      f.y[k] = out[1];
-      f.vx[k] = (out[0] * d) / cam.p00;
-      f.vy[k] = (out[1] * d) / cam.p11;
-      f.vz[k] = -d;
-    }
   }
   return f;
 }
@@ -217,22 +193,18 @@ function readConsole(dir, cam) {
   return { frames, steps, used };
 }
 
-function simulate(seconds, every, cam) {
-  const S = window.SPLINE_SETTINGS;
-  const W = 256, H = 64;
-  let data = new Float32Array(W * H);
-  let prev = new Float32Array(W * H);
-  const pipeline = window.PS3SplineReverse.createPipeline();
+function simulate(seconds, every, set, cam) {
+  const S = Object.assign({}, window.SPLINE_SETTINGS, SETS[set]);
+  const wave = window.PS3WaveReverse.createWave();
+  const prev = new Float32Array(wave.mesh.length);
   const frames = [], steps = [];
-  let t = 0;
   for (let frame = 1; frame <= (WARM_UP + seconds) * STEP_HZ; frame++) {
-    [prev, data] = [data, prev];
-    t = frame / STEP_HZ;
-    pipeline.writeDisplacementTexture(S, t, data, W, H);
+    prev.set(wave.mesh);
+    wave.update(S, 1 / STEP_HZ, ASPECT);
     const since = frame - WARM_UP * STEP_HZ;
     if (since < 0 || since % Math.round(every * STEP_HZ)) continue;
-    const a = splineFrame(S, prev, W, H, t - 1 / STEP_HZ, cam);
-    const b = splineFrame(S, data, W, H, t, cam);
+    const a = consoleFrame(prev, 0, cam);
+    const b = consoleFrame(wave.mesh, 0, cam);
     frames.push(b);
     steps.push([a, b]);
   }
@@ -248,6 +220,8 @@ function main() {
   const seconds = Number(opt('seconds', 120));
   const every = Number(opt('every', 2));
   const consoleDir = opt('console', null);
+  const set = opt('set', 'night');
+  if (!SETS[set]) throw new Error('--set is one of ' + Object.keys(SETS).join(', '));
 
   loadModules();
   const RE = window.PS3ParticlesReverse;
@@ -266,15 +240,15 @@ function main() {
   }
 
   const started = Date.now();
-  const sim = simulate(seconds, every, cam);
+  const sim = simulate(seconds, every, set, cam);
   const s = measure(sim.frames, sim.steps, deltaTime);
-  console.log('The spline layer over ' + seconds + ' s, a frame every ' + every + ' s (' + sim.frames.length
-    + ' frames), against the console\'s ' + reference.sources + '; '
+  console.log('The wave under ' + set + '\'s LINE1.mnu over ' + seconds + ' s, a frame every ' + every + ' s ('
+    + sim.frames.length + ' frames), against the console\'s ' + reference.sources + '; '
     + ((Date.now() - started) / 1000).toFixed(1) + ' s wall clock\n');
 
   const row = (label, a, b) => console.log('  ' + String(label).padEnd(44) + String(a).padEnd(32) + b);
   console.log('On screen, frame by frame (lowest to highest; NDC, y up)');
-  row('', 'spline layer', 'console');
+  row('', 'wave-reverse.js', 'console');
   row('Share of the mesh on screen', s.onScreen, reference.onScreen);
   row('Middle of the band (median y)', s.centre, reference.centre);
   row('Height of the band (5th to 95th of y)', s.height, reference.height);
@@ -291,7 +265,6 @@ function main() {
   row('Share of it sideways, median', s.sideways, reference.sideways);
   row('In space, per frame, 50th / 95th', s.spaceSpeed, reference.spaceSpeed);
   row('Same over delta time (emitter\'s units)', s.emitterSpeed, reference.emitterSpeed);
-  console.log('  (the emitter reads the spline layer\'s wave ' + RE.WAVE_SPEED_GAIN + ' times faster: WAVE_SPEED_GAIN)');
 }
 
 main();

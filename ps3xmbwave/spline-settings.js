@@ -1,7 +1,6 @@
 'use strict';
-// Central parameter source for the spline/wave system, including artistic controls and reverse-pipeline tuning knobs.
-// Read by `spline.js` and the settings UI in `settings-panels.js`, which shows each meta's `help` as its label's
-// tooltip; this file is intentionally declarative (no runtime logic).
+// The backdrop's and the wave's settings: LINE1.mnu's parameters under their own names, with the firmware's values.
+// Read by `spline.js` and `wave-reverse.js`, and shown by `settings-panels.js`; declarative only, no runtime logic.
 
 window.SPLINE_SETTINGS = {
   gradientPreset: 'auto',
@@ -13,56 +12,41 @@ window.SPLINE_SETTINGS = {
   gradientTopMul: 0.09,
   gradientBotMul: 0.62,
 
-  flowSpeed: 0.18,
-  tension: 0.12,
+  // LINE1.mnu, the base set. The keys are its parameters' names in camelCase.
   damping: 0.0001,
   length: 0.306001,
-  spacing: 407.658,
-  timeStep: 1.0,
-
-  bandAmplitude: 0.200,
-  bandSecondaryFreq: 7.0,
-  bandSecondaryAmp: 0.025,
-
-  travelSpeed1: 0.25,
-  travelAmp1: 0.014,
-  travelSpeed2: 0.15,
-  travelAmp2: 0.008,
-
+  tension: 0.25,
+  timestep: 4,
   perturbation: 0.0998587,
-  perturbationScale: 0.07,
-  waveCosAmp: 0.09,
-  waveBias: -0.1,
-  waveHeightScale: 0.5,
-  waveSoftClip: 0.22,
-
-  rePipelineBlend: 0.45,
-  reDescriptorStrength: 0.7,
-  reSyntheticDescriptorSeed: 1337,
-  reSyntheticDescriptorMotion: 0.65,
-  reKernelGain: 0.04,
-  reNormalizeGain: 0.08,
-  reKernelPhaseStep: 0.45,
-  reIndexJitter: 0.006,
-  reTemporalSmooth: 0.84,
-
-  fresnelPower: 4.0,
-  fresnelScale: 0.5,
-  opacity: 0.7,
-  brightness: 0.98,
-  zDetailScale: 0.08,
-
+  endX: 3,
+  endY: 0.4,
+  endZ: 0.2,
+  posX: -7.67933,
+  posY: -1.08844,
+  posZ: -6.40287,
+  angX: -0.994157,
+  angY: 0.0867576,
+  angZ: 0.065364,
+  angRot: 18.1208,
   ffdScale1X: 5.67726,
   ffdScale1Y: 1.00077,
-  ffdScale1Z: 1.0,
+  ffdScale1Z: 1,
   ffdScale2X: 2.82755,
   ffdScale2Y: 1.27579,
   ffdScale2Z: 2.88782,
-  ffdOffsetX: 0.0,
+  ffdOffsetX: 0,
   ffdOffsetY: -0.469999,
-  ffdOffsetZ: 0.0,
-  ffdYAmp: 0.05,
-  ffdZAmp: 0.06,
+  ffdOffsetZ: 0,
+  ffdParam1: -1.33509,
+  brightness: 0.701917,
+  mipmapBias: 1.86707,
+  fresnel: 0.638971,
+  falloff: 1.00318,
+  spacing: 407.658,
+  thinness: 1,
+
+  // Modelled: what the console's passes after the wave make of its light.
+  exposure: 1.5,
 };
 
 window.SPLINE_SETTINGS_META = {
@@ -99,235 +83,172 @@ window.SPLINE_SETTINGS_META = {
     help: "Brightness of the backdrop's bottom edge, as a multiple of its colour. Original preset only.\n" +
       'Backdrop, hand-tuned',
   },
-  flowSpeed: {
-    min: 0, max: 1.2, step: 0.005,
-    help: "Speed of the wave's flow. Almost everything that moves on the wave moves with it; the broad cosine and " +
-      "the kernel's lookups do not.\n" +
-      'Hand-tuned wave: the shader and the pipeline alike',
-  },
-  tension: {
-    min: 0, max: 0.5, step: 0.005,
-    help: 'Height of a long, slow undulation along the wave. It also scales the first travelling wave of the ' +
-      'hand-tuned sum, and weights the traced spline table as a synthetic input.\n' +
-      'Hand-tuned wave shader; synthetic b300 input to the traced pipeline',
-  },
   damping: {
-    min: 0, max: 0.002, step: 0.00001,
-    help: 'Flattens the broad cosine by this fraction, which the default barely does. It also weights the traced ' +
-      'spline table as a synthetic input.\n' +
-      'Hand-tuned wave shader; synthetic b300 input to the traced pipeline',
+    min: 0, max: 0.002, step: 0.00001, decimals: 5,
+    help: "How fast the lines lose their speed: each step takes DAMPING x TIMESTEP of each point's velocity off.\n" +
+      'LINE1.mnu: DAMPING',
   },
   length: {
-    min: 0.05, max: 1.2, step: 0.001,
-    help: 'Frequency along the wave of the long undulation and of the ripples. It also weights the traced spline ' +
-      'table as a synthetic input.\n' +
-      'Hand-tuned wave shader; synthetic b300 input to the traced pipeline',
+    min: 0.05, max: 1, step: 0.001,
+    help: "Rest length of the springs between neighbouring points, along a line and across the lines; those two " +
+      'apart rest at twice it.\n' +
+      'LINE1.mnu: LENGTH',
   },
-  spacing: {
-    min: 10, max: 800, step: 1, decimals: 0,
-    help: 'Frequency of the ripples (Perturbation). It also weights the traced spline table as a synthetic input, ' +
-      'divided by 1000.\n' +
-      'Hand-tuned wave shader; synthetic b300 input to the traced pipeline',
+  tension: {
+    min: 0, max: 1, step: 0.005,
+    help: 'Stiffness of the springs between neighbouring points; those two apart are ten times as stiff.\n' +
+      'LINE1.mnu: TENSION',
   },
-  timeStep: {
-    min: 0.1, max: 4, step: 0.05,
-    help: "Speed of the wave's animation, alongside Flow Speed: it scales the same motions except the wobbles, and " +
-      'also drives the broad cosine.\n' +
-      'Hand-tuned wave: the shader and the pipeline alike',
-  },
-  bandAmplitude: {
-    min: 0, max: 0.6, step: 0.002,
-    help: "Height of the main band in the traced pipeline's control points: a sine along the wave that drifts with " +
-      'the flow.\n' +
-      'Traced pipeline, hand-tuned knob (spline-reverse.js)',
-  },
-  bandSecondaryFreq: {
-    min: 0.5, max: 16, step: 0.1,
-    help: "Frequency across the wave's depth of the secondary band in the traced pipeline's control points.\n" +
-      'Traced pipeline, hand-tuned knob (spline-reverse.js)',
-  },
-  bandSecondaryAmp: {
-    min: 0, max: 0.12, step: 0.002,
-    help: "Height of the secondary band in the traced pipeline's control points.\n" +
-      'Traced pipeline, hand-tuned knob (spline-reverse.js)',
-  },
-  travelSpeed1: {
-    min: 0, max: 1.5, step: 0.01,
-    help: 'Speed of the first travelling wave of the hand-tuned sum.\n' +
-      'Hand-tuned wave sum (spline-reverse.js)',
-  },
-  travelAmp1: {
-    min: 0, max: 0.08, step: 0.001,
-    help: 'Height of the first travelling wave of the hand-tuned sum, times Tension.\n' +
-      'Hand-tuned wave sum (spline-reverse.js)',
-  },
-  travelSpeed2: {
-    min: 0, max: 1.5, step: 0.01,
-    help: 'Speed of the second travelling wave of the hand-tuned sum.\n' +
-      'Hand-tuned wave sum (spline-reverse.js)',
-  },
-  travelAmp2: {
-    min: 0, max: 0.08, step: 0.001,
-    help: 'Height of the second travelling wave of the hand-tuned sum.\n' +
-      'Hand-tuned wave sum (spline-reverse.js)',
+  timestep: {
+    min: 0, max: 8, step: 0.05,
+    help: "Speed of the wave's time: how far each of the 60 steps a second moves the points, the clocks and the " +
+      'lattice.\n' +
+      'LINE1.mnu: TIMESTEP',
   },
   perturbation: {
-    min: 0, max: 0.3, step: 0.001,
-    help: 'Strength of the ripples over the wave, times Perturbation Scale.\n' +
-      'Hand-tuned wave shader and sum (spline.js, spline-reverse.js)',
-  },
-  perturbationScale: {
-    min: 0, max: 0.3, step: 0.001,
-    help: "Second factor of the ripples' strength, with Perturbation.\n" +
-      'Hand-tuned wave shader and sum (spline.js, spline-reverse.js)',
-  },
-  waveCosAmp: {
-    min: 0, max: 0.3, step: 0.001,
-    help: 'Height of the broad cosine that bends the whole wave.\n' +
-      'Hand-tuned wave shader (spline.js)',
-  },
-  waveBias: {
-    min: -0.3, max: 0.3, step: 0.001,
-    help: 'Added to that cosine: raises or lowers the whole wave.\n' +
-      'Hand-tuned wave shader (spline.js)',
-  },
-  waveHeightScale: {
-    min: 0, max: 1, step: 0.005,
-    help: 'Scales everything the shader bends the wave by - the cosine, the undulation and the ripples - before the ' +
-      'soft clip.\n' +
-      'Hand-tuned wave shader (spline.js)',
-  },
-  waveSoftClip: {
-    min: 0.05, max: 0.5, step: 0.005,
-    help: 'The most the shader may bend the wave: a smooth limit, so lower flattens its peaks.\n' +
-      'Hand-tuned wave shader (spline.js)',
-  },
-  rePipelineBlend: {
-    min: 0, max: 1, step: 0.01,
-    help: "Mix, for each control point, between the traced pipeline's core (1) and the older hand-tuned sum (0).\n" +
-      'Traced pipeline, hand-tuned knob (spline-reverse.js)',
-  },
-  reDescriptorStrength: {
-    min: 0, max: 2, step: 0.01,
-    help: "How much the synthetic descriptor's waves weigh against its noise. The descriptor stands in for the " +
-      "console's b380 data, never captured, and is only rebuilt when the seed changes.\n" +
-      'Synthetic input to the traced pipeline (spline-reverse.js)',
-  },
-  reSyntheticDescriptorSeed: {
-    min: 0, max: 100000, step: 1, decimals: 0,
-    help: "Seed of the synthetic descriptor's noise: another seed gives another wave, and rebuilds the descriptor.\n" +
-      'Synthetic input to the traced pipeline (spline-reverse.js)',
-  },
-  reSyntheticDescriptorMotion: {
-    min: 0, max: 5, step: 0.05,
-    help: "How fast the synthetic descriptor's coefficients drift with the flow.\n" +
-      'Synthetic input to the traced pipeline (spline-reverse.js)',
-  },
-  reKernelGain: {
-    min: 0, max: 1, step: 0.005,
-    help: "Weight of the traced kernel's output in the pipeline's control points.\n" +
-      'Traced pipeline, hand-tuned knob (spline-reverse.js)',
-  },
-  reNormalizeGain: {
-    min: 0, max: 2, step: 0.01,
-    help: "Gain before the spline table's traced tanh normalisation: the higher, the more the table saturates.\n" +
-      'Traced pipeline, hand-tuned knob (spline-reverse.js)',
-  },
-  reKernelPhaseStep: {
-    min: 0, max: 8, step: 0.05,
-    help: "How fast the kernel's lookups into the table, and the blends between them, change with time.\n" +
-      'Traced pipeline, hand-tuned knob (spline-reverse.js)',
-  },
-  reIndexJitter: {
     min: 0, max: 0.5, step: 0.001,
-    help: "How far the kernel's lookups wander from their traced indices, as a fraction of the table.\n" +
-      'Traced pipeline, hand-tuned knob (spline-reverse.js)',
+    help: "Strength of the noise added to every point's velocity each step.\n" +
+      'LINE1.mnu: PERTURBATION',
   },
-  reTemporalSmooth: {
-    min: 0, max: 0.98, step: 0.01,
-    help: "Smoothing of the kernel's output from frame to frame: 0 none, near 1 very slow to change.\n" +
-      'Traced pipeline, hand-tuned knob (spline-reverse.js)',
+  endX: {
+    min: 0, max: 6, step: 0.05,
+    help: 'No effect: the step sets the anchored ends at x = 0 and reads only END Y and END Z.\n' +
+      'LINE1.mnu: END X',
   },
-  fresnelPower: {
-    min: 0.2, max: 8, step: 0.05,
-    help: "Exponent of the fresnel term the wave's glow comes from: the higher, the tighter and more contrasted the " +
-      'glow.\n' +
-      'Hand-tuned wave shader (spline.js)',
-  },
-  fresnelScale: {
+  endY: {
     min: 0, max: 2, step: 0.01,
-    help: 'Strength of that fresnel glow.\n' +
-      'Hand-tuned wave shader (spline.js)',
+    help: "Height of the anchored ends' swing, line after line along the wave.\n" +
+      'LINE1.mnu: END Y',
   },
-  opacity: {
-    min: 0, max: 1, step: 0.005,
-    help: 'Overall opacity of the wave.\n' +
-      'Hand-tuned wave shader (spline.js)',
-  },
-  brightness: {
+  endZ: {
     min: 0, max: 2, step: 0.01,
-    help: 'Brightness of the wave. It is drawn white over the backdrop, so this works on its opacity, as Opacity ' +
-      'does.\n' +
-      'Hand-tuned wave shader (spline.js)',
+    help: "Depth of the anchored ends' swing.\n" +
+      'LINE1.mnu: END Z',
   },
-  zDetailScale: {
-    min: 0, max: 0.25, step: 0.001,
-    help: "Depth relief from a scrolling copy of the wave's displacement.\n" +
-      'Hand-tuned wave shader (spline.js)',
+  posX: {
+    min: -15, max: 5, step: 0.01,
+    help: "Where the wave sits in the XMB's world, across the screen.\n" +
+      'LINE1.mnu: POS X',
+  },
+  posY: {
+    min: -5, max: 5, step: 0.01,
+    help: "Where the wave sits in the XMB's world, up the screen.\n" +
+      'LINE1.mnu: POS Y',
+  },
+  posZ: {
+    min: -15, max: 0, step: 0.01,
+    help: "Where the wave sits in the XMB's world, in depth; the camera is at z = 2.\n" +
+      'LINE1.mnu: POS Z',
+  },
+  angX: {
+    min: -1, max: 1, step: 0.001,
+    help: 'X of the axis the wave is turned about (normalised).\n' +
+      'LINE1.mnu: ANG X',
+  },
+  angY: {
+    min: -1, max: 1, step: 0.001,
+    help: 'Y of the axis the wave is turned about (normalised).\n' +
+      'LINE1.mnu: ANG Y',
+  },
+  angZ: {
+    min: -1, max: 1, step: 0.001,
+    help: 'Z of the axis the wave is turned about (normalised).\n' +
+      'LINE1.mnu: ANG Z',
+  },
+  angRot: {
+    min: -90, max: 90, step: 0.1,
+    help: 'How far the wave is turned about that axis, in degrees.\n' +
+      'LINE1.mnu: ANG ROT',
   },
   ffdScale1X: {
-    min: 0, max: 8, step: 0.01,
-    help: 'Frequency along the wave of a height wobble.\n' +
-      'Hand-tuned wave shader (spline.js)',
+    min: 0.5, max: 10, step: 0.01,
+    help: "Size of the deformation's lattice along x: the points are normalised by it before they are deformed, " +
+      "and the lattice's own points are scaled by it.\n" +
+      'LINE1.mnu: FFD SCALE1 X',
   },
   ffdScale1Y: {
-    min: 0, max: 3, step: 0.01,
-    help: 'No effect: only the X of Ffd Scale1 is used.\n' +
-      'Unused',
+    min: 0.1, max: 4, step: 0.01,
+    help: "Size of the deformation's lattice along y, and the scale of its moving curve.\n" +
+      'LINE1.mnu: FFD SCALE1 Y',
   },
   ffdScale1Z: {
-    min: 0, max: 3, step: 0.01,
-    help: 'No effect: only the X of Ffd Scale1 is used.\n' +
-      'Unused',
+    min: 0.1, max: 4, step: 0.01,
+    help: "Size of the deformation's lattice along z.\n" +
+      'LINE1.mnu: FFD SCALE1 Z',
   },
   ffdScale2X: {
-    min: 0, max: 8, step: 0.01,
-    help: 'No effect: only the Z of Ffd Scale2 is used, and the pipeline never reads the b300 slot it fills.\n' +
-      'Unused',
+    min: 0, max: 6, step: 0.01,
+    help: 'Scale of the deformed wave along x.\n' +
+      'LINE1.mnu: FFD SCALE2 X',
   },
   ffdScale2Y: {
-    min: 0, max: 3, step: 0.01,
-    help: 'No effect: only the Z of Ffd Scale2 is used.\n' +
-      'Unused',
+    min: 0, max: 4, step: 0.01,
+    help: 'Scale of the deformed wave along y: the height of its swell.\n' +
+      'LINE1.mnu: FFD SCALE2 Y',
   },
   ffdScale2Z: {
     min: 0, max: 6, step: 0.01,
-    help: "Frequency across the wave's depth of a depth wobble.\n" +
-      'Hand-tuned wave shader (spline.js)',
+    help: 'Scale of the deformed wave along z: its depth.\n' +
+      'LINE1.mnu: FFD SCALE2 Z',
   },
   ffdOffsetX: {
-    min: -2, max: 2, step: 0.01,
-    help: 'Phase of the height wobble.\n' +
-      'Hand-tuned wave shader (spline.js)',
+    min: -3, max: 3, step: 0.01,
+    help: "Where the deformation's lattice starts along x, and the offset of its points.\n" +
+      'LINE1.mnu: FFD OFFSET X',
   },
   ffdOffsetY: {
-    min: -2, max: 2, step: 0.01,
-    help: 'No effect: the wobbles only use X and Z, and the pipeline never reads the b300 slot it fills.\n' +
-      'Unused',
+    min: -3, max: 3, step: 0.01,
+    help: "Where the deformation's lattice starts along y, and the offset of its points.\n" +
+      'LINE1.mnu: FFD OFFSET Y',
   },
   ffdOffsetZ: {
-    min: -2, max: 2, step: 0.01,
-    help: 'Phase of the depth wobble.\n' +
-      'Hand-tuned wave shader (spline.js)',
+    min: -3, max: 3, step: 0.01,
+    help: "Where the deformation's lattice starts along z, and the offset of its points.\n" +
+      'LINE1.mnu: FFD OFFSET Z',
   },
-  ffdYAmp: {
-    min: 0, max: 0.3, step: 0.001,
-    help: 'Height of the wobble along the wave (Ffd Scale1 X).\n' +
-      'Hand-tuned wave shader (spline.js)',
+  ffdParam1: {
+    min: -5, max: 5, step: 0.01,
+    help: "Where along the lines their spread settles: the grid sent to the SPU has its height and depth scaled by " +
+      '1.3 - cos((x - P) pi/2) (1 - smoothstep((x - P) / 5)), widest near the anchors, 1.3 from five units past P ' +
+      'on, and 0.3 before P.\n' +
+      'LINE1.mnu: FFD PARAM 1',
   },
-  ffdZAmp: {
-    min: 0, max: 0.3, step: 0.001,
-    help: 'Depth of the wobble across the wave (Ffd Scale2 Z).\n' +
-      'Hand-tuned wave shader (spline.js)',
+  brightness: {
+    min: 0, max: 3, step: 0.01,
+    help: "Weight of the wave's even light, times the size of each cell on screen.\n" +
+      'LINE1.mnu: BRIGHTNESS (lines1.vpo _Brightness)',
+  },
+  mipmapBias: {
+    min: 0, max: 5, step: 0.01,
+    help: "Scale of each cell's size on screen, which the light, the fresnel table and the stripes' blur all " +
+      'follow.\n' +
+      'LINE1.mnu: MIPMAP BIAS (lines1.vpo _MipmapBias)',
+  },
+  fresnel: {
+    min: 0, max: 4, step: 0.01,
+    help: "Weight of the wave's rim light, from the fresnel table at the angle it is seen at.\n" +
+      'LINE1.mnu: FRESNEL (lines1.vpo _Fresnel)',
+  },
+  falloff: {
+    min: 0, max: 2, step: 0.01,
+    help: 'No effect: neither of the programs the wave is drawn with takes it.\n' +
+      'LINE1.mnu: FALLOFF',
+  },
+  spacing: {
+    min: 10, max: 800, step: 1, decimals: 0,
+    help: 'How many stripes run along the wave, across its lines. They show only with Thinness below 1.\n' +
+      'LINE1.mnu: SPACING (lines1.fpo _Spacing)',
+  },
+  thinness: {
+    min: 0, max: 1, step: 0.01,
+    help: "How much of each stripe's period is dark. At 1, as in every set, there are no stripes and the wave is " +
+      'lit evenly.\n' +
+      'LINE1.mnu: THINNESS (lines1.fpo _Thinness)',
+  },
+  exposure: {
+    min: 0, max: 20, step: 0.1,
+    help: "How bright the wave's light comes out on screen. The console encodes it (_Encode) and runs it through " +
+      'some thirty passes before the particles are drawn, which this stands in for.\n' +
+      'Modelled (spline.js)',
   },
 };

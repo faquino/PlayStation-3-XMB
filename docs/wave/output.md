@@ -1,9 +1,9 @@
 # What the console draws
 
 Part of the [wave notes](../../WAVE_REVERSE_ENGINEER.md): the wave as `spline.elf` hands it to the
-RSX, read out of RPCS3's frame captures and savestates with `tools/bench/wave-frames.py`. It is
-what the implementation is measured against - see [The spline layer against the
-console](implementation.md#against-the-console).
+RSX, read out of RPCS3's frame captures and savestates with `tools/bench/wave-frames.py`. How the RSX
+lights it is in [The shading](shading.md). It is what the implementation is measured against - see
+[Against the console](implementation.md#against-the-console).
 
 ## The buffers
 
@@ -58,29 +58,3 @@ The 361 = 19 × 19 control points are the table upstream's reading found, `DAT_0
 indexed 19 × row + column ([Index math](../../SPLINE_REVERSE_ENGINEER.md#index-math-inside-fun_000045c0)),
 and `.rodata`'s [0, 1/6, 2/3, 1/6] is the cubic B-spline's basis at t = 0
 ([What r37 seems to be](../../SPLINE_REVERSE_ENGINEER.md#what-r37-seems-to-be)).
-
-## The draw's uniforms
-
-**Verified** from the captures and from RPCS3's decompilation of the program, the one vertex program
-in its shader log that reads attributes 0, 8 and 9.
-
-| Uniform | Register | Parameter |
-|---|---|---|
-| internal constant 2 | c[464] | none |
-| `_MipmapBias` | c[465] | `LINE1.mnu: MIPMAP BIAS` |
-| `_Brightness` | c[466] | `LINE1.mnu: BRIGHTNESS` |
-| `_Fresnel` | c[467] | `LINE1.mnu: FRESNEL` |
-
-The three values move with the parameter sets, by the same factor as the particles' - see [Themes
-blend over hours](../particles/day-cycle.md#themes-blend-over-hours).
-
-The program passes the position and u through. Let e be the position normalised and n the normal
-normalised. The program works out:
-
-- m = |e · normal| / |position| × `_MipmapBias`, with the normal as it comes, so m grows with the
-  cell's size;
-- TEXCOORD0 = (u, m), and TEXCOORD1 = (`_Fresnel` m, `_Brightness` m, |e · n| m, v);
-- e reflected about n (using c[464]), written to an output the fragment program does not read.
-
-What the fragment program makes of them, with its `_Stripes` and `_FresLUT` textures and the
-embedded `_Spacing` and `_Thinness`, is for the shading pass.

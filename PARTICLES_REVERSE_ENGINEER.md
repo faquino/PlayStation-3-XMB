@@ -36,10 +36,9 @@ What `ps3xmbwave/` ports as verified and what it models, file by file;
 
 | File | Verified | Modelled |
 |---|---|---|
-| `particles-reverse.js` | The update task, steps 1 to 8. The pool layout, free marker, life bounds and camera. The parameter block: its layout, the values at every offset, and how the PPU fills it, the flow grid and the noise included. The emitter and its random numbers. The controller's response: the D-pad's turn and kicks, the motion, the shake detectors. `PARTICLES_SPE.mnu`, as the PPU applies it, and its first factor's animation. The particles' fade, `_Color`. The icons' layout on screen, measured. | Where the wave's vertices fall and how fast they move; how the icons move; how often the XMB repeats a held direction; the pool's first orientations, uniform as the console's are after many generations. |
+| `particles-reverse.js` | The update task, steps 1 to 8. The pool layout, free marker, life bounds and camera. The parameter block: its layout, the values at every offset, and how the PPU fills it, the flow grid and the noise included. The emitter and its random numbers, on the vertices of the wave `wave-reverse.js` builds. The controller's response: the D-pad's turn and kicks, the motion, the shake detectors. `PARTICLES_SPE.mnu`, as the PPU applies it, and its first factor's animation. The particles' fade, `_Color`. The icons' layout on screen, measured. | How the icons move; how often the XMB repeats a held direction; the pool's first orientations, uniform as the console's are after many generations. |
 | `particles.js` | Both passes, re-authored from the decompiled programs, fed with the `.mnu` values [`shaders.md`](docs/particles/shaders.md) maps to uniforms, `PARTICLES_SPE.mnu` applied. `color_control` as the programs use it, and `_Color` from the system's fade. | `_Gamma` held at 1, its value in every savestate. The iridescent texture comes from the fit. |
 | `particles-themes.js` | The nine distinct theme sets, as their differences from the base. The boot sequences: which set each step puts in, when, and over how long. The music, and Theme Settings' Colour. [The day's schedule](docs/particles/day-cycle.md) and every blend's curve. | The clock's tick, taken at once. |
-| `wave-surface-cpu.js` | | A CPU copy of the spline layer's wave vertex shader, so particles are born on the wave that is drawn. |
 | `xmb-input.js` | What it hands over: steps with the XMB's four directions, and the four sensors in the PPU's units. | The rest: the mouse and keyboard stand in for the controller. |
 
 ## Still missing
@@ -52,10 +51,6 @@ The implementation models all of these:
 - When the XMB sends a step. Every step's effect is ported - see [The
   controller](docs/particles/controller.md#the-controller) - and a held direction repeating every 8
   frames is inferred from the captures; how long the XMB waits before the first repeat is not known.
-- The wave the emitter reads. The spline layer's wave is not the console's: flatter, slower, and
-  with the console's 128 × 128 mesh laid over it by hand - see [Modelled
-  choices](docs/particles/implementation.md#modelled-choices). That is the [wave
-  notes'](WAVE_REVERSE_ENGINEER.md) open question, and it now sets the newborns' speeds.
 
 Also missing:
 
@@ -63,7 +58,7 @@ Also missing:
   `PARTICLES_SPE.mnu` factor on - see [What's New's
   board](docs/particles/scene-events.md#whats-news-board). The board's side, and the factor's
   animation, are traced.
-- How the wave's renderer uses the fade `_Color` is sent with (`0x4fe2c`), so the spline layer can
+- How the wave's renderer uses the fade `_Color` is sent with (`0x4fe2c`), so the wave can
   fade too - see [The particles' fade](docs/particles/scene-events.md#the-particles-fade).
 - `proc_iridescent` exactly. It is a file of the firmware's resources, not generated at run time, so
   the implementation stands in for it with [the

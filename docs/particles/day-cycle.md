@@ -29,7 +29,7 @@ All four windows are measured, and against the six measured moments the cycle la
 0.07%.
 
 **The wave's set moves by the same factor.** The wave's draw carries three of `LINE1.mnu`'s
-values - see [The draw's uniforms](../wave/output.md#the-draws-uniforms). In each of the ten
+values - see [The draw's uniforms](../wave/shading.md#the-draws-uniforms). In each of the ten
 resting captures they fit a blend of two of the cycle's sets to within 7e-8, by the factor the
 particles' `glare` gives in the same capture, to four decimals. 21 September at 20:18 is `higure`
 0.2527 of the way to night by both, and 24 September at 22:00 is 0.8464 by both.

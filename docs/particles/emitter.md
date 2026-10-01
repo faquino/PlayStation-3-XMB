@@ -117,9 +117,8 @@ have spent. Positions as the 5th, 50th and 95th percentile:
 - **Birth sits in a shell at z about -6.4, give or take 0.8**, in a band of y about a unit
   wide around -0.5, spread widely in x. In view depth, which is what the emitter works in
   since the camera sits at z = 2, that is 7.57 / 8.55 / 9.07 at the 5th, 50th and 95th
-  percentile. `ps3xmbwave/` used to emit between 6.8 and 10.6 deep - centred about right but
-  more than twice as thick - and since `bc9be26` it emits between 7.77 and 9.47, which with
-  the traced emitter puts its own band at 7.81 / 8.81 / 9.31.
+  percentile. `ps3xmbwave/` now emits from the console's own mesh, which puts its band at
+  7.75 / 8.97 / 10.49 - see [Against the console](implementation.md#against-the-console).
 - **The x and y velocities at birth run to about 0.3**, which `emit vel min` 0.15064 and
   `emit vel mul` 0.19 bracket.
 

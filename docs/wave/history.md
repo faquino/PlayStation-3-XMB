@@ -29,3 +29,15 @@ may already be ruled out.
 - **The second vector as a normal in camera space.** Against the mesh's own normal in camera
   space, its direction agrees only to a median |cos| of 0.63. In clip space it agrees to 1.0000 -
   see [The mesh](output.md#the-mesh).
+
+## The spline layer, before the port
+
+Until `wave-reverse.js`, the page drew upstream's port of its own reading of `spline.elf`,
+`spline-reverse.js`: a 100 × 100 grid in clip space with no camera, moved up and down by a
+256 × 64 texture the pipeline filled from inputs it made up, cross-faded with a hand-tuned sum of
+waves. Against the console its band was half as tall (0.20 to 0.31 against 0.31 to 0.65 NDC), it
+moved three times as slowly, and its vertices only moved up and down. The particles were born on it
+through a modelled mapping that the port retired with it: a depth band of 7.77 to 9.47 fitted to
+the pool's newborns, the 128 columns spread 1.55 times past the screen's edges, and the wave's
+motion read 3.5 times faster (`WAVE_SPEED_GAIN`). Git keeps both, and the bench's figures as they
+were on 1 October.

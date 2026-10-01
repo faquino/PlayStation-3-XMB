@@ -20,7 +20,7 @@ While this is inspired by the official PlayStation 3 XMB background wave design,
 
 ## Current Features (new implementation in `ps3xmbwave`)
 
-- **Reverse-engineered spline pipeline pass**: The wave displacement is generated via a CPU-side pipeline in `spline-reverse.js` and fed into a displacement texture.
+- **Reverse-engineered wave**: `wave-reverse.js` builds the wave the way the console does - the PPU's simulation of 19 lines, the GPU's deformation lattice and the SPU's B-spline surface - into the console's own 128 × 128 mesh, and `spline.js` draws it with the XMB's line programs re-authored in GLSL.
 - **WebGL2 renderer**: Pure WebGL2 rendering path (background + spline mesh + particles), no framework dependency.
 - **Day/Night monthly gradient presets**: 12 month presets with day/night variants are available in the UI, plus a fallback "Original (RGB Sliders)" mode. The default is `Auto (date and time)`, which does what the console does: it walks from this month's colour to next month's across the month and mixes the day and night tables by the hour.
 - **Live control panels**: Separate spline and particle panels with per-setting sliders/selects and reset buttons.
@@ -31,7 +31,7 @@ While this is inspired by the official PlayStation 3 XMB background wave design,
 
 - Day/night gradients are now integrated as actual presets, but they're not perfect like in the .dds files, so this issue is partially solved.
 - Sparkles run the console's own update task now, and a headless bench (`tools/bench/particles.js`) compares their pool with one read out of a savestate. What is left is the PPU side that feeds it - the emitter and the flow field are still modelled - and they drift about twice as fast as the console's late in life.
-- The wave pipeline is much less blind guesswork than before, but still not fully 1:1 because some runtime descriptor data from real hardware is still missing.
+- The wave's geometry is the console's own now, checked piece by piece against savestates. What is left is its look - some thirty post-processing passes run after it on the console and are not traced yet, so a single exposure stands in for them - and following the day cycle's parameter sets.
 
 ## Local Development
 
@@ -68,7 +68,7 @@ npm run start
 
 1. **Spline panel (top-right)**:
    - Leave the gradient on `Auto (date and time)`, or pick a preset (`MM Day` / `MM Night`), or go back to `Original (RGB Sliders)`.
-   - Tweak wave behavior, blend, fresnel, brightness, and reverse-pipeline knobs. May be useful to get a better wave.
+   - Tweak the wave with `LINE1.mnu`'s own parameters - its springs, noise, placement, deformation and lighting - and `Exposure`, which stands in for the passes after it.
 
 2. **Particles panel (top-left)**:
    - Tweak sparkle count, opacity, base size, variance, and speed.
@@ -81,12 +81,12 @@ npm run start
 
 ### WebGL implementation (`ps3xmbwave`)
 - **Rendering path**: WebGL2 only.
-- **Layering**: Background gradient pass, spline wave mesh pass, additive particles pass.
-- **Displacement source**: CPU-generated spline displacement texture (`256 x 64`, single-channel float) uploaded per frame.
+- **Layering**: Background gradient pass, the wave's mesh added on top, additive particles pass.
+- **Wave source**: the console's 128 × 128 mesh, built on the CPU each frame by `wave-reverse.js` and uploaded as a vertex buffer.
 
-### Reverse-engineered spline pipeline status
-- **What is implemented**: Spline-table-style transform + normalization flow and synthetic descriptor-driven displacement generation.
-- **What is still missing**: Exact runtime-fed descriptor/control payload from real PS3 execution (`b380` data path), which is needed for true 1:1 output.
+### Reverse-engineered wave status
+- **What is implemented**: the lines' simulation, the deformation lattice, the free-form deformation, the camera and the B-spline surface, with the line programs' shading - see [WAVE_REVERSE_ENGINEER.md](WAVE_REVERSE_ENGINEER.md).
+- **What is still missing**: the post-processing passes that follow the wave, and the day cycle's parameter sets for it.
 
 ## Contributing
 
@@ -112,9 +112,8 @@ This project is open source and available under the [MIT License](LICENSE).
 
 ## TODO
 
-- Capture real runtime descriptor/control payloads (`b300` / `b380`) from PS3 hardware or RPCS3 and wire them into the pipeline.
+- Trace the post-processing passes that follow the wave, and have the wave follow the day cycle's `LINE1.mnu` sets.
 - Find what makes the sparkles drift twice as fast as the console's late in life; the notes list six causes already ruled out.
 - Keep tuning wave calmness and flow cadence to better match real hardware captures. I realise the waves have sharp edges, when the real thing is like a water wave (just realised it!)
 - Validate month day/night gradients against more references and tighten remaining color/angle drift.
-- Add optional debug views for displacement texture / pipeline intermediates so tuning is less blind.
 - Trace the PPU side of the particles: the emitter and what the flow grid holds.

@@ -10,8 +10,9 @@ scene's constants assume: the block's default time step is (1/60, 1/60, 1/60, 1)
 both the PPU (`0x5d7b0`) and the task divide `spin time scale` by 60 a frame. The PPU side is ported
 as far as it is traced - how the block is filled, the flow grid's decay and wind, the noise's
 formula and spring, the wind, the emitter, the controller's response - and what it needs from the
-XMB is modelled: where the console's wave mesh falls on the spline layer's wave, where the icons go
-when the selection moves, and the input itself.
+XMB is modelled: where the icons go when the selection moves, and the input itself. The wave it
+emits on is the console's own mesh, which `wave-reverse.js` builds - see the wave notes'
+[implementation](../wave/implementation.md).
 
 The pool holds 2049 particles, the size read out of the savestate. Like the original it
 runs full, so emission waits on a free slot; the `welcome` set, which asks for 70 births
@@ -19,29 +20,9 @@ on each frame that passes its draw, simply keeps it that way.
 
 ## Modelled choices
 
-- **Where the wave is.** The spline layer draws in clip space with no camera.
-  - A wave point goes on the camera ray through its screen position, at a depth from 7.77
-    to 9.47 set by its row. That range is the one that puts new particles where the
-    console's pool has them, matching the median and the width of its just-born band; it
-    replaced the captured wave's own 5th to 95th percentile, 6.8 to 10.6, which was more
-    than twice as thick.
-  - The console's mesh reaches past the screen edges, and its 128 columns are spread 1.55
-    times past them. 15.1% of births then land outside the life box and 35% off screen,
-    against 14% and 28 to 30% in the captures.
 - **Emission.** Ported - see [The emitter](emitter.md#the-emitter) - with these modelled parts:
-  - The console's 128 lines are the spline layer's rows, and its columns run across the
-    surface from the right edge. A row the spline layer clips has no vertex there, and a
-    birth picked on it is lost.
-  - A vertex's velocity is the wave's own there, over `delta time`, rather than how far it
-    moved since it was picked, since the page's frames need not match the steps.
-  - **The spline layer's wave moves more slowly than the console's.** Its vertices move at
-    a median 0.113 in the emitter's units, where the pool's newborns need about 0.4, so the
-    emitter reads them 3.5 times faster (`WAVE_SPEED_GAIN`). That brings late life in line -
-    0.081 / 0.258 / 0.491 in xy against the console's 0.081 / 0.262 / 0.517 - but leaves the
-    newborns at a median 0.232 against 0.276; 4.5 brings the newborns to 0.263 and late life
-    to 0.299. No one factor fits both, because the wave's speeds are distributed differently.
-    The console's own wave moves at a median 0.365 in these units - see
-    [its bench](../wave/implementation.md).
+  - A vertex's velocity is how far it moved over the page's last frame, scaled to a sixtieth of
+    a second, since the page's frames need not be the console's.
   - The generator starts its counter at the seed; the console's is shared by all that draw
     from it. The pool starts with random orientations, which births then pass on, and it is
     filled on the second frame, once the wave has moved. The console builds its pool with
@@ -81,8 +62,9 @@ on each frame that passes its draw, simply keeps it that way.
   - the pool. The XMB's start builds it again, empty and with every orientation the identity,
     as the console's scene does, and the page does not pre-warm it. But the page's fills in
     about five seconds, where the console's held 492 particles with its blend into the cycle
-    46 per cent done - its wave may come up still, which the spline layer's does not (not
-    followed). Only the particle side changes: the backdrop and the wave keep their settings.
+    46 per cent done - its wave may come up still (not followed). Only the particle side changes:
+    the backdrop and the wave keep their settings, and the wave is not reset as the console's is -
+    see [The start](../wave/lines.md#the-start).
 - **The music and the scene's clock.** `musicPlayback` plays [the music's way in and
   out](parameter-sets.md#the-music-set) on the particle side, and `themeColor` stands for Theme
   Settings' Colour, which [stops the scene's
@@ -152,42 +134,38 @@ on each frame that passes its draw, simply keeps it that way.
 
 ## Against the console
 
-`tools/bench/particles.js` runs the simulation on the spline layer's own wave and prints
-this. Three 30-second runs, seeds 1 to 3. The pool's column is the resting savestate's, the
-drawn column the two frame captures':
+`tools/bench/particles.js` runs the simulation over the wave `wave-reverse.js` builds, under night's
+`LINE1.mnu` as the resting savestate was, and prints this. Three 30-second runs, seeds 1 to 3. The
+pool's column is the resting savestate's, the drawn column the two frame captures':
 
 | The pool | Simulation | Console |
 |---|---|---|
-| Alive | 2014 to 2044 of 2049 | 2033 of 2049 |
-| Aging rate, min / median / max | 0.001446 / 0.002491 / 0.004257 | 0.001447 / 0.002435 / 0.004256 |
-| Just born, view depth | 7.81 / 8.81 / 9.31 | 7.57 / 8.55 / 9.07 |
-| Just born, velocity z | -0.0063 / -0.0000 / 0.0080 | -0.0112 / 0.0001 / 0.0078 |
-| Just born, speed in xy | 0.135 / 0.232 / 0.335 | 0.156 / 0.276 / 0.348 |
-| Late in life, view depth | 7.74 / 8.53 / 9.48 | 7.41 / 8.40 / 9.32 |
-| Late in life, velocity z | -0.2017 / -0.0107 / 0.2198 | -0.2501 / -0.0014 / 0.2337 |
-| Late in life, speed in xy | 0.081 / 0.258 / 0.491 | 0.081 / 0.262 / 0.517 |
+| Alive | 2007 to 2031 of 2049 | 2033 of 2049 |
+| Aging rate, min / median / max | 0.001446 / 0.002440 / 0.004257 | 0.001447 / 0.002435 / 0.004256 |
+| Just born, view depth | 7.75 / 8.97 / 10.49 | 7.57 / 8.55 / 9.07 |
+| Just born, velocity z | -0.0049 / -0.0004 / 0.0065 | -0.0112 / 0.0001 / 0.0078 |
+| Just born, speed in xy | 0.085 / 0.223 / 0.336 | 0.156 / 0.276 / 0.348 |
+| Late in life, view depth | 7.56 / 9.03 / 10.28 | 7.41 / 8.40 / 9.32 |
+| Late in life, velocity z | -0.2169 / -0.0067 / 0.1856 | -0.2501 / -0.0014 / 0.2337 |
+| Late in life, speed in xy | 0.071 / 0.246 / 0.456 | 0.081 / 0.262 / 0.517 |
 
 | What is drawn | Simulation | Capture 1 | Capture 2 |
 |---|---|---|---|
-| On screen | 1552 to 1572 | 1437 | 1417 |
-| Opacity exactly 1 | 91.4 to 91.9% | 92% | 92% |
-| View depth, median | 8.63 to 8.66 | 8.92 | 8.49 |
-| Distance outside the wave band, 90th percentile (NDC) | 0.157 to 0.173 | 0.096 | 0.114 |
-| Same, 99th percentile | 0.351 to 0.387 | 0.38 | 0.39 |
+| On screen | 1458 to 1522 | 1437 | 1417 |
+| Opacity exactly 1 | 91.8 to 93.2% | 92% | 92% |
+| View depth, median | 9.14 to 9.18 | 8.92 | 8.49 |
+| Distance outside the wave band, 90th percentile (NDC) | 0.010 to 0.026 | 0.096 | 0.114 |
+| Same, 99th percentile | 0.257 to 0.284 | 0.38 | 0.39 |
 
 Known differences:
 
-- **The spline layer's wave is flatter on screen.** Its band is 0.25 NDC tall (5th to 95th
-  percentile), against 0.57 captured. Relative to the band, the particles look more spread
-  out - which is also why the last two rows cannot be read cleanly: the distance is measured
-  against a band that is wrong to begin with.
-- **The newborns are slow**, 0.232 against 0.276 at the median, because the spline layer's
-  wave moves more slowly than the console's and the emitter's speeds follow it - see
-  [Modelled choices](#modelled-choices).
-- **About a tenth too many on screen**, and the emitter's count was not it: the traced one,
-  7.67 a frame in bursts, leaves it where it was.
-- **The captured particles are denser on the left.** The captured wave runs further left
-  than right, while the spline layer's wave is centred.
+- **The particles are born deeper and wider in depth,** 7.75 to 10.49 against 7.57 to 9.07,
+  because the wave they are born on runs deeper than the savestate's at the far side - see the
+  wave's [known differences](../wave/implementation.md#against-the-console).
+- **The newborns are slow,** 0.223 against 0.276 at the median, because the wave moves at about
+  85% of the console's speed and the emitter's speeds follow it.
+- **They keep closer to the wave's band on screen** than the captured particles do. The band is
+  measured on the last frame's mesh, the captures' on their own.
 
 **The noise's drift was the emitter's count.** For as long as the emitter was modelled, the
 particles moved too fast late in life - 0.369 in xy against 0.262 - and spread twice as far in

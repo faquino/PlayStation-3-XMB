@@ -1,7 +1,7 @@
 'use strict';
 // Particle simulation: a port of the SPU update task in `particles.elf` and of the PPU code that fills its block and
-// emits, plus a modelled rest (where the wave sits, how the icons move, when a held direction repeats). Exported as
-// `window.PS3ParticlesReverse`; driven by `particles.js`, reads `WaveSurfaceCPU` and polls the `xmb-input.js` adapter.
+// emits on the wave's mesh, plus a modelled rest (how the icons move, when a held direction repeats). Exported as
+// `window.PS3ParticlesReverse`; driven by `particles.js` with the mesh `spline.js` draws, polls `xmb-input.js`.
 
 (function () {
   // -----------------------------------------------------------------------------------------------------------------
@@ -74,6 +74,7 @@
   // The emitter, 0x30b80, draws from the wave's vertices: 128 lines of 128, as the captures' wave draw lays them out.
   const MESH_N = 128; // vertices along a line, column 0 at the right edge
   const MESH_M = 128; // lines
+  const MESH_RECORD = 8; // floats per vertex: the position in clip space, then the normal
   const EMIT_MIN_SPEED = 0.0001; // a vertex that moved less than this emits nothing
   const AGING_MIN = 0.001; // and no particle ages slower than this
   const SWEEP_START = 0.06; // 0x2dbf4: an idle sweep starts with this chance a frame,
@@ -99,8 +100,7 @@
   const ICON_ASPECT = 16 / 9;
 
   // -----------------------------------------------------------------------------------------------------------------
-  // Modelled: where the console's wave mesh falls on the spline layer's wave, and two things the XMB does outside the
-  // scene's code - move the icons, and repeat a held direction.
+  // Modelled: two things the XMB does outside the scene's code - move the icons, and repeat a held direction.
   // -----------------------------------------------------------------------------------------------------------------
   const CATEGORIES = 10; // the modelled XMB's categories, and the items in each
   const ITEMS = 8;
@@ -108,22 +108,6 @@
   // 0.176 and 0.191, which only a step every 8 frames keeps it in. How long it waits before the first repeat is not
   // known; the adapter reports a direction as held once the browser starts repeating its key.
   const REPEAT_FRAMES = 8;
-  // The spline layer has no camera, so the wave is given a depth range and a point's height picks its depth inside
-  // it. The range is the one that puts new particles where the console's pool has them: its just-born band sits at
-  // view depth 7.57 / 8.55 / 9.07 (5th, 50th, 95th percentile), and this range matches the median and the width.
-  // The two ends cannot both land as well, because this wave's heights are distributed differently from the
-  // console's - the band comes out a quarter of a unit deep at both ends.
-  const WAVE_DEPTH_NEAR = 7.77;
-  const WAVE_DEPTH_FAR = 9.47;
-  // The console's mesh runs past the screen edges, its columns from 1.45 to -1.55 in normalised device coordinates
-  // in the captures, and the emitter picks among its vertices evenly. Spreading the columns this far past the edges
-  // of the spline layer's wave puts 15% of births outside the life box, as captured, and 35% off screen, against the
-  // captures' 28 to 30%.
-  const EMIT_EXTENT = 1.55;
-  // The spline layer's wave moves more slowly than the console's, and the emitter's speeds follow the wave's: its
-  // vertices are read this many times faster. That gives late life the console's speeds and leaves the newborns a
-  // little slow; no one factor fits both (see the notes).
-  const WAVE_SPEED_GAIN = 3.5;
   const STEP_HZ = 60;
   const MAX_STEPS_PER_FRAME = 4;
   const PREWARM_STEPS = 300;
@@ -336,13 +320,11 @@
     // The emitter's state: the vertices picked this frame, as (column, line) pairs, the ones picked the frame before,
     // which are born now, and the sweep in progress.
     const emission = { picked: [], due: [], sweepLeft: 0, sweepX: 0, sweepY: 0, frame: 0 };
-    const wave = {
-      surface: null, data: null, prevData: null, t: 0, prevT: 0, dtWave: 0, p00: 1, p11: 1,
-    };
+    // The wave's mesh this frame and the frame before, and the camera's scale the vertices are projected with.
+    const wave = { mesh: null, prevMesh: null, t: 0, prevT: 0, dtWave: 0, p00: 1, p11: 1 };
     const wA = new Float32Array(4);
     const wB = new Float32Array(4);
     const wD = new Float32Array(4);
-    const evalTmp = new Float32Array(3);
     // A frame's input: the D-pad step the XMB sent in it, if any (an index into DPAD_DIRECTIONS, or -1), and the
     // Sixaxis's reading (null keeps the last one).
     const noInput = { step: -1, sensor: null };
@@ -474,27 +456,25 @@
       count = n;
     }
 
-    // --- Modelled: the wave as seen by the particles -------------------------------------------------------------
-    // The spline layer draws in clip space with no camera, so a wave point is placed where the real camera would see
-    // it: at the depth range the captured wave occupies, on the ray through its screen position.
-    function waveToWorld(data, t, gx, gz, out) {
-      const s = wave.surface;
-      window.WaveSurfaceCPU.evaluate(s.settings, data, s.width, s.height, gx, gz, t, evalTmp);
-      const d = WAVE_DEPTH_NEAR + (evalTmp[2] + 1) * 0.5 * (WAVE_DEPTH_FAR - WAVE_DEPTH_NEAR);
-      out[0] = evalTmp[0] * d / wave.p00;
-      out[1] = evalTmp[1] * d / wave.p11;
-      out[2] = CAMERA.eye[2] - d;
-      out[3] = evalTmp[2];
+    // --- Verified: the wave's vertices, as the emitter takes them --------------------------------------------------
+    // Vertex ix of line iy of the mesh spline.elf writes (`wave-reverse.js`), in clip space, taken into the world
+    // the way the particle object's matrix at +0x50 does (0x2d6e8): undoing the camera's projection and view.
+    function waveToWorld(mesh, ix, iy, out) {
+      const o = MESH_RECORD * (MESH_N * iy + ix);
+      out[0] = mesh[o] / wave.p00;
+      out[1] = mesh[o + 1] / wave.p11;
+      out[2] = CAMERA.eye[2] - mesh[o + 3];
       return out;
     }
 
-    // World velocity of the wave at (gx, gz) in task units (displacement per step / dt), or 0 on the first frame.
-    function waveVelocity(gx, gz, now, S, out) {
+    // How far the vertex moved over the last frame, over `delta time` (0x30b80); 0 on the first frame. The page's
+    // frames need not be the console's sixtieths of a second, so the frame's move is scaled to one.
+    function waveVelocity(ix, iy, now, S, out) {
       if (wave.dtWave <= 1e-4) {
         out[0] = out[1] = out[2] = 0;
         return out;
       }
-      waveToWorld(wave.prevData, wave.prevT, gx, gz, wD);
+      waveToWorld(wave.prevMesh, ix, iy, wD);
       const k = 1 / (wave.dtWave * STEP_HZ * S.deltaTime);
       out[0] = (now[0] - wD[0]) * k;
       out[1] = (now[1] - wD[1]) * k;
@@ -712,14 +692,6 @@
     // cone around the way the vertex moves. The PPU queues each birth as commands - a new slot, a position, a
     // velocity, an aging rate - that write straight into the pool, so the particle keeps its slot's last orientation.
 
-    // Where column ix of line iy falls on the spline layer's wave (modelled): the lines are the surface's rows, and
-    // the columns run from EMIT_EXTENT at the right edge, where the console's column 0 is, to -EMIT_EXTENT.
-    const mesh = { gx: 0, gz: 0 };
-    function meshPoint(ix, iy) {
-      mesh.gx = EMIT_EXTENT * (1 - (2 * ix) / (MESH_N - 1));
-      mesh.gz = (2 * iy) / (MESH_M - 1) - 1;
-    }
-
     // 0x2dde4: one draw a frame against `emit prob`, and if it passes, `emit per frame` vertices - an integer, as
     // the PPU keeps it - each at trunc(U x 127) on both axes.
     function pickVertices(S) {
@@ -753,20 +725,15 @@
       }
     }
 
-    // One vertex picked the frame before, born now. The console takes the vertex's velocity as how far it moved in
-    // that frame over `delta time`; here it is the wave's own velocity in the same units, since the page's frames
-    // need not match the steps.
+    // One vertex picked the frame before, born now: at the vertex, with the velocity it has in that frame.
     function emitAt(S, ix, iy) {
-      meshPoint(ix, iy);
-      waveToWorld(wave.data, wave.t, mesh.gx, mesh.gz, wA);
-      if (Math.abs(wA[3]) > 1) return; // the spline layer clips this row, so there is no vertex there (modelled)
-      waveVelocity(mesh.gx, mesh.gz, wA, S, wB);
-      const v = Math.hypot(wB[0], wB[1], wB[2]) * WAVE_SPEED_GAIN;
+      waveToWorld(wave.mesh, ix, iy, wA);
+      waveVelocity(ix, iy, wA, S, wB);
+      const v = Math.hypot(wB[0], wB[1], wB[2]);
       if (v < EMIT_MIN_SPEED) return;
 
       // The cone's axis is the way the vertex moves, reversed with a chance of `emit neg prob`.
-      const vk = WAVE_SPEED_GAIN / v;
-      let dx = wB[0] * vk, dy = wB[1] * vk, dz = wB[2] * vk;
+      let dx = wB[0] / v, dy = wB[1] / v, dz = wB[2] / v;
       if (uniform() < S.emitNegProb) { dx = -dx; dy = -dy; dz = -dz; }
       // Two axes across it: the longest of d x X, d x Y and d x Z, normalised, and d times that.
       const l4 = dz * dz + dy * dy, l6 = dz * dz + dx * dx, l5 = dy * dy + dx * dx;
@@ -926,16 +893,16 @@
         if (sequence === 'coldboot') rebuildPool();
       }
       applySpe(settings, spe.value, height, effective);
-      if (!wave.prevData || wave.prevData.length !== surface.data.length) {
-        wave.prevData = new Float32Array(surface.data);
+      if (!wave.prevMesh || wave.prevMesh.length !== surface.mesh.length) {
+        wave.prevMesh = new Float32Array(surface.mesh);
         wave.prevT = timeSec;
       }
-      wave.surface = surface;
-      wave.data = surface.data;
+      wave.mesh = surface.mesh;
       wave.t = timeSec;
       wave.dtWave = timeSec - wave.prevT;
+      // The mesh was projected with the aspect it was built for; undoing the projection needs the same one.
       wave.p11 = 1 / Math.tan(CAMERA.fovy * 0.5);
-      wave.p00 = wave.p11 / aspect;
+      wave.p00 = wave.p11 / (surface.aspect || aspect);
 
       gatherInput(input, dtSec);
 
@@ -953,7 +920,7 @@
         step(settings, height, frameInput);
       }
 
-      wave.prevData.set(surface.data);
+      wave.prevMesh.set(surface.mesh);
       wave.prevT = timeSec;
       stats.count = count;
     }
@@ -981,8 +948,5 @@
     LIFE_MIN,
     LIFE_MAX,
     OUT_STRIDE,
-    WAVE_DEPTH_NEAR,
-    WAVE_DEPTH_FAR,
-    WAVE_SPEED_GAIN,
   };
 })();

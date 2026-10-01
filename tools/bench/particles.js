@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 'use strict';
-// Headless bench for the particle system: runs the simulation over the spline layer's own wave and prints what its
-// pool and its drawn particles look like, beside the same measurements read off the console.
+// Headless bench for the particle system: runs the simulation over the wave wave-reverse.js builds, under night's
+// LINE1.mnu as the resting savestate was, and prints what its pool and its drawn particles look like, beside the same
+// measurements read off the console.
 //
 // The console's column is not a target to hit exactly - the pool is one moment of one savestate and the captures are
-// two frames - but a change to the modelled emitter should move the simulation towards it and must not move the
-// drawn metrics away. PARTICLES_REVERSE_ENGINEER.md records where each reference number comes from.
+// two frames - but a change to the simulation should move it towards them and must not move the drawn metrics away.
+// PARTICLES_REVERSE_ENGINEER.md records where each reference number comes from.
 //
 // Usage: node tools/bench/particles.js [--seconds 30] [--runs 3] [--seed 1] [--terms]
 //
@@ -19,14 +20,13 @@ const path = require('path');
 const DIR = path.join(__dirname, '..', '..', 'ps3xmbwave');
 // The load order index.html uses; each file reads the globals the ones before it export.
 const FILES = ['background-gradients-night.js', 'background-gradients-day.js', 'spline-settings.js',
-  'particles-themes.js', 'particles-settings.js', 'spline-reverse.js', 'wave-surface-cpu.js',
-  'particles-reverse.js'];
+  'particles-themes.js', 'particles-settings.js', 'wave-reverse.js', 'particles-reverse.js'];
+const SETS = require('./line-sets.js');
 
 const ASPECT = 16 / 9;
 const STEP_HZ = 60;
 // The task's three noise generators, reseeded every frame, so the k-th live particle always draws the k-th vector.
 const NOISE_SEEDS = [0x98756161 | 0, 0x21324889 | 0, 0x82181158 | 0];
-const WAVE_GRID = 100; // the mesh spline.js draws
 const BINS = 50;
 
 // Read off the console. The pool is the resting savestate's, 2049 slots; the two captures are the RSX frames.
@@ -90,20 +90,18 @@ function three(values, digits) {
 }
 
 function simulate(seconds, seed) {
-  const S = window.SPLINE_SETTINGS;
+  const S = Object.assign({}, window.SPLINE_SETTINGS, SETS.night);
   const PS = window.PARTICLE_SETTINGS;
-  const W = 256, H = 64;
-  const data = new Float32Array(W * H);
-  const pipeline = window.PS3SplineReverse.createPipeline();
-  const surface = { settings: S, data, width: W, height: H };
+  const wave = window.PS3WaveReverse.createWave();
+  const surface = { settings: S, wave, mesh: wave.mesh, aspect: ASPECT };
   const sys = window.PS3ParticlesReverse.createSystem({ capacity: 2049, seed });
   let t = 0;
   for (let frame = 0; frame < seconds * STEP_HZ; frame++) {
     t += 1 / STEP_HZ;
-    pipeline.writeDisplacementTexture(S, t, data, W, H);
+    wave.update(S, 1 / STEP_HZ, ASPECT);
     sys.update(PS, surface, null, t, 1 / STEP_HZ, ASPECT);
   }
-  return { sys, settings: S, data, W, H, t };
+  return { sys, mesh: wave.mesh, t };
 }
 
 // The pool in the task's own record layout, split by how much life each particle has spent.
@@ -157,22 +155,19 @@ function drawnMetrics(run) {
   const p00 = p11 / ASPECT;
   const eye = RE.CAMERA.eye[2];
 
-  // The wave's own band, binned across the screen, from the same surface the emitter samples.
-  const out = new Float32Array(3);
+  // The wave's own band, binned across the screen, from the mesh the emitter takes its vertices from.
   const lo = new Array(BINS).fill(Infinity);
   const hi = new Array(BINS).fill(-Infinity);
   const waveDepth = [];
-  for (let j = 0; j < WAVE_GRID; j++) {
-    for (let i = 0; i < WAVE_GRID; i++) {
-      const gx = (i / (WAVE_GRID - 1)) * 2 - 1;
-      const gz = (j / (WAVE_GRID - 1)) * 2 - 1;
-      window.WaveSurfaceCPU.evaluate(run.settings, run.data, run.W, run.H, gx, gz, run.t, out);
-      if (Math.abs(out[0]) > 1 || Math.abs(out[2]) > 1) continue;
-      waveDepth.push(RE.WAVE_DEPTH_NEAR + (out[2] + 1) * 0.5 * (RE.WAVE_DEPTH_FAR - RE.WAVE_DEPTH_NEAR));
-      const bin = Math.min(BINS - 1, Math.max(0, Math.floor((out[0] + 1) * (BINS / 2))));
-      lo[bin] = Math.min(lo[bin], out[1]);
-      hi[bin] = Math.max(hi[bin], out[1]);
-    }
+  const record = window.PS3WaveReverse.RECORD;
+  for (let v = 0; v < run.mesh.length / record; v++) {
+    const w = run.mesh[v * record + 3];
+    const x = run.mesh[v * record] / w, y = run.mesh[v * record + 1] / w;
+    if (Math.abs(x) > 1 || Math.abs(y) > 1) continue;
+    waveDepth.push(w);
+    const bin = Math.min(BINS - 1, Math.max(0, Math.floor((x + 1) * (BINS / 2))));
+    lo[bin] = Math.min(lo[bin], y);
+    hi[bin] = Math.max(hi[bin], y);
   }
 
   const o = run.sys.output;
@@ -231,9 +226,8 @@ function main() {
     drawn.push(drawnMetrics(run));
     last = pools[pools.length - 1];
   }
-  const RE = window.PS3ParticlesReverse;
-  console.log(runs + ' run(s) of ' + seconds + 's, emission band ' + RE.WAVE_DEPTH_NEAR + ' to '
-    + RE.WAVE_DEPTH_FAR + ' deep, ' + ((Date.now() - started) / 1000).toFixed(1) + ' s wall clock\n');
+  console.log(runs + ' run(s) of ' + seconds + 's over night\'s wave, ' + ((Date.now() - started) / 1000).toFixed(1)
+    + ' s wall clock\n');
 
   const row = (label, sim, ref) => console.log('  ' + String(label).padEnd(44) + String(sim).padEnd(34) + ref);
   console.log('The pool (percentiles are 5th / 50th / 95th)');
@@ -273,7 +267,8 @@ function main() {
   row('View depth, median', collect(drawn.map((d) => d.depth), 2), CONSOLE.depth);
   row('Outside the wave band, 90th percentile (NDC)', collect(drawn.map((d) => d.outside), 3), CONSOLE.outside);
   row('Same, 99th percentile', collect(drawn.map((d) => d.outside99), 3), CONSOLE.outside99);
-  row('The wave\'s own depth spread, 5th to 95th', collect(drawn.map((d) => d.waveBand), 2), '1.50 at birth');
+  row('The wave\'s own depth on screen, 5th to 95th', collect(drawn.map((d) => d.waveBand), 2),
+    '2.50 (the wave bench)');
 }
 
 main();
