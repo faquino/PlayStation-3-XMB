@@ -80,6 +80,17 @@ on each frame that passes its draw, simply keeps it that way.
     about five seconds, where the console's held 492 particles with its blend into the cycle
     46 per cent done - its wave may come up still, which the spline layer's does not (not
     followed). Only the particle side changes: the backdrop and the wave keep their settings.
+- **The music and the scene's clock.** `musicPlayback` plays [the music's way in and
+  out](parameter-sets.md#the-music-set) on the particle side, and `themeColor` stands for Theme
+  Settings' Colour, which [stops the scene's
+  clock](day-cycle.md#theme-settings-colour-stops-the-clock) for the `auto` theme and, through
+  `xmbSceneDate`, the backdrop's Auto gradient. Headless, each step lands on the firmware's sets.
+  What is modelled:
+  - a blend's curve, the day cycle's smoothstep, and the clock's next tick, taken at once;
+  - the backdrop: that `0x10900`'s moment is what `_MonthTime` and `_NightDayBlend` read, which
+    puts it on the month's own daytime gradient, at once;
+  - what holds the clock: only the music and a sequence, not a boot's tail, the fades or the first
+    five seconds; and the XMB's start takes a colour in at 11.5 seconds, not after `ShowGUI`.
 - **Flow grid.** Ported: 32 × 16 cells of signed bytes, sampled the way the task samples them,
   decayed by 0.98 a frame, and written by every icon that moves - see
   [The flow grid](flow-grid.md#the-flow-grid). At rest it stays empty, as the console's does. What is

@@ -1,6 +1,7 @@
 'use strict';
 // Theme parameter sets: how each firmware override/<theme>/PARTICLES.mnu differs from the base one, plus the blend
-// that walks the day and the boot sequences. Read at load time by `particles-settings.js`, applied from `index.html`.
+// that walks the day, the boot sequences, the music and the scene's clock. Read at load by `particles-settings.js`,
+// applied from `index.html`, which also hands the backdrop (`spline.js`) the clock.
 
 // Only the particle side is here, and on that side some numbered sets repeat: welcome_2's particles equal
 // welcome_1's, coldboot2's equal coldboot1's, and gameboot4 is gameboot3 with `global alpha` 0, like black is music
@@ -78,6 +79,16 @@ window.PARTICLE_THEME_OPTIONS = [
   // gameboot4 is gameboot3 with `global alpha` 0.
   const SEQUENCE_SETS = { gameboot4: Object.assign({}, window.PARTICLE_THEMES.gameboot, { globalAlpha: 0 }) };
 
+  // The music: event 4, which the scene sends itself as playback starts and stops. Starting puts music_1 in over
+  // 5.5 s (0x16198). Stopping puts in the set with an empty name, the base as the name reads, over 5.5 s, and when
+  // those 5.5 s are up lets the clock go (0x15694, 0x10658); until then the clock is held (0x11c58), so the hour does
+  // not move the particles.
+  const MUSIC_IN = 5.5;
+  const MUSIC_OUT = 5.5;
+  // The scene's clock ticks every second and puts the moment it shows in over 1 s (0x12284), and Theme Settings'
+  // Colour puts its own in over 1 s too (sub-event 6).
+  const TICK = 1;
+
   const TOUCHED = [];
   Object.keys(window.PARTICLE_THEMES).forEach(function (key) {
     Object.keys(window.PARTICLE_THEMES[key]).forEach(function (name) {
@@ -95,15 +106,22 @@ window.PARTICLE_THEME_OPTIONS = [
   // where a setting was locked when they moved it.
   const written = {};
   const aim = {};
+  let music = 'off'; // 'in' while music_1 is in, 'out' while the base goes in after the music stops
+  let musicStopped = 0; // when it stopped, in seconds
+  let playback = 'stopped';
+  let lastColor = '0'; // the colour Theme Settings held last time
+  let fade = null; // a change of set on its way: where the parameters stood, when it started, and how long it takes
 
   // Writes a value the theme or the sequence has for a setting, if it moves the setting: one it leaves where it was
-  // keeps whatever it holds, a value set by hand included, and one locked in `keep` is left alone either way.
+  // keeps whatever it holds, a value set by hand included, and one locked in `keep` is left alone either way. Returns
+  // true when it wrote.
   function put(settings, name, value, keep) {
     aim[name] = value;
-    if (keep && keep.has(name)) return;
-    if (name in written && written[name] === value) return;
+    if (keep && keep.has(name)) return false;
+    if (name in written && written[name] === value) return false;
     settings[name] = value;
     written[name] = value;
+    return true;
   }
 
   // A setting that was locked and is back to what was last written into it - Reset puts that back - catches up with
@@ -149,15 +167,74 @@ window.PARTICLE_THEME_OPTIONS = [
     return dayCycle(date || new Date());
   }
 
+  // The moment the scene shows: the clock's, or, while Theme Settings' Colour holds a month, noon on the 1st of that
+  // month (0x11c58), which stops it. `index.html` hands the same moment to the backdrop.
+  window.xmbSceneDate = function xmbSceneDate(color, date) {
+    const now = date || new Date();
+    const month = Math.round(Number(color)) || 0;
+    if (month < 1 || month > 12) return now;
+    return new Date(now.getFullYear(), month - 1, 1, 12, 0, 0);
+  };
+
+  // What the theme layer asks for now: music_1 while the music is in, the base while it goes out, and otherwise what
+  // `theme` gives at the moment the scene's clock shows.
+  function layerGoal(settings, theme, date) {
+    if (music === 'in') return { from: 'music', to: 'music', mix: 0 };
+    if (music === 'out') return { from: 'base', to: 'base', mix: 0 };
+    return themeBlend(theme, window.xmbSceneDate(settings.themeColor, date));
+  }
+
+  // Seconds, on `date` when one is given and on the page's clock otherwise.
+  function clockOf(date) {
+    return (date ? date.getTime() : typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+  }
+
+  // Sets off towards what the theme layer asks for, over `seconds`, from wherever the parameters stand: where the
+  // theme or the sequence had them, not where a value set by hand holds them.
+  function startFade(settings, now, seconds) {
+    const from = {};
+    TOUCHED.forEach(function (name) { from[name] = name in aim ? aim[name] : settings[name]; });
+    fade = { from: from, start: now, seconds: seconds };
+  }
+
+  // Follows the music and Theme Settings' Colour as the settings name them. Music starting again while the base goes
+  // in puts music_1 back over 5.5 s, as the console's does; a colour picked while the music holds the clock comes in
+  // when it lets go.
+  function followScene(settings, now) {
+    const wanted = settings.musicPlayback === 'playing' ? 'playing' : 'stopped';
+    if (wanted !== playback) {
+      playback = wanted;
+      if (wanted === 'playing' && music !== 'in') {
+        music = 'in';
+        startFade(settings, now, MUSIC_IN);
+      } else if (wanted === 'stopped' && music === 'in') {
+        music = 'out';
+        musicStopped = now;
+        startFade(settings, now, MUSIC_OUT);
+      }
+    }
+    if (music === 'out' && now - musicStopped >= MUSIC_OUT) {
+      music = 'off';
+      startFade(settings, now, TICK); // the clock's next tick, which the page takes at once
+    }
+    const pinned = String(settings.themeColor || '0');
+    if (pinned !== lastColor) {
+      lastColor = pinned;
+      if (music === 'off') startFade(settings, now, TICK);
+    }
+  }
+
   // Plays the sequence `settings.sequence` names, and hands over to the next one, or to the theme, when it is over.
   // Returns true when it wrote.
   function playSequence(settings, theme, date, keep) {
-    const clock = date ? date.getTime() : typeof performance !== 'undefined' ? performance.now() : Date.now();
-    const now = clock / 1000;
+    const now = clockOf(date);
     let wrote = false;
     for (;;) {
       const wanted = SEQUENCES[settings.sequence] ? settings.sequence : null;
       if (wanted !== (playing && playing.name)) {
+        // Handing back to the theme, the clock's next tick puts the moment it shows in over a second: the cold boot
+        // reads the clock whatever the colour (0x11b20), so a colour comes in only then.
+        if (!wanted && playing) startFade(settings, now, TICK);
         playing = wanted ? { name: wanted, start: now, step: -1, from: {}, at: 0, set: null, blend: 0 } : null;
         appliedPair = null; // the theme writes again when the sequence is over
       }
@@ -196,30 +273,41 @@ window.PARTICLE_THEME_OPTIONS = [
   }
 
   // Writes a theme into the live settings, or the day's blend of two when `theme` is 'auto', and plays the boot
-  // sequence `settings.sequence` names on top of it. The theme only writes when it or its blend has moved, and then
-  // only the settings it moves, so a value set by hand survives until the theme moves that very setting; one locked in
-  // `keep` (a Set of names, the particle panel's locks) survives that too, and once it is back to what was last
-  // written - Reset puts that back - it catches up at once. Returns true when it wrote.
+  // sequence `settings.sequence` names on top of it. The music (`settings.musicPlayback`) takes the theme's place
+  // while it holds the clock, and Theme Settings' Colour (`settings.themeColor`) stops the clock 'auto' reads. The
+  // theme only writes when it or its blend has moved, and then only the settings it moves, so a value set by hand
+  // survives until the theme moves that very setting; one locked in `keep` (a Set of names, the particle panel's
+  // locks) survives that too, and once it is back to what was last written - Reset puts that back - it catches up at
+  // once. Returns who wrote, 'theme', 'music' or 'sequence', or false when nothing did.
   window.applyParticleTheme = function applyParticleTheme(settings, theme, date, keep) {
     if (!base) {
       base = {};
       TOUCHED.forEach(function (name) { base[name] = settings[name]; });
     }
-    if (playSequence(settings, theme, date, keep)) return true;
+    const now = clockOf(date);
+    followScene(settings, now);
+    if (playSequence(settings, theme, date, keep)) return 'sequence';
     if (playing) return false;
 
-    const c = themeBlend(theme, date);
+    const writer = music === 'off' ? 'theme' : 'music';
+    const c = layerGoal(settings, theme, date);
     const pair = c.from + '>' + c.to;
     const step = Math.round(c.mix * 500) / 500;
-    if (pair === appliedPair && step === appliedMix) return catchUp(settings, keep);
+    const moved = pair !== appliedPair || step !== appliedMix;
+    if (!moved && !fade) return catchUp(settings, keep) && writer;
     appliedPair = pair;
     appliedMix = step;
 
+    // A change of set eases in from where the parameters stood; the curve, which runs in qglbase, is not traced, and
+    // here it is the day's smoothstep.
+    const k = fade ? smoothstep((now - fade.start) / fade.seconds) : 1;
+    let wrote = false;
     TOUCHED.forEach(function (name) {
       const a = valueOf(name, c.from);
-      const b = valueOf(name, c.to);
-      put(settings, name, a + (b - a) * step, keep);
+      const b = a + (valueOf(name, c.to) - a) * step;
+      if (put(settings, name, k < 1 ? fade.from[name] + (b - fade.from[name]) * k : b, keep)) wrote = true;
     });
-    return true;
+    if (k >= 1) fade = null;
+    return (moved || wrote) && writer;
   };
 })();

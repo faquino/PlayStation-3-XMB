@@ -51,7 +51,8 @@ the moment:
 - a moment Date and Time Settings is showing - sub-event 4, below;
 - a fade of sub-event 2 or 3, until a fade back has run its time: sub-event 2 sets a timer for it,
   whose callback (`0x2e60`) lets go;
-- the music, event 4;
+- the music, event 4, while its set is in or on its way out - see [The music
+  set](parameter-sets.md#the-music-set);
 - the first five seconds after the start-up, which the timer counts down (`+0x20`, set to 5).
 
 The cold boot's own handlers read the clock whatever the colour (`BootBG2`, `NormalBG` and
@@ -70,8 +71,8 @@ So any colour but 0 stops the scene's clock at noon on the 1st of its month, wha
 the particles hold the `day` set, which the cycle keeps from 11:00 to 13:00. By the law above the
 backdrop should sit on that month's own daylight textures, with nothing of the next -
 `_MonthTime` 0 and `_NightDayBlend` 1 - which a capture taken with a colour set would confirm.
-Back at 0, the clock's moment comes in over a second. Nothing in `ps3xmbwave/` stands for the
-setting.
+Back at 0, the clock's moment comes in over a second. `themeColor` stands for the setting - see
+[Modelled choices](implementation.md#modelled-choices).
 
 **Sub-event 4 is Date and Time Settings.** `sysconf_plugin` sends it a pointer to the moment being
 set, and 0 when it is done (`0x7fc64`). With a pointer the handler (`0x15b0c`) holds the clock

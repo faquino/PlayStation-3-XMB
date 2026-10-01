@@ -86,8 +86,14 @@ window.PARTICLE_SETTINGS = {
   // What's New's board (wboard_plugin) opening its list: over 2 s the particles speed up and glint more
   // (PARTICLES_SPE.mnu), and closing it takes them back
   whatsNewBoard: 'closed',
+  // Music playing in the XMB: the particles go to the music set over 5.5 s and hold it whatever the hour; when it
+  // stops, to the base set over 5.5 s and then back to the theme (`particles-themes.js`)
+  musicPlayback: 'stopped',
   // Theme Settings > Background > Brightness, Normal to -5: the particles drawn at 1 - 0.15 per step, faded to over 1 s
   themeBrightness: '0',
+  // Theme Settings > Colour, Original or a month: a month stops the scene's clock at noon on its 1st, for the Auto
+  // theme and the backdrop's Auto gradient alike
+  themeColor: '0',
   // The XMB's background given away, as a video, the browser or the Store take it: the particles fade to black over
   // backgroundFadeMs, and back to the brightness when it is taken back
   xmbBackground: 'shown',
@@ -482,6 +488,12 @@ window.PARTICLE_SETTINGS_META = {
       'glare, over 2 s; closing it takes them back.\n' +
       "Console state: PARTICLES_SPE.mnu's first factor",
   },
+  musicPlayback: {
+    type: 'select', options: [{ value: 'stopped', label: 'Stopped' }, { value: 'playing', label: 'Playing' }],
+    help: 'Music playing in the XMB: the particles go to the music set over 5.5 s and hold it whatever the hour. ' +
+      'When it stops they go to the base set (PARTICLES.mnu) over 5.5 s, then back to the theme over 1 s.\n' +
+      "Console state: the scene's music event (event 4)",
+  },
   themeBrightness: {
     type: 'select',
     options: [
@@ -491,6 +503,20 @@ window.PARTICLE_SETTINGS_META = {
     help: "Theme Settings' Brightness: each step below Normal takes another 15% off the particles' brightness, " +
       'fading over 1 s.\n' +
       'Console state: Theme Settings',
+  },
+  themeColor: {
+    type: 'select',
+    options: [
+      { value: '0', label: 'Original' }, { value: '1', label: 'January' }, { value: '2', label: 'February' },
+      { value: '3', label: 'March' }, { value: '4', label: 'April' }, { value: '5', label: 'May' },
+      { value: '6', label: 'June' }, { value: '7', label: 'July' }, { value: '8', label: 'August' },
+      { value: '9', label: 'September' }, { value: '10', label: 'October' }, { value: '11', label: 'November' },
+      { value: '12', label: 'December' },
+    ],
+    help: "Theme Settings' Colour: a month stops the scene's clock at noon on the 1st of that month, whatever the " +
+      "date and hour, so the Auto theme holds the day set and the backdrop's Auto gradient that month's daytime " +
+      'colour. Original lets the clock run. The particles take a change over 1 s.\n' +
+      'Console state: Theme Settings (registry key 0x5f)',
   },
   xmbBackground: {
     type: 'select', options: [{ value: 'shown', label: 'Shown' }, { value: 'hidden', label: 'Hidden' }],

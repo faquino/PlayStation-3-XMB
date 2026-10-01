@@ -75,10 +75,9 @@
       function syncParticleTheme() {
         const settings = window.PARTICLE_SETTINGS;
         const locks = particlesPanel ? particlesPanel.locked : null;
-        const wrote = window.applyParticleTheme(settings, settings.theme, undefined, locks);
-        if (!wrote || !particlesPanel) return;
-        // While a sequence plays, what is written is its own, and the panel colours it apart from the theme's.
-        particlesPanel.refresh(settings.sequence === 'none' ? 'theme' : 'sequence');
+        const writer = window.applyParticleTheme(settings, settings.theme, undefined, locks);
+        // It names who wrote - the theme, the music or a sequence - and the panel colours each apart.
+        if (writer && particlesPanel) particlesPanel.refresh(writer);
       }
 
       syncParticleTheme();
@@ -97,7 +96,8 @@
         splineTimeSec += dtSec;
 
         syncParticleTheme();
-        splineLayer.render(splineTimeSec);
+        // The backdrop shows the moment the scene's clock does, which Theme Settings' Colour can stop.
+        splineLayer.render(splineTimeSec, window.xmbSceneDate(window.PARTICLE_SETTINGS.themeColor));
         // The particles are emitted from the wave just drawn, so they share its clock.
         particlesLayer.render(splineTimeSec, dtSec);
         requestAnimationFrame(frame);

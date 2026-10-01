@@ -1,5 +1,5 @@
 'use strict';
-// Spline layer renderer: builds background/wave WebGL programs and draws the main XMB wave mesh each frame.
+// Spline layer renderer: draws the backdrop, at the scene's moment from `index.html`, and the XMB wave each frame.
 // Consumes `SPLINE_SETTINGS` + `PS3SplineReverse`; called by `index.html`, which hands its `surface` to `particles.js`.
 
 (function () {
@@ -127,11 +127,12 @@
     ];
   }
 
-  function resolveBackgroundGradient(settings) {
+  // `date` is the moment the scene's clock shows, which 'auto' follows; without one, the page's clock.
+  function resolveBackgroundGradient(settings, date) {
     const presets = window.BG_GRADIENT_PRESETS || {};
     const selectedKey = String(settings.gradientPreset || 'default');
     const selected = selectedKey === 'auto' && window.bgGradientForDate
-      ? window.bgGradientForDate(new Date())
+      ? window.bgGradientForDate(date || new Date())
       : presets[selectedKey];
 
     if (selected && !selected.legacy && selected.colorStart && selected.colorEnd) {
@@ -320,9 +321,9 @@
       window.__PS3_REVERSE_STATE = state;
     }
 
-    function render(timeSec) {
+    function render(timeSec, date) {
       updateSplineTexture(timeSec);
-      const bgGradient = resolveBackgroundGradient(settings);
+      const bgGradient = resolveBackgroundGradient(settings, date);
 
       gl.disable(gl.DEPTH_TEST);
       gl.disable(gl.BLEND);

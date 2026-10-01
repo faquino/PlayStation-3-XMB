@@ -126,6 +126,9 @@ of a 30-day month is 0.73.
 `bgGradientForDate` in `ps3xmbwave/background-gradients-day.js`, selected by the `auto` entry of
 the gradient dropdown, walks this month's fitted gradient towards next month's, in the day tables
 and in the night ones, and mixes those two by the time of day. Angles take the shorter way round.
+It reads the moment the scene's clock shows, which Theme Settings' Colour (`themeColor`) stops at
+noon on the 1st of a month, so a colour puts it on that month's own daytime gradient - inferred, see
+the first item under [Still open](#still-open).
 
 The walk and the two ramps are the measured ones. What stays modelled:
 
