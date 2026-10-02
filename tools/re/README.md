@@ -11,12 +11,13 @@ Extracted firmware assets must never be committed.
 | `spu_disasm.py` | Disassembles SPU ELF files (the SPURS tasks inside `lines.qrc`), with Ghidra-style `FUN_`/`LAB_` labels, the quadwords that `lqr`/`lqa` read, and the constants built by `ilhu`/`iohl`. |
 | `spu_cache.py` | Matches RPCS3's SPU program cache (`spu-*.dat`) against an ELF: which of its code actually ran, and with `--since`, which code ran for the first time. |
 | `cgbin.py` | Reads compiled RSX Cg programs (`.vpo`/`.fpo`): parameter tables, register assignments, and the uniform values the XMB set at run time, read from RPCS3's shader cache. `--fc-table` maps the `_fetch_constant(n)` of RPCS3's decompiled fragment programs to those uniforms and literals. |
-| `rrc.py` | Reads RPCS3 RSX frame captures (`captures/*.rrc.gz`, Alt+C in the emulator): the draw calls of one frame, the vertex constants at each draw, and each draw's vertex buffers, decoded to CSV. |
+| `rrc.py` | Reads RPCS3 RSX frame captures (`captures/*.rrc.gz`, Alt+C in the emulator): the draw calls of one frame, the vertex constants at each draw, and each draw's vertex buffers, decoded to CSV. `frame` lists the draws with their programs, the surface each writes, the textures it reads, its blend and its live uniforms. |
 | `ppu_prx.py` | Loads decrypted PPU modules (PRX or executable), applies PRX relocations, finds the TOC, and disassembles with capstone. Also finds immediates, the code that reaches an address, the callers of each named import, and the variables a module imports and exports. Needs `pip install capstone`. |
 | `whichset.py` | Names the parameter set an RSX capture was taken under, or the pair it was crossfading and how far along, by fitting the backdrop's four corner colours against every `override/`. Reads the particles' live `glare` from the same capture. |
 | `readblock.py` | Reads the particle task's 2304-byte parameter block out of RSX captures, at the offsets the task reads it: force, drag, the field's rotation, the noise scale, and the flow grid's non-empty cells. |
 | `coverage.py` | Finds where a PPU module sits in a savestate from the return addresses its stacks keep, and lists the module's call sites among them - which functions ran - and the ones only one savestate holds. So far only `vsh.elf` leaves any. |
 | `nids.py` | Computes PS3 function NIDs from names and names a module's imports. |
+| `month-fits.py` | Fits the backdrop's 24 month textures with cubics and writes `ps3xmbwave/background-months.js`, the fitted data the page draws the backdrop from. |
 
 ## Typical workflow
 
@@ -170,6 +171,57 @@ another](../../docs/particles/day-cycle.md#how-one-set-blends-into-another).
 The cache only grows, which makes it a coverage recorder. To find the code behind a
 behaviour, copy `spu-safe-v1-tane.dat`, trigger the behaviour in RPCS3 (shake the
 controller, move across icons), then run `spu_cache.py match ... --since <the copy>`.
+
+## A capture's frame
+
+`rrc.py frame` lists a capture's draws with what each does: its fragment and vertex programs, named
+by matching the `.fpo` and `.vpo` files' microcode, the surface it writes, the textures its program
+samples - format, size, filters, wrap - its blend, and with `--uniforms` its fragment program's
+uniforms.
+
+```bash
+python tools/re/rrc.py frame <capture.rrc.gz> --programs re-work/lines/lib --uniforms
+```
+
+Three things to know when reading a frame:
+
+- **The uniforms are the draw's own.** The XMB patches fragment programs' constants between draws
+  with inline transfers - an NV3062 destination and NV308A points and colours in its FIFO - so a
+  program drawn six times can run with six sets of values, as the glare's `AccGlare` does. The
+  memory blocks hold the microcode as it was first needed, and `frame` lays the frame's transfers
+  so far over it. `whichset.py`'s `live_uniform` reads the block alone, which is right for a program
+  patched once a frame and not for one patched between draws.
+- **Render targets read as zeros.** RPCS3 keeps them on the GPU and does not write them back, so a
+  capture says what a pass draws, never what it drew. What the CPU uploads reads as it was: the
+  wave's `_Encode` and the composite's preexpose tables and noise came out of `cap.memory`, at the
+  offsets the texture registers give.
+- **`Copy`, `GlareSource` and `back_colours_cpy` are one program**, the same microcode; `frame`
+  names the first it finds.
+
+That is how [the passes after the wave](../../docs/wave/postprocess.md) were read. Their result can
+only be checked against what RPCS3 shows: its screenshots, in `screenshots/`, are the 1920 × 1080
+frame as it went out, lossless.
+
+## Checking a re-authored program
+
+RPCS3's shader log holds each program's decompilation in GLSL. Its setting, *Log shader programs*,
+is in the configuration's Debug tab, which RPCS3 hides unless `showDebugTab=true` in
+`GuiConfigs/CurrentSettings.ini`; or, with RPCS3 closed, set `Log shader programs: true` under
+`Video:` in `config/config.yml`. Booting the XMB then decompiles every program in the shader cache
+into `shaderlog/` - one a past session used only once, such as the music's, included - numbering
+them afresh over the last run's, so copy those aside into `re-work/` first. With a few definitions
+a decompilation runs in WebGL2 as it is: `_select` as
+`mix`, `fma(a, b, c)` as `a * b + c`, `_builtin_rcp(x)` returning a `vec4`, each `TEX2D(n, uv)` as a
+`texture` call, the uniforms as `vec4`s, and the `_fetch_constant(n)` filled in from `cgbin.py
+--fc-table`. Run over the same inputs as the re-authored program into a float target, the two can be
+compared texel by texel - that is how [the backdrop's program](../../docs/background/program.md) was
+checked, to 4e-7. Keep that harness in a scratch folder: a decompilation is firmware.
+
+Then the whole chain can be checked against a screenshot: the program fed what a capture taken a few
+seconds from it held - its uniforms, and the textures out of the firmware - and put through the
+composite after the wave gives the screenshot's pixels where only the backdrop shows. A capture's
+own wave mesh (`tools/bench/wave-frames.py` writes them into `re-work/wave-frames/`), drawn in place
+of the page's, does the same for the wave.
 
 ## Getting the XMB where a reading needs it
 

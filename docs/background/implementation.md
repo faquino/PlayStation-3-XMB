@@ -6,21 +6,40 @@ verified and what is modelled. This is the detail.
 
 ## What the recreation does
 
-`bgGradientForDate` in `ps3xmbwave/background-gradients-day.js`, selected by the `auto` entry of
-the gradient dropdown, walks this month's fitted gradient towards next month's, in the day tables
-and in the night ones, and mixes those two by the time of day. Angles take the shorter way round.
-It reads the moment the scene's clock shows, which Theme Settings' Colour (`themeColor`) stops at
-noon on the 1st of a month, so a colour puts it on that month's own daytime gradient - inferred, see
-`0x10900` under [Still missing](../../BACKGROUND_REVERSE_ENGINEER.md#still-missing).
+On `auto`, the gradient dropdown's default, `backdrop.js` draws what the console draws, into the 64 ×
+32 buffer the passes after the wave read - see [The passes after the
+wave](../wave/postprocess.md):
 
-The walk and the two ramps are the measured ones. What stays modelled:
+- [the programs](program.md), `back_colours0` and `back_colours1`, re-authored, as `COLOUR SHADER`
+  picks, each eased in from a copy of the buffer by `_Alpha`, as the console's are - see
+  [`_Alpha`](uniforms.md#_alpha);
+- their uniforms worked out the way the scene does - see [What the uniforms read](uniforms.md) - from
+  the moment `scene-themes.js` hands over (`xmbBackdropMoment`): the scene's clock on each of its
+  ticks, a second apart, over a second, but none while the XMB's start, a content's boot or the
+  music holds it; Theme Settings' Colour's noon on the 1st of its month; and 10:00 of the day over
+  7.5 seconds as the XMB's start begins;
+- `BACKGROUND.mnu`'s parameters as settings, which `scene-themes.js` moves with the rest of each set,
+  `COLOUR SHADER` at once, as a whole number, a change of it easing in over 2 seconds.
 
-- **That the shader spends `_MonthTime` linearly.** The uniform is measured exactly, but those 538
-  instructions have not been followed to the end, and one of the things they do with it is a
-  Gaussian - `exp(-0.01 (m - 15)^2)`, from the literals -15 and -0.0144269 at `fc[95]` and `fc[96]`
-  - which may shape the walk rather than something else.
-- **Blending two fitted gradients rather than four textures.** Each month is stored here as one
-  linear gradient fitted to its texture, so a blend of two with different angles is an
-  approximation of blending the textures themselves.
-- Our backdrop is the raw gradient, at full alpha and without the console's tone map, which is why
-  it comes out brighter and more saturated than the screen.
+Fed the console's own wave mesh, the page's frame at 22:00 on 24 September is RPCS3's screenshot of
+that moment, its backdrop to a level or two of 255 and its wave with the same golden fringes; at
+17:09 on 23 September its backdrop is the screenshot's to two levels, five in the top left corner.
+Under the music, with the page's own wave, the top of the screen is the screenshots' of 23:34 and
+23:44 on 23 September to 3 levels on average and 9 at most, what is left being the glare of a wave
+that is not the console's of the moment.
+
+The other presets, a month's gradient or the RGB sliders, draw that gradient into the same buffer as
+they are, and the passes after the wave go over them all the same.
+
+## What stays modelled
+
+- **The month textures are cubic fits.** The firmware's are left out of the repository;
+  `background-months.js` holds, for each of the 24 and each channel, the ten coefficients of the
+  cubic in u and v that fits it best, written by `tools/re/month-fits.py` from the user's own
+  `textures/month_bg`. They leave 0.4 to 3.2 levels of 255 (rms) of the textures, and the backdrop
+  drawn from them is 0.3 to 1.5 levels (rms) from the one drawn from the textures, 11 at most.
+- **The page's first frame.** The console's backdrop starts at midnight in January, with the
+  months' program, and eases into what it is first handed; the page's first frame takes the moment
+  and the program as they are, as if the XMB had been running.
+- **The ticks' phase.** The scene's clock ticks on the page's whole seconds; the console's counts
+  from its own start-up.

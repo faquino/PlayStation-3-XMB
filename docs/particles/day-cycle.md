@@ -59,6 +59,14 @@ own sake and puts the mode back. So every change of set is a smoothstep over its
 wherever the parameters stand, bar the cold boot's first 4 seconds, where `coldboot2` comes in by
 the exponential approach - its particles are `coldboot1`'s.
 
+Every file of a set blends this way, `HDR.mnu` and `BACKGROUND.mnu` with the rest: in the captures,
+the passes after the wave run on the sets blended by the factor `BACKGROUND.mnu`'s colours give,
+`WHITE LEVEL` itself rather than the 1 / W² the program takes - see [The passes after the
+wave](../wave/postprocess.md#what-hdrmnu-drives). A parameter a set's file leaves out takes the base file's value,
+and one the base file leaves out too the code's default: so `BACKGROUND.mnu`'s day and night
+parameters, which only the day's sets and a few others carry - see [What the uniforms
+read](../background/uniforms.md#the-day-and-the-night).
+
 A set put in at once resets each parameter to its default and hands its values over as where the
 blend starts rather than as targets (`0x5245c`), which mode 1 does not read. **`coldboot1` takes
 hold at once all the same, measured.** Mode 1 moves a parameter by (target - where it stands) ×
@@ -66,8 +74,8 @@ hold at once all the same, measured.** Mode 1 moves a parameter by (target - whe
 (`0x1ea04`). In the four captures taken in the cold boot's first 4 seconds, the wave's
 `BRIGHTNESS`, `MIPMAP BIAS` and `FRESNEL`, which differ between the two sets, are `coldboot1`'s
 with 0.99^n of the way to `coldboot2`'s still to go: n is 61 and 184 in one boot, 64 and 220 in
-another, whole numbers to within 0.001 and the same for the three, and the backdrop's corners give
-the same factor. In the capture of 18:22:52 they agree again, on `NormalBG2` having come 228
+another, whole numbers to within 0.001 and the same for the three, and `BACKGROUND.mnu`'s colours
+give the same factor. In the capture of 18:22:52 they agree again, on `NormalBG2` having come 228
 frames in and on its smoothstep being 96.286 per cent of the way to the cycle's set.
 
 **The windows' clock is not settled.** The layer's clock moves on by the frame's time
@@ -93,11 +101,11 @@ clock through `0x11c58`, which it calls three ways:
 
 It takes the clock's moment (`0x86b58`) or, while Theme Settings' Colour holds a month, noon on
 the 1st of that month, and hands it on with the same blend time to `0x11600`, which puts in the
-day cycle's set for that moment, and to `0x10900`. That one gives the particle object the time of
-day, as a fraction of 86400 seconds (`0x1adc8`), and works out how far the date is into its month,
-the day minus one over the month's length - the law the backdrop's `_MonthTime` follows, see
-[What the uniforms read](../background/uniforms.md) - except that its table gives February 28
-days in every year and the 29th counts as the 28th. Where that goes from there is not followed.
+day cycle's set for that moment, and to `0x10900`. That one works out the time of day, as a
+fraction of 86400 seconds, and how far the date is into its month, the day minus one over the
+month's length from a table that gives February 28 days in every year, the 29th counting as the
+28th, and hands both to the backdrop with that blend time (`0x1adc8`, `0x1b090`) - its clocks and
+`_MonthTime`, see [What the uniforms read](../background/uniforms.md#where-the-moment-comes-from).
 
 `0x11c58` does nothing while one of the scene's own states, all in the struct at `0xa03a8`, holds
 the moment:
@@ -112,7 +120,8 @@ the moment:
 - the first five seconds after the start-up, which the timer counts down (`+0x20`, set to 5).
 
 The cold boot's own handlers read the clock whatever the colour (`BootBG2`, `NormalBG` and
-`NormalBG2`), so a colour comes back only once `ShowGUI` has let go.
+`NormalBG2`), so a colour comes back only once `ShowGUI` has let go. `BootBG2` hands `0x10900` the
+day's date at 10:00:00 over 7.5 seconds (`0x110dc`), which the backdrop shows until then.
 
 **Sub-event 6 is Theme Settings' Colour.** The handler (`0x15b54`) keeps its argument at `+0x10`
 and calls `0x11c58` over 1 second. Colour is Theme Settings' second item (`msg_color`,
@@ -124,9 +133,9 @@ key 0x5f), and the saved one again when the page is cancelled (`0x12474`). `syst
 it as it applies the theme, beside the brightness (`0x9340`).
 
 So any colour but 0 stops the scene's clock at noon on the 1st of its month, whatever the hour:
-the particles hold the `day` set, which the cycle keeps from 11:00 to 13:00. By the law above the
-backdrop should sit on that month's own daylight textures, with nothing of the next -
-`_MonthTime` 0 and `_NightDayBlend` 1 - which a capture taken with a colour set would confirm.
+the particles hold the `day` set, which the cycle keeps from 11:00 to 13:00, and the backdrop sits
+on that month's own daylight textures, with nothing of the next - `_MonthTime` 0 and
+`_NightDayBlend` 1. No capture has been taken with a colour set.
 Back at 0, the clock's moment comes in over a second. `themeColor` stands for the setting - see
 [Modelled choices](implementation.md#modelled-choices).
 

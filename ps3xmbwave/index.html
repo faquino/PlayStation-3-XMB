@@ -11,6 +11,7 @@
 
   <script src="background-gradients-night.js"></script>
   <script src="background-gradients-day.js"></script>
+  <script src="background-months.js"></script>
   <script src="spline-settings.js"></script>
   <script src="scene-themes.js"></script>
   <script src="particles-settings.js"></script>
@@ -18,6 +19,8 @@
   <script src="wave-reverse.js"></script>
   <script src="particles-reverse.js"></script>
   <script src="xmb-input.js"></script>
+  <script src="backdrop.js"></script>
+  <script src="postprocess.js"></script>
   <script src="spline.js"></script>
   <script src="particles.js"></script>
   <script>
@@ -102,10 +105,11 @@
         splineTimeSec += dtSec;
 
         syncThemes();
-        // The backdrop shows the moment the scene's clock does, which Theme Settings' Colour can stop, and the wave
-        // starts its lines afresh as the XMB's start begins.
+        // The backdrop is handed the moment the scene's clock shows, on each of its ticks - which Theme Settings'
+        // Colour can stop, and the XMB's start, a content's boot and the music hold - and the wave starts its lines
+        // afresh as the XMB's start begins.
         const scene = window.PARTICLE_SETTINGS;
-        splineLayer.render(splineTimeSec, window.xmbSceneDate(scene.themeColor), scene.sequence);
+        splineLayer.render(splineTimeSec, window.xmbBackdropMoment(scene), scene.sequence);
         // The particles are emitted from the wave just drawn, so they share its clock.
         particlesLayer.render(splineTimeSec, dtSec);
         requestAnimationFrame(frame);

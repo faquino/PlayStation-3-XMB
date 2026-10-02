@@ -1,7 +1,7 @@
 'use strict';
-// The backdrop's and the wave's settings: LINE1.mnu's parameters under their own names, with the firmware's values.
-// Read by `spline.js` and `wave-reverse.js`, written by `scene-themes.js` as the scene's set moves, and shown by
-// `settings-panels.js`; declarative only, no runtime logic.
+// The backdrop's and the wave's settings: LINE1.mnu's, HDR.mnu's and BACKGROUND.mnu's parameters under their own
+// names, with the firmware's values. Read by `spline.js`, `wave-reverse.js` and `postprocess.js`, written by
+// `scene-themes.js` as the scene's set moves, and shown by `settings-panels.js`; declarative only, no runtime logic.
 
 window.SPLINE_SETTINGS = {
   gradientPreset: 'auto',
@@ -47,16 +47,48 @@ window.SPLINE_SETTINGS = {
   spacing: 407.658,
   thinness: 1,
 
-  // Modelled: what the console's passes after the wave make of its light.
-  exposure: 1.5,
+  // HDR.mnu, the passes after the wave, the base set. Its flags (ENABLED, TEX SIZE, TEX MAX MIP, GLARE, GLARE_ONLY,
+  // TONEBEFORE, BLUR) are left out: only the welcome sets change them.
+  exposure: 1.05,
+  whiteLevel: 0.899181,
+  glareLevel: 1.10245,
+  glareThresh: 0.738857,
+  gaussianRadR: 1.23888,
+  gaussianRadG: 1.43176,
+  gaussianRadB: 1.55787,
+  glareSumPow: 0.557478,
+
+  // BACKGROUND.mnu's four colours, the base set: 1 and 2 the backdrop's at the top and at the bottom of the screen, 3
+  // and 4 the wave's at the left and at the right.
+  colour1Red: 1,
+  colour1Green: 1,
+  colour1Blue: 1,
+  colour2Red: 1,
+  colour2Green: 1,
+  colour2Blue: 1,
+  colour3Red: 0.847347,
+  colour3Green: 0.846155,
+  colour3Blue: 0.846448,
+  colour4Red: 0.92487,
+  colour4Green: 0.922603,
+  colour4Blue: 0.922933,
+  // BACKGROUND.mnu's backdrop: the base file leaves these out, so the code's defaults stand for them.
+  nightBlend: 1,
+  night2dayBegin: 4,
+  night2dayEnd: 6,
+  day2nightBegin: 18,
+  day2nightEnd: 20,
+  dayspread: 3,
+  nightWhitBias: 0.5,
+  colourShader: 0,
 };
 
 window.SPLINE_SETTINGS_META = {
   gradientPreset: {
     type: 'select',
     options: window.BG_GRADIENT_PRESET_OPTIONS || [{ value: 'default', label: 'Original (RGB Sliders)' }],
-    help: "Colours of the backdrop: Auto walks the months' gradients with the date and the time of day, a month " +
-      'picks one of them, and the original preset uses the RGB sliders below.\n' +
+    help: "Colours of the backdrop: Auto draws the console's, from the months' textures, the date and the time of " +
+      "day; a month draws that month's texture as one gradient, and the original preset uses the RGB sliders below.\n" +
       'Backdrop: BACKGROUND_REVERSE_ENGINEER.md',
   },
   colorR: {
@@ -248,9 +280,149 @@ window.SPLINE_SETTINGS_META = {
       'LINE1.mnu: THINNESS (lines1.fpo _Thinness)',
   },
   exposure: {
-    min: 0, max: 20, step: 0.1,
-    help: "How bright the wave's light comes out on screen. The console encodes it (_Encode) and runs it through " +
-      'some thirty passes before the particles are drawn, which this stands in for.\n' +
-      'Modelled (spline.js)',
+    min: 0, max: 4, step: 0.01,
+    help: "What the light is multiplied by before the tone curve, the backdrop's and the wave's alike: 1/16 is taken " +
+      'off it first, so the faintest light stays black.\n' +
+      'HDR.mnu: EXPOSURE (the preexpose tables, GlareSourcePre _Exposure)',
+  },
+  whiteLevel: {
+    min: 0.5, max: 1.5, step: 0.001,
+    help: "The tone curve's white, W, in x (1 + x / W^2) / (1 + x): at 1 the curve is a straight line, below 1 it " +
+      'brightens what is already bright.\n' +
+      'HDR.mnu: WHITE LEVEL (the preexpose tables, GlareSourcePre _WhiteSqrRcp = 1 / W^2)',
+  },
+  glareLevel: {
+    min: 0, max: 3, step: 0.01,
+    help: "Strength of the glare: its six levels' weights add up to its square.\n" +
+      'HDR.mnu: GLARE LEVEL (AccGlare _Weight)',
+  },
+  glareThresh: {
+    min: 0, max: 1.5, step: 0.001,
+    help: "How bright a pixel's brightest channel must be, after the tone curve, for it to glow.\n" +
+      "HDR.mnu: GLARE THRESH (the preexpose tables' alpha)",
+  },
+  gaussianRadR: {
+    min: 0, max: 3, step: 0.01,
+    help: "Spread of the glare's blur in red, in texels of each of its levels: the Gaussian's sigma, cut at 3 sigma " +
+      '- 1 texels.\n' +
+      'HDR.mnu: GAUSSIAN RAD R (Gaussian _Weights)',
+  },
+  gaussianRadG: {
+    min: 0, max: 3, step: 0.01,
+    help: "Spread of the glare's blur in green.\n" +
+      'HDR.mnu: GAUSSIAN RAD G (Gaussian _Weights)',
+  },
+  gaussianRadB: {
+    min: 0, max: 3, step: 0.01,
+    help: "Spread of the glare's blur in blue.\n" +
+      'HDR.mnu: GAUSSIAN RAD B (Gaussian _Weights)',
+  },
+  glareSumPow: {
+    min: 0, max: 1, step: 0.001,
+    help: "What each coarser level of the glare weighs against the one before it: the higher, the wider its halo.\n" +
+      'HDR.mnu: GLARE SUM POW (AccGlare _Weight)',
+  },
+  colour1Red: {
+    min: 0, max: 1.5, step: 0.001,
+    help: "Red of the backdrop's colour at the top of the screen: the backdrop is multiplied by a gradient from colour 2 at the bottom to colour 1 at the top.\n" +
+      'BACKGROUND.mnu: 1 RED (LinesController.vpo _Colour2)',
+  },
+  colour1Green: {
+    min: 0, max: 1.5, step: 0.001,
+    help: "Green of the backdrop's colour at the top of the screen: the backdrop is multiplied by a gradient from colour 2 at the bottom to colour 1 at the top.\n" +
+      'BACKGROUND.mnu: 1 GREEN (LinesController.vpo _Colour2)',
+  },
+  colour1Blue: {
+    min: 0, max: 1.5, step: 0.001,
+    help: "Blue of the backdrop's colour at the top of the screen: the backdrop is multiplied by a gradient from colour 2 at the bottom to colour 1 at the top.\n" +
+      'BACKGROUND.mnu: 1 BLUE (LinesController.vpo _Colour2)',
+  },
+  colour2Red: {
+    min: 0, max: 1.5, step: 0.001,
+    help: "Red of the backdrop's colour at the bottom of the screen: the backdrop is multiplied by a gradient from colour 2 at the bottom to colour 1 at the top.\n" +
+      'BACKGROUND.mnu: 2 RED (LinesController.vpo _Colour1)',
+  },
+  colour2Green: {
+    min: 0, max: 1.5, step: 0.001,
+    help: "Green of the backdrop's colour at the bottom of the screen: the backdrop is multiplied by a gradient from colour 2 at the bottom to colour 1 at the top.\n" +
+      'BACKGROUND.mnu: 2 GREEN (LinesController.vpo _Colour1)',
+  },
+  colour2Blue: {
+    min: 0, max: 1.5, step: 0.001,
+    help: "Blue of the backdrop's colour at the bottom of the screen: the backdrop is multiplied by a gradient from colour 2 at the bottom to colour 1 at the top.\n" +
+      'BACKGROUND.mnu: 2 BLUE (LinesController.vpo _Colour1)',
+  },
+  colour3Red: {
+    min: 0, max: 1.5, step: 0.001,
+    help: "Red of the wave's colour at the left edge of the screen: the wave's light is multiplied by a gradient from colour 3 at the left to colour 4 at the right.\n" +
+      'BACKGROUND.mnu: 3 RED (LinesController.vpo _Colour3)',
+  },
+  colour3Green: {
+    min: 0, max: 1.5, step: 0.001,
+    help: "Green of the wave's colour at the left edge of the screen: the wave's light is multiplied by a gradient from colour 3 at the left to colour 4 at the right.\n" +
+      'BACKGROUND.mnu: 3 GREEN (LinesController.vpo _Colour3)',
+  },
+  colour3Blue: {
+    min: 0, max: 1.5, step: 0.001,
+    help: "Blue of the wave's colour at the left edge of the screen: the wave's light is multiplied by a gradient from colour 3 at the left to colour 4 at the right.\n" +
+      'BACKGROUND.mnu: 3 BLUE (LinesController.vpo _Colour3)',
+  },
+  colour4Red: {
+    min: 0, max: 1.5, step: 0.001,
+    help: "Red of the wave's colour at the right edge of the screen: the wave's light is multiplied by a gradient from colour 3 at the left to colour 4 at the right.\n" +
+      'BACKGROUND.mnu: 4 RED (LinesController.vpo _Colour4)',
+  },
+  colour4Green: {
+    min: 0, max: 1.5, step: 0.001,
+    help: "Green of the wave's colour at the right edge of the screen: the wave's light is multiplied by a gradient from colour 3 at the left to colour 4 at the right.\n" +
+      'BACKGROUND.mnu: 4 GREEN (LinesController.vpo _Colour4)',
+  },
+  colour4Blue: {
+    min: 0, max: 1.5, step: 0.001,
+    help: "Blue of the wave's colour at the right edge of the screen: the wave's light is multiplied by a gradient from colour 3 at the left to colour 4 at the right.\n" +
+      'BACKGROUND.mnu: 4 BLUE (LinesController.vpo _Colour4)',
+  },
+  nightBlend: {
+    min: 0, max: 1, step: 0.001,
+    help: "How far the backdrop goes over to the night's textures at night: _NightDayBlend is 1 less this times what " +
+      "is left of the day's two ramps.\n" +
+      'BACKGROUND.mnu: NIGHT BLEND',
+  },
+  night2dayBegin: {
+    min: 0, max: 24, step: 0.01,
+    help: "The hour the backdrop's morning ramp starts, a smoothstep from the night's textures to the day's.\n" +
+      'BACKGROUND.mnu: NIGHT2DAY BEGIN',
+  },
+  night2dayEnd: {
+    min: 0, max: 24, step: 0.01,
+    help: "The hour the backdrop's morning ramp ends.\n" +
+      'BACKGROUND.mnu: NIGHT2DAY END',
+  },
+  day2nightBegin: {
+    min: 0, max: 24, step: 0.01,
+    help: "The hour the backdrop's evening ramp starts, a smoothstep back to the night's textures.\n" +
+      'BACKGROUND.mnu: DAY2NIGHT BEGIN',
+  },
+  day2nightEnd: {
+    min: 0, max: 24, step: 0.01,
+    help: "The hour the backdrop's evening ramp ends.\n" +
+      'BACKGROUND.mnu: DAY2NIGHT END',
+  },
+  dayspread: {
+    min: 0, max: 6, step: 0.01,
+    help: "How fast the backdrop's day clock runs at midnight, against its slowest at noon: _DayTime is a cubic of the " +
+      "time of day with this slope at both ends.\n" +
+      'BACKGROUND.mnu: DAYSPREAD',
+  },
+  nightWhitBias: {
+    min: 0, max: 1, step: 0.001,
+    help: "The least light the night's textures get, wherever the night's glows are.\n" +
+      'BACKGROUND.mnu: NIGHT WHIT BIAS (back_colours0.fpo _NightBrightness)',
+  },
+  colourShader: {
+    min: 0, max: 1, step: 1, decimals: 0,
+    help: "Which program draws the backdrop: 0 the months' (back_colours0), 1 the one without them (back_colours1), " +
+      'which the music and the welcome screens use. A change eases in over 2 seconds.\n' +
+      'BACKGROUND.mnu: COLOUR SHADER',
   },
 };

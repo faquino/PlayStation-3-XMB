@@ -23,11 +23,11 @@ Each `override/<theme>/PARTICLES.mnu` is a complete parameter set. Differences f
 **The numbering is a sequence, not a duplicate.** `welcome_1` and `welcome_2` carry the same
 `PARTICLES.mnu`, and so do `coldboot1` and `coldboot2`, which is why only one of each is on the
 particle side of `scene-themes.js` - but their other files differ, so the console is walking a
-chain of stages. `welcome_1` opens at a 158.7 degree field of view with a corner colour of (0.34, 1.16,
-10); `welcome_2` closes at 81.24 with (0.12, 6.24, 8.93). Both run `EXPOSURE` 3.404 against the
-base 1.05. `gameboot1` to `gameboot5` walk from a white corner through two black stages - the
-third and fourth being the ones that touch the particles, the fourth with `global alpha` 0 -
-and back out to white.
+chain of stages. `welcome_1` opens at a 158.7 degree field of view with a backdrop colour of (0.34,
+1.16, 10); `welcome_2` closes at 81.24 with (0.12, 6.24, 8.93). Both run `EXPOSURE` 3.404 against
+the base 1.05. `gameboot1` to `gameboot5` walk from the wave alone through the backdrop alone and
+two stages with nothing lit - the third and fourth being the ones that touch the particles, the
+fourth with `global alpha` 0 - and back to the wave alone.
 
 ## What puts each set in
 
@@ -85,7 +85,7 @@ So:
 ## The XMB starts by fading out of `coldboot1`
 
 Five captures taken during start-up, across two boots, say what the opening transition is - and
-it is not `welcome`. Fitting each capture's twelve corner channels against every pair of sets
+it is not `welcome`. Fitting each capture's twelve colour channels against every pair of sets
 lands on the same answer three times, to within 6e-7, which is float noise:
 
 | Capture | Blend | Factor | Particles alive |
@@ -126,15 +126,15 @@ the running set, so the way it dims the icons and defocuses the backdrop happens
 `lines.qrc`. The captures that show it are in
 [history](history.md#the-first-run-wizard-the-saved-data-utility-and-the-welcome-sets).
 
-`tools/re/whichset.py` does this matching, for any capture: it fits the four corner colours
-against every pair of sets and reads the particles' `glare` beside them.
+`tools/re/whichset.py` does this matching, for any capture: it fits `BACKGROUND.mnu`'s four
+colours against every pair of sets and reads the particles' `glare` beside them.
 
 ## Telling the sets apart in a capture
 
-Since a capture carries the corner colours as vertex constants and the particles' `glare` inside
-the microcode, these four numbers name the set on screen, or the pair being crossfaded:
+Since a capture carries those colours as vertex constants and the particles' `glare` inside the
+microcode, these numbers name the set on screen, or the pair being crossfaded:
 
-| Set | corner 1 | corner 4 | `FOVY` | `COLOUR SHADER` | `EXPOSURE` | `glare` |
+| Set | colour 1 | colour 4 | `FOVY` | `COLOUR SHADER` | `EXPOSURE` | `glare` |
 |---|---|---|---|---|---|---|
 | base | 1, 1, 1 | 0.925, 0.923, 0.923 | 71.85 | 0 | 1.05 | 0.159705 |
 | `yoake` | = base | = base | 71.85 | 0 | 1.1 | 0.180536 |
@@ -156,7 +156,7 @@ the microcode, these four numbers name the set on screen, or the pair being cros
 | `welcome_2` | 0.123, 6.237, 8.927 | 0.228, 2.143, 10 | 81.24 | 1 | 3.404 | 0.222198 |
 
 The day-cycle sets share the base backdrop, so only `glare` separates them - which is what the
-cycle was measured with. Everything else has a corner colour of its own, and the two `welcome`
+cycle was measured with. Everything else has colours of its own, and the two `welcome`
 stages are unmistakable: no other set puts a colour above 1, let alone at 10.
 
 **Verified: overrides apply at run time.** The glare value the XMB fed `particles_second`
@@ -180,13 +180,13 @@ four files, and all four differ from the base:
 | `PARTICLES.mnu` | the three values above |
 | `LINE1.mnu` | 11 of 35: the wave rises and comes forward (`POS Y` -1.08844 to 0, `POS Z` -6.40287 to -5.2), turns (`ANG Y` 0.0867576 to 0.796751, `ANG ROT` 18.1208 to 13.1208), slows (`TIMESTEP` 4 to 3.72102), and its free-form deformation is rescaled |
 | `HDR.mnu` | 10 of 17: `EXPOSURE` 1.05 to 1.51, `GLARE LEVEL` 1.10245 to 2.46, `GLARE THRESH` 0.738857 to 0.260814, wider Gaussian radii - the whole image blooms harder, which is why the wave reads as lit more strongly |
-| `BACKGROUND.mnu` | all 14: the four corner colours go dark and magenta (corner 2 to black, corner 4 to 0.5, 0, 0.5), `FOVY` 71.846 to 83.2002, and `COLOUR SHADER` 0 to 1 |
+| `BACKGROUND.mnu` | all 14: the backdrop fades to black at the bottom (colour 2) and the wave's light goes magenta at the right (colour 4, 0.5, 0, 0.5), `FOVY` 71.846 to 83.2002, and `COLOUR SHADER` 0 to 1 |
 
 **The GPU side of that table, from four frame captures taken with a track playing.** All four
 read a live `_Glare` of 0.201367, the set's own value and steady across the 47 seconds they
-span, so the transition was over before the first. The backdrop's four corner colours arrive
-as vertex constants and are the set's, exactly: `c[464]` (0.5, 0, 0.5), `c[465]` (1.2, 1, 1.1),
-`c[466]` (0.579004, 0.435001, 0.472), `c[467]` (0, 0, 0) - corner 4's magenta and corner 2's
+span, so the transition was over before the first. `BACKGROUND.mnu`'s four colours arrive as
+vertex constants and are the set's, exactly: `c[464]` (0.5, 0, 0.5), `c[465]` (1.2, 1, 1.1),
+`c[466]` (0.579004, 0.435001, 0.472), `c[467]` (0, 0, 0) - colour 4's magenta and colour 2's
 black, which is the screen. The wave's own draw (`lines1`, 16384 vertices) carries only its
 shading parameters, `MIPMAP BIAS` 1.86707, `BRIGHTNESS` 0.701917 and `FRESNEL` 0.638971, all
 three the base values that this set does not touch, and its transform is the identity with z
@@ -202,8 +202,8 @@ It comes forward by 1.115, against the 1.203 that `POS Z` moves in the file, and
 more than `POS Y`'s 1.088 on its own - the rest is `ANG Y` turning the whole band.
 
 **Changing set is one crossfade, 5.5 seconds long.** Three more captures, seven and eight
-seconds apart, caught it running. The backdrop's corner colours give the factor twelve
-times over - four corners, three channels each - and they agree:
+seconds apart, caught it running. `BACKGROUND.mnu`'s colours give the factor twelve times
+over - four colours, three channels each - and they agree:
 
 | | blend factor from the twelve channels | particle `glare` | as a factor |
 |---|---|---|---|
@@ -237,5 +237,5 @@ against 2.406 in a capture taken ten minutes later with everything settled.
 
 `ps3xmbwave/` applies the particle and the wave columns of that table, as `musicPlayback` starts
 and stops the music - see [Modelled choices](implementation.md#modelled-choices) - and every
-other set's `LINE1.mnu` with its `PARTICLES.mnu`. The tone mapper and the backdrop without a month
-in it, `HDR.mnu` and `BACKGROUND.mnu`, are not applied.
+other set's `LINE1.mnu`, `HDR.mnu` and `BACKGROUND.mnu` with its `PARTICLES.mnu`. The music's
+backdrop program, `back_colours1`, is in the [backdrop notes](../background/program.md#back_colours1-the-musics).

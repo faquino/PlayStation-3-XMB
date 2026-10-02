@@ -1,8 +1,8 @@
 'use strict';
-// The scene's parameter sets: how each firmware override/<set>/PARTICLES.mnu and LINE1.mnu differs from the base one,
-// and the blend that walks the day, the boot sequences, the music and the scene's clock, which put them into the
-// particles' and the wave's settings. Read at load by `particles-settings.js`, applied from `index.html`, which also
-// hands the backdrop (`spline.js`) the clock.
+// The scene's parameter sets: how each firmware override/<set>/PARTICLES.mnu, LINE1.mnu, HDR.mnu and BACKGROUND.mnu
+// differs from the base one, and the blend that walks the day, the boot sequences, the music and the scene's clock,
+// which put them into the particles' and the wave's settings. Read at load by `particles-settings.js`, applied from
+// `index.html`, which also hands the backdrop (`spline.js`) the clock.
 
 // The particle side. Some numbered sets repeat there: welcome_2's particles equal welcome_1's, coldboot2's equal
 // coldboot1's, and gameboot4 is gameboot3 with `global alpha` 0, like black is music with it - so the repeats are
@@ -35,36 +35,88 @@ window.PARTICLE_THEMES = {
   },
 };
 
-// The wave's side, LINE1.mnu, under the same names: `music` is music_1, `coldboot` coldboot1, `gameboot` gameboot3
-// and `welcome` welcome_1, whose LINE1.mnu welcome_2 repeats, as day's does too. THINNESS is 1 in every set.
+// The wave's side, LINE1.mnu, then HDR.mnu and BACKGROUND.mnu, which the passes after the wave read (`postprocess.js`),
+// under the same names: `music` is music_1, `coldboot` coldboot1, `gameboot` gameboot3 and `welcome` welcome_1, whose
+// LINE1.mnu welcome_2 repeats, as day's does too. THINNESS is 1 in every set. The day's sets share the base
+// BACKGROUND.mnu's colours, and day's HDR.mnu is the base one; night's HDR.mnu is black's and gameboot2's too. The base
+// BACKGROUND.mnu leaves out the backdrop's day and night parameters, so the code's defaults stand for them, and the
+// sets that leave them out too (music_1, black, gameboot2) keep those.
 window.WAVE_THEMES = {
   yoake: {
     spacing: 407.671, brightness: 1.12108, mipmapBias: 1.86511, fresnel: 0.463044, falloff: 0.294154, timestep: 2,
     perturbation: 0.1, posX: -8.2, ffdScale2X: 3.2, ffdScale2Y: 1.27473, ffdScale2Z: 2.88939, ffdParam1: -1.34164,
+    exposure: 1.1, whiteLevel: 0.999878, glareLevel: 1.5, glareThresh: 0.8, gaussianRadR: 1.23638,
+    gaussianRadG: 1.43047, gaussianRadB: 1.55683, glareSumPow: 0.5,
+    nightBlend: 0.499947, night2dayBegin: 0, night2dayEnd: 5.16611, day2nightBegin: 18.498, day2nightEnd: 20.3312,
+    dayspread: 2.68038, nightWhitBias: 0.486059,
   },
-  day: { timestep: 2, posX: -8.2, ffdScale2X: 3.2 },
+  day: {
+    timestep: 2, posX: -8.2, ffdScale2X: 3.2,
+    nightBlend: 0.499947, night2dayBegin: 0, night2dayEnd: 5.16611, day2nightBegin: 18.498, day2nightEnd: 20.3312,
+    dayspread: 2.68038, nightWhitBias: 0.486059,
+  },
   higure: {
     spacing: 408.298, brightness: 1.06, mipmapBias: 1.75802, fresnel: 0.501002, falloff: 0.048, timestep: 2,
     perturbation: 0.1, posX: -8.2, ffdScale2X: 3.2, ffdScale2Y: 1.2, ffdScale2Z: 3, ffdParam1: -1.83395,
+    exposure: 1.2, whiteLevel: 0.999878, glareLevel: 1.1, glareThresh: 0.8, gaussianRadR: 1.1, gaussianRadG: 1.36,
+    gaussianRadB: 1.5, glareSumPow: 0.5,
+    nightBlend: 0.499947, night2dayBegin: 0, night2dayEnd: 5.16611, day2nightBegin: 18.498, day2nightEnd: 20.3312,
+    dayspread: 2.68038, nightWhitBias: 0.486059,
   },
   night: {
     spacing: 408.298, brightness: 0.9, mipmapBias: 1.75802, fresnel: 0.52, falloff: 0.048, timestep: 2,
     perturbation: 0.1, posX: -8.2, angRot: 10, ffdScale2X: 3.2, ffdScale2Y: 1.2, ffdScale2Z: 3, ffdParam1: -1.83395,
+    exposure: 1.41, whiteLevel: 0.999878, glareLevel: 1.33, glareThresh: 0.699812, gaussianRadR: 1.1,
+    gaussianRadG: 1.36, gaussianRadB: 1.5, glareSumPow: 0.5,
+    nightBlend: 0.499947, night2dayBegin: 0, night2dayEnd: 5.16611, day2nightBegin: 18.498, day2nightEnd: 20.3312,
+    dayspread: 2.68038, nightWhitBias: 0.486059,
   },
   music: {
     timestep: 3.72102, posX: -7.5, posY: 0, posZ: -5.2, angY: 0.796751, angZ: 0.190364, angRot: 13.1208,
     ffdScale1X: 5.13725, ffdScale2X: 3.2, ffdScale2Y: 0.99579, ffdScale2Z: 3.41782,
+    exposure: 1.51, whiteLevel: 0.999878, glareLevel: 2.46, glareThresh: 0.260814, gaussianRadR: 2, gaussianRadG: 2.2,
+    gaussianRadB: 2.5, glareSumPow: 0.738001,
+    colour1Red: 0.579004, colour1Green: 0.435001, colour1Blue: 0.472, colour2Red: 0, colour2Green: 0, colour2Blue: 0,
+    colour3Red: 1.2, colour3Green: 1, colour3Blue: 1.1, colour4Red: 0.5, colour4Green: 0, colour4Blue: 0.5,
+    colourShader: 1,
   },
   black: {
     damping: 0.0003, spacing: 402.611, brightness: 0.506754, mipmapBias: 2.72688, fresnel: 1.05552, falloff: 2.27705,
     perturbation: 0.1, ffdScale1Y: 1.01926, ffdScale2Y: 1.94378, ffdScale2Z: 1.99926, ffdParam1: -0.908607,
+    exposure: 1.41, whiteLevel: 0.999878, glareLevel: 1.33, glareThresh: 0.699812, gaussianRadR: 1.1,
+    gaussianRadG: 1.36, gaussianRadB: 1.5, glareSumPow: 0.5,
+    colour1Red: 0, colour1Green: 0, colour1Blue: 0, colour2Red: 0, colour2Green: 0, colour2Blue: 0,
+    colour3Red: 0, colour3Green: 0, colour3Blue: 0, colour4Red: 0, colour4Green: 0, colour4Blue: 0,
   },
+  // The cold boot starts black: coldboot1's colours put the backdrop at a five-hundredth and the wave at nothing.
   coldboot: {
     spacing: 357.46, brightness: 0.512099, mipmapBias: 1.90518, fresnel: 2, falloff: 0.900768, timestep: 2,
     perturbation: 0, posZ: -7, ffdScale2Y: 0.999999, ffdScale2Z: 2.85341, ffdParam1: -2,
+    exposure: 1.64, whiteLevel: 1, glareLevel: 1.74, glareThresh: 0.2,
+    colour1Red: 0.0021302, colour1Green: 0.00213025, colour1Blue: 0.00213032, colour2Red: 0.00213051,
+    colour2Green: 0.00213051, colour2Blue: 0.00213082,
+    colour3Red: 0, colour3Green: 0, colour3Blue: 0, colour4Red: 0, colour4Green: 0, colour4Blue: 0,
+    day2nightBegin: 18.498, day2nightEnd: 24, dayspread: 2.73593, nightWhitBias: 0.513834,
   },
-  gameboot: { brightness: 0, fresnel: 0, timestep: 2, posZ: -2.40287 },
-  welcome: { timestep: 2, posX: -8.2, ffdScale2X: 3.2 },
+  gameboot: {
+    brightness: 0, fresnel: 0, timestep: 2, posZ: -2.40287,
+    exposure: 1, whiteLevel: 1, glareLevel: 1, glareThresh: 1, gaussianRadR: 1.1, gaussianRadG: 1.36,
+    gaussianRadB: 1.5, glareSumPow: 0.5,
+    colour1Red: 0, colour1Green: 0, colour1Blue: 0, colour2Red: 0, colour2Green: 0, colour2Blue: 0,
+    colour3Red: 0, colour3Green: 0, colour3Blue: 0, colour4Red: 0, colour4Green: 0, colour4Blue: 0,
+    nightBlend: 0, dayspread: 1, nightWhitBias: 0.513834,
+  },
+  // Its HDR.mnu also changes the flags the page leaves out: TEX SIZE and TEX MAX MIP 7, TONEBEFORE 0, BLUR 1.
+  welcome: {
+    timestep: 2, posX: -8.2, ffdScale2X: 3.2,
+    exposure: 3.40362, whiteLevel: 1000, glareLevel: 100, glareThresh: 100, gaussianRadR: 2.9, gaussianRadG: 2.9,
+    gaussianRadB: 2.9, glareSumPow: 100,
+    colour1Red: 0.343163, colour1Green: 1.15655, colour1Blue: 10, colour2Red: 0.440692, colour2Green: 1.81381,
+    colour2Blue: 10, colour3Red: 0.557667, colour3Green: 0.624199, colour3Blue: 0.859806, colour4Red: 0.774938,
+    colour4Green: 1.81381, colour4Blue: 0.696515,
+    colourShader: 1, nightBlend: 0.499947, night2dayBegin: 0, night2dayEnd: 5.16611, day2nightBegin: 18.498,
+    day2nightEnd: 20.3312, nightWhitBias: 0.486059,
+  },
 };
 
 window.PARTICLE_THEME_OPTIONS = [
@@ -131,6 +183,11 @@ window.PARTICLE_THEME_OPTIONS = [
     },
   };
   const FRAME_HZ = 60;
+  // ShowGUI, 5.5 s into the XMB's start, lets go of the scene's clock, which the start holds (0x11c58).
+  const BOOT_CLOCK_HOLD = 5.5;
+  // As it begins, the XMB's start hands the backdrop 10:00 of the day, over 7.5 s (BootBG2, 0x110dc).
+  const BOOT_HOUR = 10;
+  const BOOT_EASE = 7.5;
 
   // The music: event 4, which the scene sends itself as playback starts and stops. Starting puts music_1 in over
   // 5.5 s (0x16198). Stopping puts in the set with an empty name, the base as the name reads, over 5.5 s, and when
@@ -141,6 +198,11 @@ window.PARTICLE_THEME_OPTIONS = [
   // The scene's clock ticks every second and puts the moment it shows in over 1 s (0x12284), and Theme Settings'
   // Colour puts its own in over 1 s too (sub-event 6).
   const TICK = 1;
+
+  // The settings whose parameter is a whole number, which a set puts in at once rather than blending (the parameter's
+  // own blend does nothing, 0x1de90): COLOUR SHADER. A frame capture of the music coming in has its program changed
+  // 15% of the way into the set's crossfade.
+  const WHOLE = { colourShader: true };
 
   // A layer of the scene: its sets, the settings they write, and its own state - the firmware defaults, taken before
   // the first write; what the theme or the sequence last wrote into each setting and what it would write now, which
@@ -160,7 +222,8 @@ window.PARTICLE_THEME_OPTIONS = [
 
   // Each layer's sets, and the ones only a sequence puts in. On the particle side gameboot2 carries no PARTICLES.mnu,
   // so the base particles stand in for it, coldboot2's are coldboot1's, and gameboot4 is gameboot3 with `global
-  // alpha` 0. The wave's coldboot2 is day's LINE1.mnu again.
+  // alpha` 0. The wave's coldboot2 is day's LINE1.mnu again, with the base HDR.mnu and BACKGROUND.mnu; gameboot2 and
+  // gameboot4 carry night's HDR.mnu, and colours that dim the backdrop and take the wave away, then both.
   const LAYERS = {
     particles: createLayer(window.PARTICLE_THEMES, {
       coldboot2: window.PARTICLE_THEMES.coldboot,
@@ -169,10 +232,21 @@ window.PARTICLE_THEME_OPTIONS = [
     }),
     wave: createLayer(window.WAVE_THEMES, {
       coldboot2: window.WAVE_THEMES.day,
-      gameboot2: { timestep: 2, posZ: -4.40287 },
+      gameboot2: {
+        timestep: 2, posZ: -4.40287,
+        exposure: 1.41, whiteLevel: 0.999878, glareLevel: 1.33, glareThresh: 0.699812, gaussianRadR: 1.1,
+        gaussianRadG: 1.36, gaussianRadB: 1.5, glareSumPow: 0.5,
+        colour1Red: 0.8, colour1Green: 0.8, colour1Blue: 0.8, colour2Red: 0.8, colour2Green: 0.8, colour2Blue: 0.8,
+        colour3Red: 0, colour3Green: 0, colour3Blue: 0, colour4Red: 0, colour4Green: 0, colour4Blue: 0,
+      },
       gameboot4: {
         spacing: 408.299, brightness: 1.06, mipmapBias: 1.75802, fresnel: 0.501002, falloff: 0.048,
         perturbation: 0.1, ffdScale2Y: 1.2, ffdScale2Z: 3, ffdParam1: -1.83395,
+        exposure: 1.41, whiteLevel: 0.999878, glareLevel: 1.33, glareThresh: 0.699812, gaussianRadR: 1.1,
+        gaussianRadG: 1.36, gaussianRadB: 1.5, glareSumPow: 0.5,
+        colour1Red: 0, colour1Green: 0, colour1Blue: 0, colour2Red: 0, colour2Green: 0, colour2Blue: 0,
+        colour3Red: 0, colour3Green: 0, colour3Blue: 0, colour4Red: 0, colour4Green: 0, colour4Blue: 0,
+        nightBlend: 0, dayspread: 1, nightWhitBias: 0.513834,
       },
     }),
   };
@@ -252,8 +326,14 @@ window.PARTICLE_THEME_OPTIONS = [
 
   // A setting's value in what a goal asks for: one set, or `mix` of the way from one to another.
   function goalValue(L, name, goal) {
+    if (WHOLE[name]) return valueOf(L, name, goal.mix > 0 ? goal.to : goal.from);
     const a = valueOf(L, name, goal.from);
     return a + (valueOf(L, name, goal.to) - a) * goal.mix;
+  }
+
+  // Where a setting stands `k` of the way from `from` to `to`: a whole number is at `to` from the start.
+  function between(name, from, to, k) {
+    return WHOLE[name] ? to : from + (to - from) * k;
   }
 
   // What `theme` asks for now: one set, or on 'auto' the day's blend of two, `mix` of the way from one to the other.
@@ -263,13 +343,48 @@ window.PARTICLE_THEME_OPTIONS = [
   }
 
   // The moment the scene shows: the clock's, or, while Theme Settings' Colour holds a month, noon on the 1st of that
-  // month (0x11c58), which stops it. `index.html` hands the same moment to the backdrop.
+  // month (0x11c58), which stops it. The backdrop is handed it on the clock's ticks - see `xmbBackdropMoment`.
   window.xmbSceneDate = function xmbSceneDate(color, date) {
     const now = date || new Date();
     const month = Math.round(Number(color)) || 0;
     if (month < 1 || month > 12) return now;
     return new Date(now.getFullYear(), month - 1, 1, 12, 0, 0);
   };
+
+  // The moment last handed to the backdrop (0x10900, through 0x1adc8 and 0x1b090), how long it takes to ease in, and
+  // a count of the hand-overs. The scene's clock hands it the moment it shows on each of its ticks, a second apart
+  // (0x12284, 0x11c58), over a second, but not while something holds the clock: the XMB's start until ShowGUI, a
+  // content's boot, or the music while its set is in or on its way out. The XMB's start hands it 10:00 of the day
+  // over 7.5 s as it begins (BootBG2) - the cold boot's captures read the backdrop's clocks at 10:00 3.9 s in, and the
+  // hour 7.5 s in. The page's first frame hands the moment at once, as if the XMB had been running.
+  let handed = null;
+  let lastTick = null;
+  let bootHanded = null;
+  window.xmbBackdropMoment = function xmbBackdropMoment(scene, date) {
+    const now = clockOf(date);
+    const tick = Math.floor(now);
+    const at = date || new Date();
+    function hand(moment, seconds) {
+      handed = { date: moment, seconds: seconds, serial: handed ? handed.serial + 1 : 0 };
+    }
+    if (playing && playing.name === 'coldboot' && bootHanded !== playing.start) {
+      bootHanded = playing.start;
+      hand(new Date(at.getFullYear(), at.getMonth(), at.getDate(), BOOT_HOUR, 0, 0), BOOT_EASE);
+    } else if (!handed) {
+      hand(window.xmbSceneDate(scene.themeColor, date), 0);
+    } else if (tick !== lastTick && !clockHeld(now)) {
+      hand(window.xmbSceneDate(scene.themeColor, date), TICK);
+    }
+    lastTick = tick;
+    return handed;
+  };
+
+  // Whether something holds the scene's clock, so that its ticks do nothing (0x11c58).
+  function clockHeld(now) {
+    if (music !== 'off') return true;
+    if (!playing) return false;
+    return playing.name !== 'coldboot' || now - playing.start < BOOT_CLOCK_HOLD;
+  }
 
   // What the theme asks for now: music_1 while the music is in, the base while it goes out, and otherwise what
   // `theme` gives at the moment the scene's clock shows.
@@ -365,7 +480,7 @@ window.PARTICLE_THEME_OPTIONS = [
     L.keys.forEach(function (name) {
       const b = goalValue(L, name, goal);
       const from = name in L.stepFrom ? L.stepFrom[name] : b;
-      put(layer, name, from + (b - from) * mix);
+      put(layer, name, between(name, from, b, mix));
     });
   }
 
@@ -424,7 +539,7 @@ window.PARTICLE_THEME_OPTIONS = [
       L.keys.forEach(function (name) {
         const b = goalValue(L, name, settled);
         const from = name in L.fadeFrom ? L.fadeFrom[name] : b;
-        if (put(layer, name, k < 1 ? from + (b - from) * k : b)) wrote = true;
+        if (put(layer, name, k < 1 ? between(name, from, b, k) : b)) wrote = true;
       });
       result[layer.name] = (moved || wrote) && writer;
     });

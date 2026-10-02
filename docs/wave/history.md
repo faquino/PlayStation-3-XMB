@@ -6,6 +6,10 @@ may already be ruled out.
 
 ## Ruled out
 
+- **The glare's textures fading to a black border.** Their CLAMP was read as the RSX's, which
+  blends a texture's edge with its border colour, black. RPCS3 runs it as clamp-to-edge, and its
+  screenshots under the music, bright up to the top right corner, are 27 to 33 levels brighter
+  there than a black border gives - see [The glare](postprocess.md#the-glare).
 - **The captures' y running down the screen.** Plotted beside a frame of a video recorded the
   same minute, a capture's wave looked upside down. It is not. In the captures the icons'
   category row sits at y = +0.463, at the top of the screen as in the video - see [Where the icons
@@ -36,6 +40,10 @@ may already be ruled out.
 - **The lines' steps behind their slower pace.** From the console's own start the steps give
   every savestate's speed and every capture's band; the pace was the start's, made then under the
   day cycle's values - see [The start](lines.md#the-start).
+- **The passes after the wave as a gain on the wave's light.** The page stood a gain of 1.5 in for
+  them, set by eye against a video. They lay the wave over the backdrop and expose the two
+  together, taking 1/16 off first, so a faint light only shows where the backdrop has some
+  already - see [The passes after the wave](postprocess.md).
 
 ## The spline layer, before the port
 

@@ -15,12 +15,16 @@ and what is modelled. This is the detail.
 - the deformation, the matrix and the surface, into 128 × 128 vertices in clip space with their
   normals, laid out as `spline.elf` writes them - see [The SPU task](spu-task.md);
 - the mesh's texture coordinates and its index buffer - see [The mesh](output.md#the-mesh);
-- `lines1.vpo` and `lines1.fpo`, re-authored, with the additive blend - see [The
-  shading](shading.md);
-- the sets: `scene-themes.js` holds every override's `LINE1.mnu` and writes it into the wave's
-  settings as it writes the particles' - the day cycle, the boot sequences, the music - see
-  [Parameter sets](../particles/parameter-sets.md); and the XMB's start resets the lines, as the
-  cold boot's handlers do - see [The start](lines.md#the-start).
+- `lines1.vpo` and `lines1.fpo`, re-authored, with the additive blend, into a buffer of the
+  wave's own in `_Encode`'s two channels - see [The shading](shading.md);
+- the passes after the wave, in `postprocess.js`: the backdrop drawn into its 64 × 32 buffer, the
+  composite with `BACKGROUND.mnu`'s colours, the tone curve as the preexpose tables hold it, read
+  half a texel short, the noise, and the glare - its source, its six levels, the Gaussians, their
+  weights and its addition to the screen - see [The passes after the wave](postprocess.md);
+- the sets: `scene-themes.js` holds every override's `LINE1.mnu`, `HDR.mnu` and `BACKGROUND.mnu`
+  and writes them into the wave's settings as it writes the particles' - the day cycle, the boot
+  sequences, the music - see [Parameter sets](../particles/parameter-sets.md); and the XMB's start
+  resets the lines, as the cold boot's handlers do - see [The start](lines.md#the-start).
 
 Each piece was checked against the savestates, fed what the console held: the surface gives the
 newer wave buffer from the local store's grid to 3e-5; the matrix rebuilds `b300` to 1e-5 from the
@@ -29,7 +33,8 @@ deformation and the matrix give the local store's grid to 5e-5 from A0 a frame b
 gives A0 to 5e-7; and a step gives A6 to the precision of [the one-step
 check](lines.md#a-step). The sets give the uniforms of every capture, through the day and the cold
 boot - see [How one set blends into
-another](../particles/day-cycle.md#how-one-set-blends-into-another).
+another](../particles/day-cycle.md#how-one-set-blends-into-another) - and, through
+`PS3PostProcess.uniforms`, those of the passes after the wave in seven captures to 5e-5.
 
 ## What it models
 
@@ -52,9 +57,14 @@ another](../particles/day-cycle.md#how-one-set-blends-into-another).
   peak × (1 - (d / reach)²)^power, d being the distance from the stripe's middle; `_FresLUT`'s red
   is a curve through 19 points, within 1.6% of the file's. At `THINNESS` 1 the stripe coordinate,
   0 / 0 on the console, is read as 0.
-- **`_Encode` and the passes after the wave.** The light is added to the backdrop times
-  `exposure`, 1.5, set by eye against a video of the console. `HDR.mnu`'s sets, which drive the
-  passes (inferred), are not applied.
+- **The passes after the wave, in their details.** The wave's buffer is read through a bilinear
+  filter where the console's texture unit applies a convolution; `_Encode`'s fine part is 2 (n mod
+  32), without the table's odd step of one; the six levels of the glare are added in one pass, not
+  six, and its textures are clamped to their edge, as RPCS3 runs their CLAMP; the luminance the
+  glare's source carries, and the copy the CPU fetches, are left out; and the noise is the page's
+  own. `HDR.mnu`'s flags are not applied - only the welcome sets change
+  them. The backdrop that goes into the passes is the console's program over fits of its month
+  textures - see the [backdrop notes](../../BACKGROUND_REVERSE_ENGINEER.md).
 - **The sets' clock.** The blends run on the page's seconds, and blend mode 1's frames at 60 a
   second - see [How one set blends into
   another](../particles/day-cycle.md#how-one-set-blends-into-another). The fade, `_Color`, is not

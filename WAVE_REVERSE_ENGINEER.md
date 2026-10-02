@@ -29,6 +29,7 @@ it first, then only the topics the task needs - see [Keeping these notes](#keepi
 | [`lines.md`](docs/wave/lines.md) | The PPU's simulation of the 19 lines: the object, the baked state each cold boot resets them to, the 60 Hz steps, the springs, the noise, the anchored ends, and the shaping of what the task receives |
 | [`ffd.md`](docs/wave/ffd.md) | The deformation's lattice: `ffd_shader1.fpo` on the GPU, its formula and clock, and how the PPU turns its output into the lattice |
 | [`shading.md`](docs/wave/shading.md) | How the RSX lights the mesh: the draw, `lines1.vpo` and `lines1.fpo` with their uniforms, the stripes `THINNESS` switches off, and the three textures |
+| [`postprocess.md`](docs/wave/postprocess.md) | The passes after the wave: the composite with `BACKGROUND.mnu`'s colours, the tone curve read half a texel short, and the glare `HDR.mnu` drives |
 | [`implementation.md`](docs/wave/implementation.md) | What `ps3xmbwave/` ports and models, and how it compares with the console |
 | [`history.md`](docs/wave/history.md) | Superseded readings, closed investigations and dead ends, for reopening a question |
 
@@ -40,29 +41,32 @@ What `ps3xmbwave/` ports as verified and what it models, file by file;
 | File | Verified | Modelled |
 |---|---|---|
 | `wave-reverse.js` | The lines, from their 60 Hz steps to the grid the task receives; the lattice; the deformation, the matrix and the B-spline surface, into the 128 × 128 mesh `spline.elf` writes; its texture coordinates and index buffer. Each checked against the savestates. | The lines' start, made as the console's was - run at a `TIMESTEP` of 7.4 up to its clock, the first and last lines averaged - with the console's mean place and velocity; at most four steps a frame; the deformation divides exactly. |
-| `spline.js` | `lines1.vpo` and `lines1.fpo`, re-authored, and the additive blend. The lines start afresh as the XMB's start begins. | `_Stripes` and `_FresLUT`, fitted; `_Encode` and the passes after the wave, as one gain, `exposure`. |
-| `spline-settings.js` | `LINE1.mnu`'s parameters under their own names, with the base set's values. | `exposure`. |
-| `scene-themes.js` | Every set's `LINE1.mnu`, as its differences from the base, put in as the particles' sets are: the day cycle, the boot sequences, the music. The cold boot's ramp, checked against the captures. | The blends' windows on the page's seconds. |
+| `spline.js` | `lines1.vpo` and `lines1.fpo`, re-authored, the additive blend and `_Encode`. The lines start afresh as the XMB's start begins. | `_Stripes` and `_FresLUT`, fitted. |
+| `postprocess.js` | `LinesController`, the preexpose tables, `GlareSourcePre`, the levels, `Gaussian`, `AccGlare` and `ToneApplyDisplay`, re-authored; their uniforms from the sets, checked against the captures. | The wave's buffer read bilinearly, not through a convolution; the glare's levels added in one pass; its textures clamped to their edge, as RPCS3 runs them. |
+| `spline-settings.js` | `LINE1.mnu`'s, `HDR.mnu`'s and `BACKGROUND.mnu`'s parameters under their own names, with the base set's values. | |
+| `scene-themes.js` | Every set's `LINE1.mnu`, `HDR.mnu` and `BACKGROUND.mnu`, as their differences from the base, put in as the particles' sets are: the day cycle, the boot sequences, the music. The cold boot's ramp, checked against the captures. | The blends' windows on the page's seconds. |
 
 ## Still missing
 
 The implementation models all of these. They are listed roughly by how much each one changes the
 wave on screen:
 
-- **The passes after the wave.** Some thirty full-screen passes run between the wave and the
-  particles, and read back what `_Encode` wrote - see [The draw](docs/wave/shading.md#the-draw).
-  `HDR.mnu` probably drives them (inferred). Also where `_Stripes` and `_Encode` are made, where
-  `FALLOFF` goes, since no uniform of the two programs is named for it, and `_Gamma`, which the
-  scene sends the wave's renderer too (`0x70bf8`).
+- **Who makes what the passes after the wave read.** The preexpose tables, the glare's weights,
+  `_Stripes` and `_Encode`, which the captures only show the results of - see [The passes after the
+  wave](docs/wave/postprocess.md). Also where `FALLOFF` goes, since no uniform of the two programs
+  is named for it; `_Gamma`, which the scene sends the wave's renderer too (`0x70bf8`); and what the
+  CPU does with the copy of the glare's levels it fetches each frame.
 - **The lines' start.** The console's, baked into its module, is firmware data, and from it the
   page draws the console's wave frame by frame - see [Against the
   console](docs/wave/implementation.md#against-the-console). The start the page makes has its
   energy and stretch, and the wave's pace and depth at rest match; for the first minutes after
   the reset its band is about a tenth thinner, and at first nearer.
+- **The glare's edges on the RSX.** Its textures are set to CLAMP, which RPCS3 runs as
+  clamp-to-edge and the page follows; the RSX's own blends the edge with the border colour, which
+  would dim the glare along the screen's edges - see [The glare](docs/wave/postprocess.md#the-glare).
 - **The blends' clock.** Under RPCS3 the sets' blends ran 2.4 to 2.7 times ahead of the lines'
   steps, where the code moves both by the frame's time - see [How one set blends into
-  another](docs/particles/day-cycle.md#how-one-set-blends-into-another). `HDR.mnu`'s and
-  `BACKGROUND.mnu`'s sets wait for the passes after the wave and the backdrop.
+  another](docs/particles/day-cycle.md#how-one-set-blends-into-another).
 - **The FFD's other programs.** `ffd_alpha_blend.fpo`, drawn every frame after `ffd_shader1`,
   and `ffd_shader0`, 2 and 3, which no set picks - see [The draws](docs/wave/ffd.md#the-draws).
 - **The clock's wrap.** What `0x47af0` does when the lines' clock passes 10 and starts again,

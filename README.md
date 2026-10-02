@@ -22,16 +22,16 @@ While this is inspired by the official PlayStation 3 XMB background wave design,
 
 - **Reverse-engineered wave**: `wave-reverse.js` builds the wave the way the console does - the PPU's simulation of 19 lines, the GPU's deformation lattice and the SPU's B-spline surface - into the console's own 128 × 128 mesh, and `spline.js` draws it with the XMB's line programs re-authored in GLSL. The firmware's parameter sets move it as they move the particles: through the day, the XMB's start, a game's launch and the music.
 - **WebGL2 renderer**: Pure WebGL2 rendering path (background + spline mesh + particles), no framework dependency.
-- **Day/Night monthly gradient presets**: 12 month presets with day/night variants are available in the UI, plus a fallback "Original (RGB Sliders)" mode. The default is `Auto (date and time)`, which does what the console does: it walks from this month's colour to next month's across the month and mixes the day and night tables by the hour.
+- **The console's backdrop**: the default, `Auto (date and time)`, runs the XMB's own backdrop program, re-authored, over fits of its month textures: this month's and next month's colours taken through hue, saturation and value, lit by clocks that run through the day with two glows going round, next month wiped in up the screen as the month goes on, and the night's textures mixed in by the hour. Under the music it switches, as the console does, to the console's other program. The 12 month gradients with day/night variants, and an "Original (RGB Sliders)" mode, remain as presets.
 - **Live control panels**: Separate spline and particle panels with per-setting sliders/selects and reset buttons.
 - **Reverse-engineered particle system**: `particles-reverse.js` is a port of the SPU update task in the PS3's `particles.elf`, drawn in the two passes the XMB uses, re-authored in GLSL. The firmware's own parameter sets come with it: the day cycle runs by the clock, and the controller stand-in (mouse drag, pointer, arrow keys) stirs the field the way the real one does.
 - **Reverse engineering notes included**: [SPLINE_REVERSE_ENGINEER.md](SPLINE_REVERSE_ENGINEER.md), [WAVE_REVERSE_ENGINEER.md](WAVE_REVERSE_ENGINEER.md) (an index into [`docs/wave/`](docs/wave/)), [PARTICLES_REVERSE_ENGINEER.md](PARTICLES_REVERSE_ENGINEER.md) (an index into [`docs/particles/`](docs/particles/)) and [BACKGROUND_REVERSE_ENGINEER.md](BACKGROUND_REVERSE_ENGINEER.md) (an index into [`docs/background/`](docs/background/)) document traced functions, memory ranges, and what is still modelled, each one saying which is which.
 
 ## Reality check (what still needs work)
 
-- Day/night gradients are now integrated as actual presets, but they're not perfect like in the .dds files, so this issue is partially solved.
+- The backdrop is the console's programs: the months', over fits of its textures, which stay out of the repository, and the music's, which needs none.
 - Sparkles run the console's own update task now, and a headless bench (`tools/bench/particles.js`) compares their pool with one read out of a savestate. What is left is the PPU side that feeds it - the emitter and the flow field are still modelled - and they drift about twice as fast as the console's late in life.
-- The wave's geometry is the console's own now, checked piece by piece against savestates. What is left is its look - some thirty post-processing passes run after it on the console and are not traced yet, so a single exposure stands in for them - and the very first minutes after a start: the console starts its lines from a state baked into its firmware, so the page makes one the same way, which keeps the console's pace but not its exact course.
+- The wave's geometry is the console's own now, checked piece by piece against savestates, and so are the passes the console runs after it - the composite with the backdrop, the tone curve and the glare: fed the console's own mesh, the page draws RPCS3's screenshot of the moment. What is left is the very first minutes after a start: the console starts its lines from a state baked into its firmware, so the page makes one the same way, which keeps the console's pace but not its exact course.
 
 ## Local Development
 
@@ -68,7 +68,7 @@ npm run start
 
 1. **Spline panel (top-right)**:
    - Leave the gradient on `Auto (date and time)`, or pick a preset (`MM Day` / `MM Night`), or go back to `Original (RGB Sliders)`.
-   - Tweak the wave with `LINE1.mnu`'s own parameters - its springs, noise, placement, deformation and lighting - and `Exposure`, which stands in for the passes after it.
+   - Tweak the wave with `LINE1.mnu`'s own parameters - its springs, noise, placement, deformation and lighting - and the passes after it with `HDR.mnu`'s (exposure, tone curve, glare) and `BACKGROUND.mnu`'s colours.
 
 2. **Particles panel (top-left)**:
    - Tweak sparkle count, opacity, base size, variance, and speed.
@@ -81,12 +81,12 @@ npm run start
 
 ### WebGL implementation (`ps3xmbwave`)
 - **Rendering path**: WebGL2 only.
-- **Layering**: Background gradient pass, the wave's mesh added on top, additive particles pass.
+- **Layering**: the backdrop into a 64 × 32 buffer, the wave's light into one of its own, the console's composite, tone curve and glare over both, then the additive particles.
 - **Wave source**: the console's 128 × 128 mesh, built on the CPU each frame by `wave-reverse.js` and uploaded as a vertex buffer.
 
 ### Reverse-engineered wave status
-- **What is implemented**: the lines' simulation, the deformation lattice, the free-form deformation, the camera and the B-spline surface, with the line programs' shading, and the firmware's `LINE1.mnu` sets - see [WAVE_REVERSE_ENGINEER.md](WAVE_REVERSE_ENGINEER.md).
-- **What is still missing**: the post-processing passes that follow the wave.
+- **What is implemented**: the lines' simulation, the deformation lattice, the free-form deformation, the camera and the B-spline surface, with the line programs' shading, the passes that follow the wave, and the firmware's `LINE1.mnu`, `HDR.mnu` and `BACKGROUND.mnu` sets - see [WAVE_REVERSE_ENGINEER.md](WAVE_REVERSE_ENGINEER.md) and [BACKGROUND_REVERSE_ENGINEER.md](BACKGROUND_REVERSE_ENGINEER.md).
+- **What is still missing**: the very first minutes after a start.
 
 ## Contributing
 
@@ -112,8 +112,6 @@ This project is open source and available under the [MIT License](LICENSE).
 
 ## TODO
 
-- Trace the post-processing passes that follow the wave.
 - Find what makes the sparkles drift twice as fast as the console's late in life; the notes list six causes already ruled out.
 - Keep tuning wave calmness and flow cadence to better match real hardware captures. I realise the waves have sharp edges, when the real thing is like a water wave (just realised it!)
-- Validate month day/night gradients against more references and tighten remaining color/angle drift.
 - Trace the PPU side of the particles: the emitter and what the flow grid holds.

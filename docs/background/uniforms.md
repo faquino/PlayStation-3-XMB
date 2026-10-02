@@ -1,47 +1,89 @@
 # What the uniforms read
 
-Part of the [backdrop notes](../../BACKGROUND_REVERSE_ENGINEER.md): the values `back_colours0.fpo`
-is fed while it runs, and what they say about the month's walk and the hour.
+Part of the [backdrop notes](../../BACKGROUND_REVERSE_ENGINEER.md): what the scene hands the
+backdrop's programs every frame - see [The programs](program.md) for what they do with them - and how
+it works each one out of the time of day, the date and `BACKGROUND.mnu`'s parameters.
 
-Read live out of the savestates, with the fragment microcode found in main memory and its patched
-constant slots decoded (halves swapped, as always in fragment microcode):
+**Verified** in `custom_render_plugin`'s `0x52ad8`, which sets them, and against every capture and
+savestate taken with the XMB on screen: the live values are read out of the fragment microcode, with
+the frame's inline transfers laid over it - see [`tools/re/README.md`](../../tools/re/README.md#a-captures-frame).
 
-Console clock, not host clock: the last row was taken with RPCS3's *Console time offset* moved
-forward a month. Every row but the first is a savestate; the first is an RSX frame capture, which
-carries the same patched microcode and is far less trouble to take.
+## The clocks
 
-| When | `_MonthTime` | `_NightDayBlend` | `_DayTime` | `_NightTime` |
-|---|---|---|---|---|
-| 21 Sep 20:18 (frame capture) | 20 | 0.500186 | 1668.16 | 831.39 |
-| 22 Sep 22:55 | 21 | 0.500053 | 2136.53 | 1093.00 |
-| 22 Sep 23:03 | 21 | 0.500053 | 2165.29 | 1105.64 |
-| 23 Sep 07:52 | 22 | 1 | 1093.38 | 1988.06 |
-| 23 Sep 08:07 | 22 | 1 | 1103.95 | 2012.08 |
-| 23 Sep 16:54 | 22 | 1 | 1347.52 | 490.97 |
-| 23 Sep 20:02 | 22 | 0.534256 | 1631.51 | 803.83 |
-| 23 Sep 20:11 | 22 | 0.508853 | 1651.01 | 818.69 |
-| 23 Oct 01:32 | 21.2903 | 0.605699 | 363.13 | 1353.06 |
+t is the time of day, 0 at midnight to 1, clamped to that range (`+0x1d0` of the backdrop's object).
 
-- **`_MonthTime` is the walk itself, on a thirty-day scale**: `(day - 1) * 30 / days in month`. In
-  September, a thirty-day month, that is the day of the month minus one, which is what the first
-  seven rows read. October gives the law away: 21.2903 on the 23rd is exactly `22 * 30 / 31`. So
-  the share of the next month's colour is `_MonthTime / 30`, that is `(day - 1) / days in month`,
-  and it steps once a day - there is no time-of-day term in it, or 01:32 would have added 0.06.
-  The shader's own `exp(-0.01 (m - 15)^2)` is centred on 15, the middle of that same scale.
-- **`_NightDayBlend` spans [0.5, 1]**, 1 in daylight and 0.500053 at its floor, so the daylight
-  share it carries is `2 x - 1`: 0 at 22:55 and 23:03, 0.211 at 01:32, 1 at 07:52, 08:07 and 16:54,
-  0.069 at 20:02 and 0.018 at 20:11. Two straight lines hold all eight to within 0.008 - **up from
-  nothing at midnight to full daylight at 07:00, and down again between 17:15 and 20:15**. The
-  floor is midnight, not the small hours: by half past one the backdrop is already a fifth of the
-  way back towards its daylight colour, which the screenshot of that moment shows as a warm glow
-  along the bottom of an otherwise black screen.
-- **`_DayTime` and `_NightTime` are animation clocks.** They advance with emulated time, at rates
-  that move with the emulator's speed (`_DayTime` gained 0.012/s over one interval and 0.036/s over
-  another), and they do not encode the wall clock.
-- `_NightBrightness` held 0.486059 in every savestate. `_Alpha` did not hold still at all - 0.038,
-  0.939, 0.926, 0.550, 0.911, 0.352 across the eight - so it is animated by something else and is
-  the reason our backdrop comes out about four times brighter than the console's.
+- **`_NightTime`** is 2400 × fract(t + 0.5): a hundred times the hours since noon.
+- **`_DayTime`** is 2400 × f(t), f a cubic through 0 at midnight and 1 at the next with `DAYSPREAD`
+  for its slope at both ends (`0x52a28`, a Hermite curve): f(t) = 3t² - 2t³ + `DAYSPREAD` (t - 2t² +
+  t³). So it runs fast through the night and slowly about noon: under the day's sets, `DAYSPREAD`
+  2.68, it passes 600 at 02:48 and 1800 at 21:12, and goes from 1104 at 08:07 to 1348 at 16:54.
 
-RPCS3's shader cache carries an older copy of the same uniforms, from the first frame the program
-was ever compiled for: `_Alpha` 0, `_MonthTime` 16 on 17 September (the day minus one again) and
-`_NightDayBlend` 1. Only the date-driven one is worth reading there; the rest is start-up state.
+Both are 2400 times 0 to 1, so [the program](program.md)'s windows, 600 to 1800, are fractions of
+its clock, and its glows go round once a day. Every capture's two clocks are these to 0.08, the
+seconds the capture's own time is known to, and every savestate's to within the minute its time is
+known to.
+
+Under `COLOUR SHADER` 1 (`back_colours1`, the music's), `_DayTime` is t × 1000 / 24 instead
+(`0x92e64`), and nothing else is read. The music holds the scene's clock, so it stays where the music
+came in: 0.52662, 00:18:12, through the four captures taken during one track, and 0.836227,
+00:28:54, through the three that caught the next coming in.
+
+## The day and the night
+
+- **`_NightDayBlend`** is 1 - `NIGHT BLEND` × (1 - s₁ (1 - s₂)), s₁ the smoothstep from
+  `NIGHT2DAY BEGIN` to `END` and s₂ the one from `DAY2NIGHT BEGIN` to `END`, all four in hours
+  (`0x3e980`). Under the day's sets, `NIGHT BLEND` 0.499947 and the ramps 00:00 to 05:10 and 18:30
+  to 20:20: 0.500053 at midnight, 1 from 05:10 to 18:30, and the savestates' 0.6057 at 01:32 and
+  0.5343 at 20:02 to within the minute their times are known to.
+- **`_NightBrightness`** is `NIGHT WHIT BIAS`, 0.486059 under the day's sets.
+
+The base `BACKGROUND.mnu` carries none of these, so the code's defaults stand for them: `NIGHT BLEND`
+1, the ramps 04:00 to 06:00 and 18:00 to 20:00, `DAYSPREAD` 3, `NIGHT WHIT BIAS` 0.5 (from
+`0x23844` on). The sets that carry none either, the music's, `black` and `gameboot2`, keep those.
+
+## The months
+
+The backdrop's object keeps the month as a number, 0 for January to 12 (`+0x1d4`): this month's two
+textures are its whole part's, next month's the one after, and **`_MonthTime`** is its fraction times
+30. The scene works that number out as the month less one, plus the day less one over the month's
+length (`0x10900`), from a table that gives February 28 days in every year (`0x91cb0`), the 29th
+counting as the 28th: October's 23rd reads 21.2903, which is 22 × 30 / 31.
+
+## Where the moment comes from
+
+The scene hands the backdrop its time of day and its month through `0x10900`, which works both out
+from a moment and passes them on with a blend time (through `0x1adc8` and `0x1b090`, to the
+backdrop's `0x4fe04` and `0x4fe18`). The moment is the scene's clock's, which ticks every second and
+hands it over a second, unless something holds the clock - see [Theme Settings' Colour stops the
+clock](../particles/day-cycle.md#theme-settings-colour-stops-the-clock). Until something is handed,
+the backdrop's clock stands at midnight in January (`0x4fc40`).
+
+## The XMB's start
+
+The XMB's start hands the backdrop 10:00 of the day: `anim_coldboot_BootBG2`'s handler (`0x110dc`)
+gives `0x10900` the date with its time set to 10:00:00, over 7.5 seconds. The start then holds the
+clock until `ShowGUI` lets go of it 5.5 seconds in, and the clock's next tick hands the hour over a
+second. The captures taken in the cold boot's first seconds read `_NightTime` 2200 and `_DayTime`
+1166, whatever the hour, on the date's own month: 10:00 3.9 seconds in, the hour 7.5 seconds in.
+Their `_Alpha` is the 7.5-second ease's - see below: 0.0688 and 0.4314, 1.20 and 3.41 seconds into
+it, where the wave's lines had stepped 73 and 205 times, 1.22 and 3.42 seconds of their 60 Hz.
+
+## `_Alpha`
+
+**Verified** in the code. The backdrop keeps a timer and an ease's length (`+0x1d8` and `+0x1dc`).
+Handing it a time of day or a month (`0x4fe04`, `0x4fe18`) sets the length to the blend time handed
+with it, a change of `COLOUR SHADER` (`0x4fdf0`) to 2 seconds, and both zero the timer. Each frame
+(`0x52ef0`), if the timer is 0 the 64 × 32 buffer is first copied into another (`0x52784`); then that
+copy is drawn into the buffer (draw 0, `Copy` from `0x2c02600`) and the program over it (draw 1),
+blended by `_Alpha`, the smoothstep of the timer over the length (`0x453ac`); and the timer moves on
+by the frame's time until it reaches one and a half lengths. That the copy is of the buffer as it
+stands is read from the code's shape: no capture caught a frame with it.
+
+So at rest, with the clock's tick every second over a second, `_Alpha` is the smoothstep of n / 60
+at 60 frames a second, n a whole number: 20/27 is the smoothstep of 2/3, 0.104 of 1/5, 0.71825 of
+13/20. In the 11 captures and 6 savestates taken at rest with `back_colours0`, n comes out whole (to
+0.0001 in the captures), and 16 and 39 come up twice each. What the backdrop shows is the program's
+output eased in over a second, which is why the screenshots match the program's output without
+`_Alpha` in it. While the music holds the clock no tick comes, and `_Alpha` stays 1; as the music
+came in, the capture of 00:28:55 caught the change of program's 2-second ease 0.574 seconds in, at
+0.199624.

@@ -2,12 +2,13 @@
 
 Part of the [wave notes](../../WAVE_REVERSE_ENGINEER.md): how the RSX lights the mesh `spline.elf`
 writes - see [What the console draws](output.md) - with `lines1.vpo`, `lines1.fpo` and three
-textures, and what comes after.
+textures. What comes after is in [The passes after the wave](postprocess.md).
 
 ## The draw
 
-**Verified** from the captures. The wave is the frame's fifth draw. It blends `ONE, ONE`, adding its
-light to the backdrop, with no depth test, and binds three textures:
+**Verified** from the captures. The wave is the frame's fifth draw. It goes into a buffer of its own,
+1920 × 1080 and cleared to black, and writes its red and green only, blending `ONE, ONE` with no
+depth test - so where the wave folds over itself its light adds up. It binds three textures:
 
 | Unit | Uniform | Texture |
 |---|---|---|
@@ -16,9 +17,8 @@ light to the backdrop, with no depth test, and binds three textures:
 | 2 | `_Encode` | 4096 × 1, made at run time |
 
 All three are A8R8G8B8: `_Stripes` filtered linearly and repeating across, `_FresLUT` filtered
-linearly and clamped, `_Encode` read from the nearest texel and clamped.
-About thirty full-screen passes follow before the particles' two - draws 5 to 34 in the capture of
-24 September at 18:21 - and what they do with the wave's light is not followed.
+linearly and clamped, `_Encode` read from the nearest texel and clamped. The composite that follows
+reads the buffer back and lays it over the backdrop - see [The composite](postprocess.md#the-composite).
 
 ## The draw's uniforms
 
@@ -74,8 +74,11 @@ The page reads it as 0, `_Stripes`' column at the edge of a stripe, which leaves
 - **`_Stripes`.** A stripe's profile, 16 texels across, one row per step of m: the first flat at
   127, the others peaking at 170, 219 and 255, each narrower than the last. All four channels are
   equal. Where it is made is not followed.
-- **`_Encode`.** 4096 texels over the light from 0 to 1. Two channels hold a coarse part,
-  4 ⌊n/32⌋ - 1 for texel n from 32 on, saturating at 255 from texel 2048, a light of 0.5. The
-  other two hold a fine part, about 2 (n mod 32), from 0 to 62, with room for four layers of the
-  wave to add up before it carries. That keeps the light the wave adds up more precisely than 8
-  bits would (inferred). Where it is made, and what reads the sums back, is not followed.
+- **`_Encode`.** 4096 texels over the light from 0 to 1. Through the sampler's remap the program
+  reads a fine part in red and blue, 2 (n mod 32) for texel n but 2n - 1 in the first 32 texels,
+  and one more or less here and there, from 0 to 63; and a coarse part in green and alpha,
+  4 ⌊n/32⌋ - 1 from texel 32 on, saturating at 255 from texel 2048. The composite reads the
+  buffer back as red / 32 + green / 2, so a fragment's light stops at 0.5 and the buffer's at
+  0.53, its two channels saturating at 8 bits; the fine part has room for four layers of the wave
+  to add up before it does. That keeps the light the wave adds up more precisely than 8 bits
+  would (inferred). Where the table is made is not followed.

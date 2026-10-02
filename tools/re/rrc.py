@@ -28,11 +28,23 @@ first data word; each further data word follows as a command whose header is 0.
 The capture holds main memory as it was when each block was first needed, keyed by
 RSX location: 0 is local (video) memory, 1 is main memory mapped through the IO table.
 
+Fragment program constants live in the microcode, and the XMB patches them between draws with
+inline transfers: an NV3062 destination (subchannel 3 in the XMB's FIFO) and NV308A points and
+colours (subchannel 5), which write words straight into memory. The memory blocks hold the
+microcode as it was first needed, so a draw's own values are those words laid over it - `frame`
+does that.
+
+RPCS3 keeps render targets on the GPU and does not write them back, so the blocks of a target
+read as zeros; what the CPU uploaded (textures, tables, vertex data) reads as it was.
+
 Usage:
   rrc.py summary <capture.rrc.gz>
   rrc.py draws   <capture.rrc.gz> [--vpo P.vpo ...]   draw calls, naming known programs
   rrc.py consts  <capture.rrc.gz> <draw> [first] [n]  vertex constants at a draw
   rrc.py buffer  <capture.rrc.gz> <draw> [-o F.csv]   a draw's vertex attributes, decoded
+  rrc.py frame   <capture.rrc.gz> --programs <dir>    every draw: its programs, the surface it
+                 [--first N] [--last N] [--uniforms]  writes, the textures it reads, its blend,
+                                                      and with --uniforms its fragment uniforms
 """
 
 import argparse
@@ -60,6 +72,39 @@ DRAW_ARRAYS = 0x1814
 INDEX_ARRAY_ADDRESS = 0x181c
 INDEX_ARRAY_DMA = 0x1820            # bits 0-3 location, bit 4 set for 16-bit indices
 DRAW_INDEX_ARRAY = 0x1824
+# The state `frame` reports.
+SURFACE_CLIP_HORIZONTAL = 0x0200
+SURFACE_CLIP_VERTICAL = 0x0204
+SURFACE_FORMAT = 0x0208
+SURFACE_COLOR_AOFFSET = 0x0210
+VIEWPORT_HORIZONTAL = 0x0a00
+VIEWPORT_VERTICAL = 0x0a04
+BLEND_ENABLE = 0x0310
+BLEND_SFACTOR = 0x0314
+BLEND_DFACTOR = 0x0318
+COLOR_MASK = 0x0324
+TEXTURE = 0x1a00                    # 16 units of 0x20 bytes: offset, format, address, control0,
+                                    # control1 (remap), filter, image rect, border colour
+# Inline transfers, as the XMB's FIFO binds them.
+NV3062_OFFSET_DESTIN = 0x630c
+NV3062_PITCH = 0x6304
+NV308A_POINT = 0xa304
+NV308A_SIZE_OUT = 0xa308
+NV308A_COLOR = 0xa400
+
+SURFACE_FORMATS = {4: 'X8R8G8B8', 5: 'X8R8G8B8', 8: 'A8R8G8B8', 9: 'B8', 10: 'G8B8', 11: 'RGBA16F',
+                   12: 'RGBA32F', 13: 'R32F'}
+TEXTURE_FORMATS = {0x81: 'B8', 0x82: 'A1R5G5B5', 0x83: 'A4R4G4B4', 0x84: 'R5G6B5', 0x85: 'A8R8G8B8',
+                   0x86: 'DXT1', 0x87: 'DXT23', 0x88: 'DXT45', 0x8b: 'G8B8', 0x9a: 'RGBA16F',
+                   0x9b: 'RGBA32F', 0x9c: 'R32F', 0x9e: 'D8R8G8B8', 0x9f: 'RG16F'}
+MIN_FILTERS = {1: 'nearest', 2: 'linear', 3: 'nearest, nearest mip', 4: 'linear, nearest mip',
+               5: 'nearest, linear mip', 6: 'linear, linear mip', 7: 'convolution'}
+MAG_FILTERS = {1: 'nearest', 2: 'linear', 4: 'convolution'}
+WRAPS = {1: 'wrap', 2: 'mirror', 3: 'clamp to edge', 4: 'border', 5: 'clamp', 6: 'mirror once to edge',
+         7: 'mirror once to border', 8: 'mirror once'}
+BLEND_FACTORS = {0: '0', 1: '1', 0x300: 'SC', 0x301: '1-SC', 0x302: 'SA', 0x303: '1-SA', 0x304: 'DA',
+                 0x305: '1-DA', 0x306: 'DC', 0x307: '1-DC', 0x308: 'SA saturate', 0x8001: 'CC',
+                 0x8002: '1-CC', 0x8003: 'CA', 0x8004: '1-CA'}
 
 
 class Reader:
@@ -161,7 +206,8 @@ class Capture:
         offset k > 0 rewrites the current block from word k, and a word's position
         since the LOAD gives its slot (position // 4) and component (position % 4).
         """
-        consts, program = {}, {}
+        consts, program, regs, inline = {}, {}, {}, {}
+        transfer = {'dest': 0, 'pitch': 0, 'point': 0, 'size': 0, 'index': 0}
         const_load = prog_load = 0
         const_block = prog_block = None
         vp_start, fp, divider_op = 0, None, 0
@@ -176,6 +222,23 @@ class Capture:
             return block, block + offset + word
 
         for index, (reg, value, packet, word) in enumerate(self.commands):
+            regs[reg] = value
+            if reg == NV3062_OFFSET_DESTIN:
+                transfer['dest'] = value
+            elif reg == NV3062_PITCH:
+                transfer['pitch'] = value >> 16
+            elif reg == NV308A_POINT:
+                transfer['point'], transfer['index'] = value, 0
+            elif reg == NV308A_SIZE_OUT:
+                transfer['size'] = value
+            elif NV308A_COLOR <= reg < NV308A_COLOR + 0x700:
+                # Words past the transfer's own size pad its packets to an even count.
+                width, height = transfer['size'] & 0xffff, transfer['size'] >> 16
+                if transfer['index'] < width * height:
+                    x = (transfer['point'] & 0xffff) + transfer['index'] % width
+                    y = (transfer['point'] >> 16) + transfer['index'] // width
+                    inline[transfer['dest'] + y * transfer['pitch'] + 4 * x] = value
+                transfer['index'] += 1
             if reg == TRANSFORM_CONSTANT_LOAD:
                 const_load, const_block = value, None
             elif TRANSFORM_CONSTANT <= reg < TRANSFORM_CONSTANT + 0x80:
@@ -214,7 +277,7 @@ class Capture:
                            'vp_start': vp_start, 'fp': fp, 'arrays': dict(arrays),
                            'formats': dict(formats), 'divider_op': divider_op,
                            'primitive': primitive, 'ranges': ranges,
-                           'indexed': bool(indexed)}
+                           'indexed': bool(indexed), 'regs': dict(regs), 'inline': dict(inline)}
                     count += 1
             elif reg == DRAW_ARRAYS and in_draw:
                 ranges.append((value & 0xffffff, (value >> 24) + 1))
@@ -237,6 +300,70 @@ class Capture:
             fmt = '>%d%s' % (n, 'H' if width == 2 else 'I')
             top = max([top] + [i for i in struct.unpack(fmt, blob) if i != restart])
         return top + 1
+
+
+def patched(cap, draw, location, offset, size):
+    """Memory at an RSX address as the draw saw it: the captured block with the frame's inline
+    transfers so far laid over it."""
+    blob = cap.memory(location, offset, size)
+    if blob is None:
+        return None
+    out = bytearray(blob)
+    for address, value in draw['inline'].items():
+        if offset <= address <= offset + size - 4:
+            out[address - offset:address - offset + 4] = struct.pack('>I', value)
+    return bytes(out)
+
+
+def fragment_program(cap, draw, programs):
+    """The .fpo a draw's fragment program is, and its microcode as the draw ran it."""
+    value = draw['fp'] or 0
+    location = 0 if (value & 3) == 1 else 1
+    for name, prog in programs.items():
+        blob = patched(cap, draw, location, value & ~3, len(prog.ucode))
+        if blob is not None and prog.matches_cached(blob):
+            return name, prog, blob
+    return None, None, None
+
+
+def describe_draw(cap, draw, fpos, vpos, uniforms):
+    """A draw's line in `frame`, and the lines under it."""
+    regs = draw['regs']
+    name, prog, blob = fragment_program(cap, draw, fpos)
+    clip_h, clip_v = regs.get(SURFACE_CLIP_HORIZONTAL, 0), regs.get(SURFACE_CLIP_VERTICAL, 0)
+    vp_h, vp_v = regs.get(VIEWPORT_HORIZONTAL, 0), regs.get(VIEWPORT_VERTICAL, 0)
+    fmt = regs.get(SURFACE_FORMAT, 0)
+    target = '%x %s %dx%d' % (regs.get(SURFACE_COLOR_AOFFSET, 0), SURFACE_FORMATS.get(fmt & 0x1f, '?'),
+                              clip_h >> 16, clip_v >> 16)
+    if (vp_h, vp_v) != (clip_h & 0xffff0000, clip_v & 0xffff0000):
+        target += ' (viewport %dx%d at %d,%d)' % (vp_h >> 16, vp_v >> 16, vp_h & 0xffff, vp_v & 0xffff)
+    blend = 'blend %s, %s' % (BLEND_FACTORS.get(regs.get(BLEND_SFACTOR, 0) & 0xffff, '?'),
+                              BLEND_FACTORS.get(regs.get(BLEND_DFACTOR, 0) & 0xffff, '?')) \
+        if regs.get(BLEND_ENABLE) else 'no blend'
+    mask = regs.get(COLOR_MASK, 0x01010101)
+    if mask != 0x01010101:
+        blend += ', writes ' + ''.join(c for c, bit in zip('ARGB', (24, 16, 8, 0)) if mask >> bit & 0xff)
+    lines = ['draw %3d  %-20s %-20s -> %s, %s' % (draw['index'], name or 'fp@%x' % (draw['fp'] or 0),
+                                                   program_name(draw, vpos) or '-', target, blend)]
+    units = sorted({int(p['resource'][7:]) for p in prog.params
+                    if p['resource'].startswith('TEXUNIT') and p['referenced']}) if prog else []
+    for unit in units:
+        base = TEXTURE + 0x20 * unit
+        tex_fmt = regs.get(base + 0x04, 0)
+        kind = (tex_fmt >> 8) & 0xff
+        label = TEXTURE_FORMATS.get(kind & ~0x60, '%02x' % kind) + (' linear' if kind & 0x20 else '') + \
+            (' unnormalised' if kind & 0x40 else '')
+        rect, filt, wrap = regs.get(base + 0x18, 0), regs.get(base + 0x14, 0), regs.get(base + 0x08, 0)
+        lines.append('          t%-2d %x %s %dx%d, min %s, mag %s, %s' % (
+            unit, regs.get(base, 0), label, rect >> 16, rect & 0xffff, MIN_FILTERS.get((filt >> 16) & 0xff, '?'),
+            MAG_FILTERS.get((filt >> 24) & 0xf, '?'), WRAPS.get(wrap & 0xf, '?')))
+    if uniforms and prog:
+        for param in prog.params:
+            if param['slots']:
+                values = sorted(set(tuple(round(v, 6) for v in vec) for vec in prog.embedded_values(blob, param)))
+                lines.append('          %-18s %s' % (param['name'], ' '.join(
+                    '(' + ', '.join('%.6g' % v for v in vec) + ')' for vec in values)))
+    return lines
 
 
 def program_name(draw, vpos):
@@ -311,6 +438,13 @@ def main(argv=None):
     p.add_argument('capture', type=Path)
     p.add_argument('draw', type=int)
     p.add_argument('-o', '--out', type=Path, help='CSV file (default: stdout)')
+    p = sub.add_parser('frame', help='every draw: programs, target, textures, blend, uniforms')
+    p.add_argument('capture', type=Path)
+    p.add_argument('--programs', type=Path, required=True,
+                   help='a folder of .fpo and .vpo files, searched recursively (re-work/lines/lib)')
+    p.add_argument('--first', type=int, default=0)
+    p.add_argument('--last', type=int, default=None)
+    p.add_argument('--uniforms', action='store_true', help="each fragment program's live uniforms")
     args = ap.parse_args(argv)
 
     cap = Capture(gzip.open(args.capture).read())
@@ -341,6 +475,19 @@ def main(argv=None):
             print('draw %3d  cmd %6d  vp@%3d %-18s fp=%08x  %5d verts  %s'
                   % (d['index'], d['command'], d['vp_start'], program_name(d, vpos) or '',
                      d['fp'] or 0, verts, ' '.join(attrs)))
+        return 0
+
+    if args.cmd == 'frame':
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from cgbin import CgProgram
+        fpos, vpos = {}, {}
+        for path in sorted(args.programs.rglob('*.fpo')):
+            fpos[path.stem] = CgProgram(path.read_bytes())
+        for path in sorted(args.programs.rglob('*.vpo')):
+            ucode = CgProgram(path.read_bytes()).ucode
+            vpos[path.stem] = list(struct.unpack('>%dI' % (len(ucode) // 4), ucode))
+        for d in draws[args.first:None if args.last is None else args.last + 1]:
+            print('\n'.join(describe_draw(cap, d, fpos, vpos, args.uniforms)))
         return 0
 
     d = draws[args.draw]

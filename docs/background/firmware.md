@@ -9,8 +9,8 @@ backdrop, which way up the console draws it, and which of it the RSX holds at on
 `textures/month_bg/night/01..12.dds`, all 64 x 32 BGRA8888 with five mips. `09.dds` really is the
 magenta one and `10.dds` really is the amber one, so the month naming is what everyone assumed.
 
-They are drawn by `lib/moyou/back_colours0.fpo`, 538 instructions, whose parameter table names
-everything that matters:
+They are drawn by `lib/moyou/back_colours0.fpo`, 538 instructions - see [The program](program.md) -
+whose parameter table names everything that matters:
 
 | Parameter | Kind | |
 |---|---|---|
@@ -26,19 +26,38 @@ everything that matters:
 | `_Alpha` | float | embedded at 0x2020 |
 
 Four textures at once, and the "1" and "2" of those names are two months, not two halves of one.
-`back_colours1.fpo` (79 instructions, `_DayTime` and `_Alpha`) and `back_colours2.fpo` (2
-instructions, `_Alpha`) are the cheap paths for when there is nothing to blend.
+`back_colours1.fpo` (79 instructions, `_DayTime` and `_Alpha`) draws the backdrop instead under the
+music and on the welcome screens, from no texture - see [The
+programs](program.md#back_colours1-the-musics) - and `back_colours2.fpo` (2 instructions, `_Alpha`)
+is one no set picks.
 
-`BACKGROUND.mnu` modulates the result with four corner colours - white at the top, 0.847 and 0.925
-grey at the bottom - a `FOVY` of 71.846 and a `COLOUR SHADER` flag.
+`BACKGROUND.mnu` holds four colours, a `FOVY` of 71.846 and a `COLOUR SHADER` flag. The colours are
+not corners: the composite after the wave multiplies the backdrop by a gradient from colour 2 at
+the bottom of the screen to colour 1 at the top, both white in the day's sets, and the wave's light
+by one from colour 3 at the left to colour 4 at the right - see [The
+composite](../wave/postprocess.md#the-composite). The day's sets' files carry seven more, which the
+base file does not: `NIGHT BLEND`, `NIGHT2DAY BEGIN` and `END` (0 and 5.17), `DAY2NIGHT BEGIN` and
+`END` (18.5 and 20.33), `DAYSPREAD` and `NIGHT WHIT BIAS` - the clocks' and the ramps' parameters,
+see [What the uniforms read](uniforms.md).
 
-**`COLOUR SHADER` picks which of the three runs, and the music player proves it.** Its
-`override/music_1/BACKGROUND.mnu` flips the flag to 1 and repaints all four corners, corner 2 to
-black and corner 4 to (0.5, 0, 0.5). A savestate taken with a track playing has `back_colours1`
-live and patched, `_Alpha` 1, and the screen is magenta fading to black - not the amber the month
-walk was on that evening. So in that screen the backdrop has no month texture in it at all; the
-colour is the corner colours. `back_colours0` keeps being fed fresh uniforms in the same
+## `COLOUR SHADER`
+
+**It picks which of the three programs runs, and the music player proves it.** Its
+`override/music_1/BACKGROUND.mnu` flips the flag to 1 and repaints all four colours: the backdrop's
+gradient runs from pink at the top (colour 1, (0.579, 0.435, 0.472)) to black at the bottom (colour
+2), and the wave's light turns magenta towards the right (colour 4, (0.5, 0, 0.5)). A savestate
+taken with a track playing has `back_colours1` live and patched, `_Alpha` 1, and the screen is
+magenta fading to black - not the amber the month walk was on that evening. So in that screen the
+backdrop has no month texture in it at all; the colour is `back_colours1`'s under the set's
+gradient. `back_colours0` keeps being fed fresh uniforms in the same
 savestate, so memory alone does not say it stopped running - the screen does.
+
+**It is a whole number, which a set puts in at once.** The files give it as `COLOUR SHADER:int:1`,
+and the scene's whole-number parameters take a set's value as the set goes in: their own blend does
+nothing (`0x1de90`). Its change reaches the backdrop as a program and a 2-second ease (`0x21a4c`,
+`0x4fdf0`), and the program decides how `_DayTime` is worked out (`0x52ad8`) - see
+[`_Alpha`](uniforms.md#_alpha). The capture of 00:28:55 on 24 September, 15% of the way into the
+music's crossfade, already draws with `back_colours1`, 0.574 seconds into its ease.
 
 ## The textures are drawn upside down
 
