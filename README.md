@@ -31,7 +31,7 @@ While this is inspired by the official PlayStation 3 XMB background wave design,
 
 - Day/night gradients are now integrated as actual presets, but they're not perfect like in the .dds files, so this issue is partially solved.
 - Sparkles run the console's own update task now, and a headless bench (`tools/bench/particles.js`) compares their pool with one read out of a savestate. What is left is the PPU side that feeds it - the emitter and the flow field are still modelled - and they drift about twice as fast as the console's late in life.
-- The wave's geometry is the console's own now, checked piece by piece against savestates. What is left is its look - some thirty post-processing passes run after it on the console and are not traced yet, so a single exposure stands in for them - and the pace of its lines, which run a little slower and lower than the console's.
+- The wave's geometry is the console's own now, checked piece by piece against savestates. What is left is its look - some thirty post-processing passes run after it on the console and are not traced yet, so a single exposure stands in for them - and the very first minutes after a start: the console starts its lines from a state baked into its firmware, so the page makes one the same way, which keeps the console's pace but not its exact course.
 
 ## Local Development
 
@@ -86,7 +86,7 @@ npm run start
 
 ### Reverse-engineered wave status
 - **What is implemented**: the lines' simulation, the deformation lattice, the free-form deformation, the camera and the B-spline surface, with the line programs' shading, and the firmware's `LINE1.mnu` sets - see [WAVE_REVERSE_ENGINEER.md](WAVE_REVERSE_ENGINEER.md).
-- **What is still missing**: the post-processing passes that follow the wave, and why its lines run slower than the console's.
+- **What is still missing**: the post-processing passes that follow the wave.
 
 ## Contributing
 
@@ -112,7 +112,7 @@ This project is open source and available under the [MIT License](LICENSE).
 
 ## TODO
 
-- Trace the post-processing passes that follow the wave, and find why the wave's lines run slower than the console's.
+- Trace the post-processing passes that follow the wave.
 - Find what makes the sparkles drift twice as fast as the console's late in life; the notes list six causes already ruled out.
 - Keep tuning wave calmness and flow cadence to better match real hardware captures. I realise the waves have sharp edges, when the real thing is like a water wave (just realised it!)
 - Validate month day/night gradients against more references and tighten remaining color/angle drift.

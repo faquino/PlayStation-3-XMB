@@ -40,16 +40,25 @@
   const RESTART = 0xffff;
 
   // -----------------------------------------------------------------------------------------------------------------
-  // Modelled: the lines' start. The console resets them to a state baked into its module, which is firmware data and
-  // stays out of the repository. This one is made the same way the console's must have been, by running the lines:
-  // from a sheet at rest, settled under heavy damping, then left to run with the day cycle's values.
+  // Modelled: the lines' start. The console resets them to a state baked into its module (0x97c18), which is firmware
+  // data and stays out of the repository. That state is these lines, run: its anchored ends are where `step` puts
+  // them at a smoothed clock of 4.37234, and the time the reset hands over with it (0x4e624), 98.62, is that many
+  // seconds of steps at a TIMESTEP of 7.4 (inferred). This one is made the same way - a sheet at rest, settled under
+  // heavy damping, then run under LINE1.mnu's base values at that TIMESTEP until its smoothed clock is the console's -
+  // and finished as the console's is: its first and last lines averaged into one, and its mean place and velocity,
+  // over the 361 points, the console's.
   // -----------------------------------------------------------------------------------------------------------------
   const START = {
-    damping: 0.0001, length: 0.306001, tension: 0.25, timestep: 2, perturbation: 0.1, endY: 0.4, endZ: 0.2,
+    damping: 0.0001, length: 0.306001, tension: 0.25, timestep: 7.4, perturbation: 0.0998587, endY: 0.4, endZ: 0.2,
   };
   const START_SETTLE_STEPS = 600;
   const START_SETTLE_DAMPING = 100; // times DAMPING
-  const START_RUN_STEPS = 1200;
+  // Where the run's noise starts: of two dozen starts made this way, the one whose lines, run from the reset, come
+  // closest to the savestates'.
+  const START_NOISE = 2000006;
+  const START_CLOCK = 4.37234;
+  const START_MEAN_PLACE = [2.5976, 0.1683, 0.0947];
+  const START_MEAN_VELOCITY = [-0.512, -0.1, 0.198];
 
   // The noise: the integer hash of a counter each point moves on by 3 (0x4ab04), in (-1, 1].
   function noise(n) {
@@ -346,7 +355,9 @@
     const mesh = new Float32Array(VERTICES * RECORD);
     const state = { latticeTime: 0, steps: 0, frames: 0 };
 
-    // The start, made once: a sheet at rest, each line straight out from its anchor, settled and then run.
+    // The start, made once: a sheet at rest, each line straight out from its anchor, settled, then run from a clock of
+    // 0 until its smoothed clock is the console's; its first and last lines averaged, then every point but the anchors
+    // moved alike so that the mean place and velocity are the console's.
     (function makeStart() {
       for (let r = 0; r < N; r++) {
         const t = r / N;
@@ -358,8 +369,27 @@
         }
       }
       const settle = Object.assign({}, START, { damping: START.damping * START_SETTLE_DAMPING });
+      start.counter = START_NOISE;
       for (let n = 0; n < START_SETTLE_STEPS; n++) step(start, settle);
-      for (let n = 0; n < START_RUN_STEPS; n++) step(start, START);
+      start.clock = start.smoothed = 0;
+      while (start.smoothed < START_CLOCK) step(start, START);
+      const last = 4 * N * (N - 1);
+      for (let i = 0; i < 4 * N; i++) {
+        start.p[i] = start.p[last + i] = (start.p[i] + start.p[last + i]) / 2;
+        start.v[i] = start.v[last + i] = (start.v[i] + start.v[last + i]) / 2;
+      }
+      for (let k = 0; k < 3; k++) {
+        let p = 0, v = 0;
+        for (let i = 0; i < COUNT; i++) { p += start.p[4 * i + k]; v += start.v[4 * i + k]; }
+        const dp = (START_MEAN_PLACE[k] * COUNT - p) / (COUNT - N);
+        const dv = (START_MEAN_VELOCITY[k] * COUNT - v) / (COUNT - N);
+        for (let r = 0; r < N; r++) {
+          for (let c = 0; c < N - 1; c++) {
+            start.p[4 * (N * r + c) + k] += dp;
+            start.v[4 * (N * r + c) + k] += dv;
+          }
+        }
+      }
     })();
 
     // The reset (0x4e624): the points and velocities from the start, the clocks, the accumulator and the noise to 0.

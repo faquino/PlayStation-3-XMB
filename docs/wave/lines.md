@@ -35,7 +35,22 @@ of the points; the clock, the smoothed clock, the accumulator and the noise's co
 scene only ever asks for the second state (`0x50da8`): 361 points at `0x97c18`, then 361
 velocities at `0x98d04`, three floats each. The other two, at `0x95a40` and `0x99df0`, go unused.
 Before zeroing the clock, `0x4e624` hands `0x47af0` a time that goes with the state, 98.62 for the
-second (not followed).
+second, which it keeps in the object at +0x00 (+0xb4) and nothing below reads.
+
+**The second state is these lines, run.** The ends of lines 1 to 17 are where [the
+ends](#a-step) put them at a smoothed clock of 4.37234, to 1e-5. Lines 0 and 18 are one line, their
+points and velocities alike, whose end is halfway between where the ends put each of them: the
+first and the last line averaged. If its time is the run's length in seconds at 60 steps a
+second, the run went at a `TIMESTEP` of 7.40 (inferred), which would also account for its lines
+being stretched more than the base set stretches them - the ends' pull grows with `TIMESTEP`. Its
+lines reach 5.37 from their anchors, spread 0.19 in y and 0.28 in z across a column, and move at a
+median speed of 4. The other two states are of other layouts: the first's ends sit at x = -2.5,
+the third's at y = 0 with z up to 2.5.
+
+**What follows the reset comes from its shape.** From the state's points with no velocity at all,
+the lines draw in and speed up as the savestates show - their reach falls from 5.37 to 4.6 by step
+2193 and their median speed climbs to 5.3, past the day cycle's own level of about 5 - while from a
+snapshot of the base set's run with the state's velocities they do neither.
 
 The renderer resets its lines when it is set up (`0x576e4`) and from `0x56fe0`, which the scene
 reaches through `0x1b05c` from the cold boot's `BootBG1` and `BootBG2` handlers (`0xfa38`,
@@ -89,7 +104,11 @@ off, reversing its lanes, or leaving out either kind of spring all fit worse in 
 ## From the start
 
 Running the steps from the reset to a savestate's count gets the lines' shape but not their detail:
-the points end 0.005 apart on average after 1235 steps and 0.02 after 2193. Part of the reason is
+the points end 0.005 apart on average after 1235 steps and 0.02 after 2193. Their statistics hold
+for longer: run through the page's sets, the lines' reach, mean height, spread and median speed
+land within a few hundredths of every savestate's to step 2193, and the wave built from them on
+every source's band, to the hundredth, up to a lattice time of 6 - see [Against the
+console](implementation.md#against-the-console). Part of the reason the points drift apart is
 the cold boot, which moves `PERTURBATION` while they run. **Verified** in the boot's captures:
 `coldboot1` goes in at once as `BootBG2` resets the lines, its `PERTURBATION` 0, then blend mode 1
 takes it 1% of the way to `coldboot2`'s 0.0998587 each frame, until the day cycle's set comes in

@@ -152,6 +152,12 @@ every vertex. `tools/bench/wave-frames.py` extracts the wave from both kinds of 
 `re-work/wave-frames/`, naming each capture's set, for `tools/bench/wave.js` - see
 [What the console draws](../../docs/wave/output.md).
 
+**The lines' own start is in the module.** The reset copies 361 points from `0x97c18` and 361
+velocities from `0x98d04`, three big-endian floats each, line by line - see [The
+start](../../docs/wave/lines.md#the-start). `ppu_prx.py`'s `Prx(...).f32` reads them out of the
+decrypted `custom_render_plugin.prx`; written as a JSON of `positions` and `velocities` into
+`re-work/`, they are what `tools/bench/wave.js --start` takes.
+
 **`ffd_shader1`'s live `_Time` dates a source.** Ten times the lines' clock a step back, it says how
 many steps they have run since the cold boot reset them - see [The
 time](../../docs/wave/ffd.md#the-time) - and `wave-frames.py` records it. A savestate holds one copy

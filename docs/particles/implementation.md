@@ -141,32 +141,31 @@ pool's column is the resting savestate's, the drawn column the two frame capture
 
 | The pool | Simulation | Console |
 |---|---|---|
-| Alive | 2007 to 2031 of 2049 | 2033 of 2049 |
-| Aging rate, min / median / max | 0.001446 / 0.002440 / 0.004257 | 0.001447 / 0.002435 / 0.004256 |
-| Just born, view depth | 7.75 / 8.97 / 10.49 | 7.57 / 8.55 / 9.07 |
-| Just born, velocity z | -0.0049 / -0.0004 / 0.0065 | -0.0112 / 0.0001 / 0.0078 |
-| Just born, speed in xy | 0.085 / 0.223 / 0.336 | 0.156 / 0.276 / 0.348 |
-| Late in life, view depth | 7.56 / 9.03 / 10.28 | 7.41 / 8.40 / 9.32 |
-| Late in life, velocity z | -0.2169 / -0.0067 / 0.1856 | -0.2501 / -0.0014 / 0.2337 |
-| Late in life, speed in xy | 0.071 / 0.246 / 0.456 | 0.081 / 0.262 / 0.517 |
+| Alive | 2012 to 2032 of 2049 | 2033 of 2049 |
+| Aging rate, min / median / max | 0.001446 / 0.002442 / 0.004257 | 0.001447 / 0.002435 / 0.004256 |
+| Just born, view depth | 7.20 / 8.18 / 9.23 | 7.57 / 8.55 / 9.07 |
+| Just born, velocity z | -0.0058 / -0.0004 / 0.0047 | -0.0112 / 0.0001 / 0.0078 |
+| Just born, speed in xy | 0.077 / 0.216 / 0.329 | 0.156 / 0.276 / 0.348 |
+| Late in life, view depth | 7.15 / 8.28 / 9.53 | 7.41 / 8.40 / 9.32 |
+| Late in life, velocity z | -0.2351 / -0.0109 / 0.2365 | -0.2501 / -0.0014 / 0.2337 |
+| Late in life, speed in xy | 0.064 / 0.254 / 0.493 | 0.081 / 0.262 / 0.517 |
 
 | What is drawn | Simulation | Capture 1 | Capture 2 |
 |---|---|---|---|
-| On screen | 1458 to 1522 | 1437 | 1417 |
-| Opacity exactly 1 | 91.8 to 93.2% | 92% | 92% |
-| View depth, median | 9.14 to 9.18 | 8.92 | 8.49 |
-| Distance outside the wave band, 90th percentile (NDC) | 0.010 to 0.026 | 0.096 | 0.114 |
-| Same, 99th percentile | 0.257 to 0.284 | 0.38 | 0.39 |
+| On screen | 1337 to 1353 | 1437 | 1417 |
+| Opacity exactly 1 | 91.9 to 93.2% | 92% | 92% |
+| View depth, median | 8.32 to 8.35 | 8.92 | 8.49 |
+| Distance outside the wave band, 90th percentile (NDC) | 0.126 to 0.157 | 0.096 | 0.114 |
+| Same, 99th percentile | 0.347 to 0.397 | 0.38 | 0.39 |
 
 Known differences:
 
-- **The particles are born deeper and wider in depth,** 7.75 to 10.49 against 7.57 to 9.07,
-  because the wave they are born on runs deeper than the savestate's at the far side - see the
-  wave's [known differences](../wave/implementation.md#against-the-console).
-- **The newborns are slow,** 0.223 against 0.276 at the median, because the wave moves at about
-  85% of the console's speed and the emitter's speeds follow it.
-- **They keep closer to the wave's band on screen** than the captured particles do. The band is
-  measured on the last frame's mesh, the captures' on their own.
+- **The newborns are slow,** 0.216 against 0.276 at the median, and the wave is not why: the
+  one they are born on here moves at 0.0035 a frame in space, faster than the console's at rest,
+  0.0032 - see the wave's [bench](../wave/implementation.md#against-the-console) (not followed).
+- **Fewer are drawn,** 1337 to 1353 against 1437 and 1417, and a little nearer: the bench's wave is
+  its first 30 seconds from the start, when its lines draw in - see [What it
+  models](../wave/implementation.md#what-it-models).
 
 **The noise's drift was the emitter's count.** For as long as the emitter was modelled, the
 particles moved too fast late in life - 0.369 in xy against 0.262 - and spread twice as far in

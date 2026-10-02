@@ -31,8 +31,11 @@ may already be ruled out.
   see [The mesh](output.md#the-mesh).
 - **The day cycle's mix of sets behind the bench's gap.** Run under one set, the page's wave sat a
   tenth lower and 0.4 deeper than the console's, which mixes four. Run under each source's own
-  sets, from the reset, to its lattice time, it still does - see [Against the
+    sets, from the reset, to its lattice time, it still does - see [Against the
   console](implementation.md#against-the-console).
+- **The lines' steps behind their slower pace.** From the console's own start the steps give
+  every savestate's speed and every capture's band; the pace was the start's, made then under the
+  day cycle's values - see [The start](lines.md#the-start).
 
 ## The spline layer, before the port
 

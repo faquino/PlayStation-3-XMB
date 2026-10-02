@@ -39,7 +39,7 @@ What `ps3xmbwave/` ports as verified and what it models, file by file;
 
 | File | Verified | Modelled |
 |---|---|---|
-| `wave-reverse.js` | The lines, from their 60 Hz steps to the grid the task receives; the lattice; the deformation, the matrix and the B-spline surface, into the 128 × 128 mesh `spline.elf` writes; its texture coordinates and index buffer. Each checked against the savestates. | The lines' start, made by running them; at most four steps a frame; the deformation divides exactly. |
+| `wave-reverse.js` | The lines, from their 60 Hz steps to the grid the task receives; the lattice; the deformation, the matrix and the B-spline surface, into the 128 × 128 mesh `spline.elf` writes; its texture coordinates and index buffer. Each checked against the savestates. | The lines' start, made as the console's was - run at a `TIMESTEP` of 7.4 up to its clock, the first and last lines averaged - with the console's mean place and velocity; at most four steps a frame; the deformation divides exactly. |
 | `spline.js` | `lines1.vpo` and `lines1.fpo`, re-authored, and the additive blend. The lines start afresh as the XMB's start begins. | `_Stripes` and `_FresLUT`, fitted; `_Encode` and the passes after the wave, as one gain, `exposure`. |
 | `spline-settings.js` | `LINE1.mnu`'s parameters under their own names, with the base set's values. | `exposure`. |
 | `scene-themes.js` | Every set's `LINE1.mnu`, as its differences from the base, put in as the particles' sets are: the day cycle, the boot sequences, the music. The cold boot's ramp, checked against the captures. | The blends' windows on the page's seconds. |
@@ -54,10 +54,11 @@ wave on screen:
   `HDR.mnu` probably drives them (inferred). Also where `_Stripes` and `_Encode` are made, where
   `FALLOFF` goes, since no uniform of the two programs is named for it, and `_Gamma`, which the
   scene sends the wave's renderer too (`0x70bf8`).
-- **The lines' start and pace.** Run from the reset under the console's sets, the page's lines
-  stay slower, lower and longer than the console's, and its wave sits lower and deeper - see
-  [Against the console](docs/wave/implementation.md#against-the-console). The start it makes is
-  wider than the console's baked one; whether the pace comes from the start alone is open.
+- **The lines' start.** The console's, baked into its module, is firmware data, and from it the
+  page draws the console's wave frame by frame - see [Against the
+  console](docs/wave/implementation.md#against-the-console). The start the page makes has its
+  energy and stretch, and the wave's pace and depth at rest match; for the first minutes after
+  the reset its band is about a tenth thinner, and at first nearer.
 - **The blends' clock.** Under RPCS3 the sets' blends ran 2.4 to 2.7 times ahead of the lines'
   steps, where the code moves both by the frame's time - see [How one set blends into
   another](docs/particles/day-cycle.md#how-one-set-blends-into-another). `HDR.mnu`'s and

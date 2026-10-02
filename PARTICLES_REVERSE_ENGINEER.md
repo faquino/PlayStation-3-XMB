@@ -60,6 +60,9 @@ Also missing:
   animation, are traced.
 - How the wave's renderer uses the fade `_Color` is sent with (`0x4fe2c`), so the wave can
   fade too - see [The particles' fade](docs/particles/scene-events.md#the-particles-fade).
+- Why the newborns are slower than the pool's, 0.216 against 0.276, where the wave they are born
+  on moves as fast as the console's - see [Against the
+  console](docs/particles/implementation.md#against-the-console).
 - `proc_iridescent` exactly. It is a file of the firmware's resources, not generated at run time, so
   the implementation stands in for it with [the
   fit](docs/particles/shaders.md#the-iridescent-texture).

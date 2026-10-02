@@ -17,7 +17,11 @@
 //   music    a track playing, under music_1, pooled;
 //   boot     the XMB's start, capture by capture, at the lattice time each was taken at.
 //
-// Usage: node tools/bench/wave.js [--seconds 10] [--every 2] [--console re-work/wave-frames]
+// Usage: node tools/bench/wave.js [--seconds 10] [--every 2] [--console re-work/wave-frames] [--start <file>]
+//
+// --start runs the lines from a start of one's own in place of the one wave-reverse.js makes: a JSON file of 361
+// `positions` and 361 `velocities`, line by line, as [x, y, z]. The console's own, read out of its module, is firmware
+// data and stays in re-work/.
 //
 // --console measures the console's column again from the frames tools/bench/wave-frames.py extracts, and prints it,
 // with the sources, as the CONSOLE and SOURCES literals below, to paste in when captures or savestates are added.
@@ -43,47 +47,47 @@ const MUSIC_SAVESTATES = ['vsh.self_1_8'];
 // The console's sources, as --console last read them: the group, when each was taken, the lattice's time, the frames,
 // and for a capture the wave's FRESNEL, which says how far its set had got.
 const SOURCES = {
-  1_0: { group: 'resting', taken: '2026-09-22 22:55:49', time: 4.38406, frames: 2 },
-  1_1: { group: 'resting', taken: '2026-09-22 23:03:24', time: 10.37147, frames: 2 },
-  1_2: { group: 'resting', taken: '2026-09-23 07:52:52', time: 2.81804, frames: 2 },
-  1_3: { group: 'resting', taken: '2026-09-23 08:07:17', time: 2.46803, frames: 2 },
-  1_4: { group: 'resting', taken: '2026-09-23 16:54:36', time: 2.78204, frames: 2 },
-  1_5: { group: 'resting', taken: '2026-09-23 20:02:19', time: 8.76158, frames: 2 },
-  1_6: { group: 'resting', taken: '2026-09-23 20:11:15', time: 9.06954, frames: 2 },
-  1_7: { group: 'resting', taken: '2026-09-23 21:08:08', time: 3.70805, frames: 2 },
-  1_8: { group: 'music', taken: '2026-09-23 23:34:34', time: 21.22248, frames: 2 },
-  20260921201850: { group: 'resting', taken: '2026-09-21 20:18:50', time: 6.05793, frames: 1, fresnel: 0.505803 },
-  20260921201948: { group: 'resting', taken: '2026-09-21 20:19:48', time: 11.53567, frames: 1, fresnel: 0.505904 },
-  20260924001818: { group: 'music', taken: '2026-09-24 00:18:18', time: 4.27568, frames: 1, fresnel: 0.638971 },
-  20260924001832: { group: 'music', taken: '2026-09-24 00:18:32', time: 5.91297, frames: 1, fresnel: 0.638971 },
-  20260924001850: { group: 'music', taken: '2026-09-24 00:18:50', time: 8.67032, frames: 1, fresnel: 0.638971 },
-  20260924001905: { group: 'music', taken: '2026-09-24 00:19:05', time: 10.75775, frames: 1, fresnel: 0.638971 },
-  20260924002910: { group: 'music', taken: '2026-09-24 00:29:10', time: 4.30008, frames: 1, fresnel: 0.638971 },
-  20260924182100: { group: 'boot', taken: '2026-09-24 18:21:00', time: 0.146, frames: 1, fresnel: 1.37622 },
-  20260924182107: { group: 'boot', taken: '2026-09-24 18:21:07', time: 0.41, frames: 1, fresnel: 0.853133 },
-  20260924182252: { group: 'boot', taken: '2026-09-24 18:22:52', time: 0.81, frames: 1, fresnel: 0.511238 },
-  20260924182304: { group: 'resting', taken: '2026-09-24 18:23:04', time: 1.42601, frames: 1, fresnel: 0.501002 },
-  20260924182318: { group: 'resting', taken: '2026-09-24 18:23:18', time: 2.44203, frames: 1, fresnel: 0.501002 },
-  20260924190049: { group: 'resting', taken: '2026-09-24 19:00:49', time: 15.71036, frames: 1, fresnel: 0.501003 },
-  20260924193437: { group: 'boot', taken: '2026-09-24 19:34:37', time: 0.138, frames: 1, fresnel: 1.354323 },
-  20260924193445: { group: 'boot', taken: '2026-09-24 19:34:45', time: 0.468, frames: 1, fresnel: 0.788116 },
-  20260924193454: { group: 'boot', taken: '2026-09-24 19:34:54', time: 0.902, frames: 1, fresnel: 0.502235 },
-  20260924220036: { group: 'resting', taken: '2026-09-24 22:00:36', time: 5.10806, frames: 1, fresnel: 0.517082 },
-  20260924223648: { group: 'resting', taken: '2026-09-24 22:36:48', time: 2.39603, frames: 1, fresnel: 0.5195 },
-  20260924223701: { group: 'resting', taken: '2026-09-24 22:37:01', time: 3.10004, frames: 1, fresnel: 0.519509 },
-  20260924223714: { group: 'resting', taken: '2026-09-24 22:37:14', time: 4.11606, frames: 1, fresnel: 0.519519 },
-  20260924223735: { group: 'resting', taken: '2026-09-24 22:37:35', time: 5.02607, frames: 1, fresnel: 0.519533 },
+  '1_0': { group: 'resting', taken: '2026-09-22 22:55:49', time: 4.38406, frames: 2 },
+  '1_1': { group: 'resting', taken: '2026-09-22 23:03:24', time: 10.37147, frames: 2 },
+  '1_2': { group: 'resting', taken: '2026-09-23 07:52:52', time: 2.81804, frames: 2 },
+  '1_3': { group: 'resting', taken: '2026-09-23 08:07:17', time: 2.46803, frames: 2 },
+  '1_4': { group: 'resting', taken: '2026-09-23 16:54:36', time: 2.78204, frames: 2 },
+  '1_5': { group: 'resting', taken: '2026-09-23 20:02:19', time: 8.76158, frames: 2 },
+  '1_6': { group: 'resting', taken: '2026-09-23 20:11:15', time: 9.06954, frames: 2 },
+  '1_7': { group: 'resting', taken: '2026-09-23 21:08:08', time: 3.70805, frames: 2 },
+  '1_8': { group: 'music', taken: '2026-09-23 23:34:34', time: 21.22248, frames: 2 },
+  '20260921201850': { group: 'resting', taken: '2026-09-21 20:18:50', time: 6.05793, frames: 1, fresnel: 0.505803 },
+  '20260921201948': { group: 'resting', taken: '2026-09-21 20:19:48', time: 11.53567, frames: 1, fresnel: 0.505904 },
+  '20260924001818': { group: 'music', taken: '2026-09-24 00:18:18', time: 4.27568, frames: 1, fresnel: 0.638971 },
+  '20260924001832': { group: 'music', taken: '2026-09-24 00:18:32', time: 5.91297, frames: 1, fresnel: 0.638971 },
+  '20260924001850': { group: 'music', taken: '2026-09-24 00:18:50', time: 8.67032, frames: 1, fresnel: 0.638971 },
+  '20260924001905': { group: 'music', taken: '2026-09-24 00:19:05', time: 10.75775, frames: 1, fresnel: 0.638971 },
+  '20260924002910': { group: 'music', taken: '2026-09-24 00:29:10', time: 4.30008, frames: 1, fresnel: 0.638971 },
+  '20260924182100': { group: 'boot', taken: '2026-09-24 18:21:00', time: 0.146, frames: 1, fresnel: 1.37622 },
+  '20260924182107': { group: 'boot', taken: '2026-09-24 18:21:07', time: 0.41, frames: 1, fresnel: 0.853133 },
+  '20260924182252': { group: 'boot', taken: '2026-09-24 18:22:52', time: 0.81, frames: 1, fresnel: 0.511238 },
+  '20260924182304': { group: 'resting', taken: '2026-09-24 18:23:04', time: 1.42601, frames: 1, fresnel: 0.501002 },
+  '20260924182318': { group: 'resting', taken: '2026-09-24 18:23:18', time: 2.44203, frames: 1, fresnel: 0.501002 },
+  '20260924190049': { group: 'resting', taken: '2026-09-24 19:00:49', time: 15.71036, frames: 1, fresnel: 0.501003 },
+  '20260924193437': { group: 'boot', taken: '2026-09-24 19:34:37', time: 0.138, frames: 1, fresnel: 1.354323 },
+  '20260924193445': { group: 'boot', taken: '2026-09-24 19:34:45', time: 0.468, frames: 1, fresnel: 0.788116 },
+  '20260924193454': { group: 'boot', taken: '2026-09-24 19:34:54', time: 0.902, frames: 1, fresnel: 0.502235 },
+  '20260924220036': { group: 'resting', taken: '2026-09-24 22:00:36', time: 5.10806, frames: 1, fresnel: 0.517082 },
+  '20260924223648': { group: 'resting', taken: '2026-09-24 22:36:48', time: 2.39603, frames: 1, fresnel: 0.5195 },
+  '20260924223701': { group: 'resting', taken: '2026-09-24 22:37:01', time: 3.10004, frames: 1, fresnel: 0.519509 },
+  '20260924223714': { group: 'resting', taken: '2026-09-24 22:37:14', time: 4.11606, frames: 1, fresnel: 0.519519 },
+  '20260924223735': { group: 'resting', taken: '2026-09-24 22:37:35', time: 5.02607, frames: 1, fresnel: 0.519533 },
 };
 
 // The console's column, as --console last measured it.
 const CONSOLE = {
   boot: {
-    20260924182100: '0.64 / -0.103 / 0.456 / -0.306 / 9.25',
-    20260924182107: '0.60 / -0.022 / 0.358 / -0.205 / 9.11',
-    20260924182252: '0.60 / -0.012 / 0.363 / 0.139 / 9.05',
-    20260924193437: '0.63 / -0.105 / 0.459 / -0.308 / 9.24',
-    20260924193445: '0.60 / -0.012 / 0.337 / -0.159 / 9.11',
-    20260924193454: '0.60 / -0.019 / 0.387 / 0.189 / 9.02'
+    '20260924182100': '0.64 / -0.103 / 0.456 / -0.306 / 9.25',
+    '20260924182107': '0.60 / -0.022 / 0.358 / -0.205 / 9.11',
+    '20260924182252': '0.60 / -0.012 / 0.363 / 0.139 / 9.05',
+    '20260924193437': '0.63 / -0.105 / 0.459 / -0.308 / 9.24',
+    '20260924193445': '0.60 / -0.012 / 0.337 / -0.159 / 9.11',
+    '20260924193454': '0.60 / -0.019 / 0.387 / 0.189 / 9.02'
   },
   resting: {
     onScreen: '0.56 to 0.61',
@@ -302,6 +306,15 @@ function readConsole(dir, cam, deltaTime) {
   return { column, sources };
 }
 
+// A start of the lines from --start's file.
+function readStart(file) {
+  const json = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const p = new Float32Array(361 * 4), v = new Float32Array(361 * 4);
+  json.positions.forEach((q, i) => p.set([q[0], q[1], q[2], 1], 4 * i));
+  json.velocities.forEach((q, i) => v.set([q[0], q[1], q[2], 0], 4 * i));
+  return { p, v };
+}
+
 function parseTaken(taken) {
   const m = /^(\d+)-(\d+)-(\d+) (\d+):(\d+):(\d+)$/.exec(taken);
   return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
@@ -311,11 +324,16 @@ function parseTaken(taken) {
 // source's time when the source was taken, and the music put on once the start is over for a source taken with a
 // track playing. Measured when the lattice reaches the source's time and every `every` seconds for `seconds` more;
 // a frame of the boot only then.
-function runSource(src, seconds, every, cam, wave, sceneThemes, defaults) {
+function runSource(src, seconds, every, cam, wave, sceneThemes, defaults, lineStart) {
   (0, eval)(sceneThemes); // a scene of its own, from the start
   const S = Object.assign({}, defaults);
   const scene = { theme: 'auto', sequence: 'coldboot', musicPlayback: 'stopped', themeColor: '0' };
   wave.reset(); // as the XMB's start does
+  if (lineStart) {
+    wave.lines.p.set(lineStart.p);
+    wave.lines.prev.set(lineStart.p);
+    wave.lines.v.set(lineStart.v);
+  }
   const prev = new Float32Array(wave.mesh.length);
   const start = parseTaken(src.taken).getTime() - (src.time / T_PER_SECOND) * 1000;
   const frames = [], steps = [];
@@ -350,6 +368,7 @@ function main() {
   const seconds = Number(opt('seconds', 10));
   const every = Number(opt('every', 2));
   const consoleDir = opt('console', null);
+  const startFile = opt('start', null);
 
   loadModules();
   const RE = window.PS3ParticlesReverse;
@@ -359,6 +378,7 @@ function main() {
   const defaults = Object.assign({}, window.SPLINE_SETTINGS);
   const sceneThemes = fs.readFileSync(path.join(DIR, 'scene-themes.js'), 'utf8');
   const wave = window.PS3WaveReverse.createWave();
+  const lineStart = startFile ? readStart(startFile) : null;
 
   let reference = CONSOLE;
   let sources = SOURCES;
@@ -366,7 +386,7 @@ function main() {
     const c = readConsole(consoleDir, cam, deltaTime);
     reference = c.column;
     sources = c.sources;
-    const key = (k) => (/^\w+$/.test(k) ? k : '\'' + k + '\'');
+    const key = (k) => (/^[A-Za-z_$][\w$]*$/.test(k) ? k : '\'' + k + '\'');
     const literal = (v) => JSON.stringify(v, null, 2).replace(/"([\w.]+)":/g, (m, k) => key(k) + ':')
       .replace(/"/g, '\'');
     const inline = (v) => '{ ' + Object.entries(v).map(([k, x]) => k + ': ' + JSON.stringify(x).replace(/"/g, '\''))
@@ -381,7 +401,7 @@ function main() {
   const pooled = { resting: { frames: [], steps: [] }, music: { frames: [], steps: [] } };
   const boot = [];
   for (const [name, src] of Object.entries(sources)) {
-    const run = runSource(src, seconds, every, cam, wave, sceneThemes, defaults);
+    const run = runSource(src, seconds, every, cam, wave, sceneThemes, defaults, lineStart);
     if (src.group === 'boot') {
       boot.push({ name, src, run });
       continue;
@@ -429,4 +449,7 @@ function main() {
   }
 }
 
-main();
+
+// Run as a script, it benches; required, it hands over its pieces, for one-off checks.
+if (require.main === module) main();
+else module.exports = { loadModules, meshFrame, shape, measure, snapshot, runSource, readStart, SOURCES, CONSOLE };
