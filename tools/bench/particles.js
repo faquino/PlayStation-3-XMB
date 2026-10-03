@@ -4,8 +4,9 @@
 // LINE1.mnu (scene-themes.js) as the resting savestate was, and prints what its pool and its drawn particles look
 // like, beside the same measurements read off the console.
 //
-// The console's column is not a target to hit exactly - the pool is one moment of one savestate and the captures are
-// two frames - but a change to the simulation should move it towards them and must not move the drawn metrics away.
+// The console's column is not a target to hit exactly - the pool is one moment of one savestate, its newborns those of
+// six, and the captures are two frames - but a change to the simulation should move it towards them and must not move
+// the drawn metrics away.
 // PARTICLES_REVERSE_ENGINEER.md records where each reference number comes from.
 //
 // Usage: node tools/bench/particles.js [--seconds 30] [--runs 3] [--seed 1] [--terms]
@@ -32,7 +33,9 @@ const BINS = 50;
 const CONSOLE = {
   alive: '2033 of 2049',
   aging: '0.001447 / 0.002435 / 0.004256',
-  young: { depth: '7.57 / 8.55 / 9.07', vz: '-0.0112 / +0.0001 / +0.0078', vxy: '0.156 / 0.276 / 0.348' },
+  // The newborns of the six savestates taken at rest, 1_0, 1_1 and 1_4 to 1_7, as pool-from-savestate.py pools them:
+  // one holds some fifty, born on a few frames of one moment's wave, too few to stand for the rest.
+  young: { n: 312, depth: '7.08 / 8.42 / 9.86', vz: '-0.0064 / -0.0001 / +0.0067', vxy: '0.098 / 0.224 / 0.348' },
   old: { depth: '7.41 / 8.40 / 9.32', vz: '-0.2501 / -0.0014 / +0.2337', vxy: '0.081 / 0.262 / 0.517' },
   noiseCorr: '+0.128 / +0.111 / +0.193 (ctl +0.043)',
   onScreen: '1437, 1417',
@@ -88,19 +91,40 @@ function three(values, digits) {
   return [0.05, 0.5, 0.95].map((f) => quantile(values, f).toFixed(digits)).join(' / ');
 }
 
+// A pool holds few particles under 3% of their life at any one moment, so the newborns are gathered from a look at
+// the pool every YOUNG_EVERY frames once the first YOUNG_AFTER seconds are past.
+const YOUNG_EVERY = 15;
+const YOUNG_AFTER = 5;
+
+function youngRecords(sys, out) {
+  const { pool, stride, free, capacity } = sys;
+  for (let i = 0; i < capacity; i++) {
+    const o = i * stride;
+    const life = pool[o + 3];
+    if (life === free || life >= 0.03) continue;
+    out.push({
+      depth: window.PS3ParticlesReverse.CAMERA.eye[2] - pool[o + 2],
+      vz: pool[o + 6],
+      vxy: Math.hypot(pool[o + 4], pool[o + 5]),
+    });
+  }
+}
+
 function simulate(seconds, seed) {
   const S = Object.assign({}, window.SPLINE_SETTINGS, window.WAVE_THEMES.night);
   const PS = window.PARTICLE_SETTINGS;
   const wave = window.PS3WaveReverse.createWave();
   const surface = { settings: S, wave, mesh: wave.mesh, aspect: ASPECT };
   const sys = window.PS3ParticlesReverse.createSystem({ capacity: 2049, seed });
+  const young = [];
   let t = 0;
   for (let frame = 0; frame < seconds * STEP_HZ; frame++) {
     t += 1 / STEP_HZ;
     wave.update(S, 1 / STEP_HZ, ASPECT);
     sys.update(PS, surface, null, t, 1 / STEP_HZ, ASPECT);
+    if (t > YOUNG_AFTER && frame % YOUNG_EVERY === 0) youngRecords(sys, young);
   }
-  return { sys, mesh: wave.mesh, t };
+  return { sys, mesh: wave.mesh, t, young };
 }
 
 // The pool in the task's own record layout, split by how much life each particle has spent.
@@ -218,11 +242,13 @@ function main() {
   const started = Date.now();
   const pools = [];
   const drawn = [];
+  const young = [];
   let last = null;
   for (let r = 0; r < runs; r++) {
     const run = simulate(seconds, Number.isNaN(seed) ? undefined : seed + r);
     pools.push(poolMetrics(run.sys));
     drawn.push(drawnMetrics(run));
+    young.push(...run.young);
     last = pools[pools.length - 1];
   }
   console.log(runs + ' run(s) of ' + seconds + 's over night\'s wave, ' + ((Date.now() - started) / 1000).toFixed(1)
@@ -233,10 +259,11 @@ function main() {
   row('', 'simulation', 'console');
   row('Alive', collect(pools.map((p) => p.alive), 0) + ' of 2049', CONSOLE.alive);
   row('Aging rate, min / median / max', pools[0].aging.map((v) => v.toFixed(6)).join(' / '), CONSOLE.aging);
-  console.log('  -- just born, life under 0.03 (' + collect(pools.map((p) => p.young.n), 0) + ' particles)');
-  row('View depth', last.young.depth, CONSOLE.young.depth);
-  row('Velocity z', last.young.vz, CONSOLE.young.vz);
-  row('Velocity in xy', last.young.vxy, CONSOLE.young.vxy);
+  console.log('  -- just born, life under 0.03 (' + young.length + ' looks at them over the runs; the console\'s '
+    + CONSOLE.young.n + ' over six savestates at rest)');
+  row('View depth', three(young.map((r) => r.depth), 2), CONSOLE.young.depth);
+  row('Velocity z', three(young.map((r) => r.vz), 4), CONSOLE.young.vz);
+  row('Velocity in xy', three(young.map((r) => r.vxy), 3), CONSOLE.young.vxy);
   console.log('  -- late in life, over 0.5 (' + collect(pools.map((p) => p.old.n), 0) + ' particles)');
   row('View depth', last.old.depth, CONSOLE.old.depth);
   row('Velocity z', last.old.vz, CONSOLE.old.vz);

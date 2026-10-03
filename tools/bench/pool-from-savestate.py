@@ -10,7 +10,12 @@ side by side.
 The slot count is whatever the walk reaches, which can stop a record short of the real pool
 when one is caught mid-write; the numbers below it are unaffected.
 
-Usage: pool-from-savestate.py <vsh.self_1_1.SAVESTAT.zst | decompressed.bin>
+Given several savestates, it also pools their bands: one pool holds some fifty particles under
+3% of their life, born on a few frames of one moment's wave, so the bench's newborns are the six
+savestates taken at rest pooled (vsh.self_1_0, 1_1 and 1_4 to 1_7; 1_2 was taken shaking the
+controller, 1_3 navigating and 1_8 with a track playing).
+
+Usage: pool-from-savestate.py <vsh.self_1_1.SAVESTAT.zst | decompressed.bin> [more ...]
 """
 import argparse
 import struct
@@ -79,35 +84,48 @@ def three(values, digits):
                       for f in (0.05, 0.5, 0.95))
 
 
-def main(argv=None):
-    ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
-    ap.add_argument('savestate', type=Path)
-    args = ap.parse_args(argv)
+def bands_of(alive):
+    return {'just born (life under 0.03)': [r for r in alive if r[0][3] < 0.03],
+            'late in life (over 0.5)': [r for r in alive if r[0][3] >= 0.5]}
 
-    data = load(args.savestate)
-    base, slots = find_pool(data)
-    alive, aging = [], []
-    for i in range(slots):
-        off = base + i * RECORD
-        p = struct.unpack('>4f', data[off:off + 16])
-        v = struct.unpack('>4f', data[off + 16:off + 32])
-        if p[3] == FREE or not any(p[:3]):
-            continue
-        alive.append((p, v))
-        aging.append(v[3])
 
-    bands = {'just born (life under 0.03)': [r for r in alive if r[0][3] < 0.03],
-             'late in life (over 0.5)': [r for r in alive if r[0][3] >= 0.5]}
-
-    print('%s: pool at %#x, %d slots' % (args.savestate.name, base, slots))
-    print('  %-32s %d of %d' % ('Alive', len(alive), slots))
-    print('  %-32s %.6f / %.6f / %.6f' % ('Aging rate, min / median / max',
-                                          min(aging), quantile(aging, 0.5), max(aging)))
+def print_bands(bands):
     for label, rows in bands.items():
         print('  -- %s: %d particles' % (label, len(rows)))
         print('  %-32s %s' % ('View depth', three([EYE_Z - r[0][2] for r in rows], 2)))
         print('  %-32s %s' % ('Velocity z', three([r[1][2] for r in rows], 4)))
         print('  %-32s %s' % ('Speed in xy', three([(r[1][0] ** 2 + r[1][1] ** 2) ** 0.5 for r in rows], 3)))
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
+    ap.add_argument('savestate', type=Path, nargs='+')
+    args = ap.parse_args(argv)
+
+    pooled = []
+    for path in args.savestate:
+        data = load(path)
+        base, slots = find_pool(data)
+        alive, aging = [], []
+        for i in range(slots):
+            off = base + i * RECORD
+            p = struct.unpack('>4f', data[off:off + 16])
+            v = struct.unpack('>4f', data[off + 16:off + 32])
+            if p[3] == FREE or not any(p[:3]):
+                continue
+            alive.append((p, v))
+            aging.append(v[3])
+        pooled += alive
+
+        print('%s: pool at %#x, %d slots' % (path.name, base, slots))
+        print('  %-32s %d of %d' % ('Alive', len(alive), slots))
+        print('  %-32s %.6f / %.6f / %.6f' % ('Aging rate, min / median / max',
+                                              min(aging), quantile(aging, 0.5), max(aging)))
+        print_bands(bands_of(alive))
+
+    if len(args.savestate) > 1:
+        print('All %d pooled:' % len(args.savestate))
+        print_bands(bands_of(pooled))
 
 
 if __name__ == '__main__':

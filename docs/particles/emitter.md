@@ -26,7 +26,12 @@ pool.
 **Which vertices.** The emitter draws from the wave's own vertices, the 128 lines of 128 that
 `spline.elf` writes - see [The wave](#the-wave). Vertex ix of line iy sits at 32 × (128 iy + ix)
 in the buffer, and a matrix the particle object keeps at `+0x50` takes it into the world
-(`0x2d6e8`, `0x2d640`). Two sources pick them:
+(`0x2d6e8`, `0x2d640`), times the vertex's x, y, z and w with no division. Every frame, just before
+the particle update, the scene hands the object the buffer the wave's renderer holds as current,
+its 128 × 128 and that matrix (`0x2b288`, from `0x32244`), and in every savestate the matrix is the
+camera's exact inverse: x times 0.886367, tan 26.5° × 16/9, y times 0.498582, and z and w those of
+a projection with near 0.1 and far 1000, so w comes out 1 and z is 2 less the view depth. Two
+sources pick them:
 
 - `0x2dde4` makes one draw a frame against `emit prob`. If it passes, it picks `emit per frame`
   vertices, the integer 16, each at trunc(U × 127) on both axes; if not, none. That is 16 ×
@@ -86,18 +91,21 @@ the disassembly describes it, down to the rotation being a unit quaternion.
   the pool run from 0.001521 to 0.004256, against the 0.001445 and 0.004262 that symmetric
   draw gives. A one-sided draw would have started at 0.00285. A life therefore lasts
   between 235 and 692 frames, a median of 410, rather than the 285 assumed before.
-- **Emission velocity, from the particles younger than 3% of a life:** speed median 0.276,
-  5th to 95th percentile 0.115 to 0.348. The speed is not `emit vel min` + `emit vel var` ×
-  U(0, 1), as first read, but grows as the square root of the wave's own speed - see
-  [The emitter](#the-emitter).
+- **Emission velocity, from the particles younger than 3% of a life:** in xy 0.098 / 0.224 /
+  0.348 at the 5th, 50th and 95th percentile, pooled over the six savestates taken at rest, 312 of
+  them; one savestate's median runs from 0.192 to 0.276 with how fast its wave moves. The speed is
+  not `emit vel min` + `emit vel var` × U(0, 1), as first read, but grows as the square root of the
+  wave's own speed - see [The emitter](#the-emitter). The resting savestate's own, read below, are
+  among the fastest.
 - **Their z velocity is zero**: |vz| / |v| has a median of 0.005 at birth. `emit vel
   zscale` being 0 flattens emission into the screen plane.
 - **The direction is a cone around the vertical**: |vy| / |v| has a median of 0.838,
   where a cone of `emit cone angle` 51.87° around y gives 0.809. The cone's axis is the way
   the wave moves where the particle is born, which is mostly up and down.
 - **The noise builds up over a life:** |vz| / |v| climbs to 0.05, 0.20 and 0.34 at a
-  tenth, a half and nine tenths of a life, and the median speed grows from 0.276 to 0.324
-  while the 95th percentile goes from 0.348 to 0.633. Nothing else pushes a particle in z.
+  tenth, a half and nine tenths of a life, and in the resting savestate the median speed grows
+  from 0.276 to 0.324 while the 95th percentile goes from 0.348 to 0.633. Nothing else pushes a
+  particle in z.
 
 ### Binned by life
 

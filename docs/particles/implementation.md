@@ -140,15 +140,16 @@ on each frame that passes its draw, simply keeps it that way.
 
 `tools/bench/particles.js` runs the simulation over the wave `wave-reverse.js` builds, under night's
 `LINE1.mnu` as the resting savestate was, and prints this. Three 30-second runs, seeds 1 to 3. The
-pool's column is the resting savestate's, the drawn column the two frame captures':
+pool's column is the resting savestate's, its newborns those of the six savestates taken at rest
+pooled, and the drawn column the two frame captures':
 
 | The pool | Simulation | Console |
 |---|---|---|
 | Alive | 2012 to 2032 of 2049 | 2033 of 2049 |
 | Aging rate, min / median / max | 0.001446 / 0.002442 / 0.004257 | 0.001447 / 0.002435 / 0.004256 |
-| Just born, view depth | 7.20 / 8.18 / 9.23 | 7.57 / 8.55 / 9.07 |
-| Just born, velocity z | -0.0058 / -0.0004 / 0.0047 | -0.0112 / 0.0001 / 0.0078 |
-| Just born, speed in xy | 0.077 / 0.216 / 0.329 | 0.156 / 0.276 / 0.348 |
+| Just born, view depth | 7.24 / 8.27 / 9.24 | 7.08 / 8.42 / 9.86 |
+| Just born, velocity z | -0.0087 / -0.0001 / 0.0082 | -0.0064 / -0.0001 / 0.0067 |
+| Just born, speed in xy | 0.088 / 0.232 / 0.373 | 0.098 / 0.224 / 0.348 |
 | Late in life, view depth | 7.15 / 8.28 / 9.53 | 7.41 / 8.40 / 9.32 |
 | Late in life, velocity z | -0.2351 / -0.0109 / 0.2365 | -0.2501 / -0.0014 / 0.2337 |
 | Late in life, speed in xy | 0.064 / 0.254 / 0.493 | 0.081 / 0.262 / 0.517 |
@@ -161,14 +162,15 @@ pool's column is the resting savestate's, the drawn column the two frame capture
 | Distance outside the wave band, 90th percentile (NDC) | 0.126 to 0.157 | 0.096 | 0.114 |
 | Same, 99th percentile | 0.347 to 0.397 | 0.38 | 0.39 |
 
-Known differences:
+Known difference: **fewer are drawn,** 1337 to 1353 against 1437 and 1417, and a little nearer:
+the bench's wave is its first 30 seconds from the start, when its lines draw in - see [What it
+models](../wave/implementation.md#what-it-models).
 
-- **The newborns are slow,** 0.216 against 0.276 at the median, and the wave is not why: the
-  one they are born on here moves at 0.0035 a frame in space, faster than the console's at rest,
-  0.0032 - see the wave's [bench](../wave/implementation.md#against-the-console) (not followed).
-- **Fewer are drawn,** 1337 to 1353 against 1437 and 1417, and a little nearer: the bench's wave is
-  its first 30 seconds from the start, when its lines draw in - see [What it
-  models](../wave/implementation.md#what-it-models).
+**The newborns are the console's.** Against the resting savestate's alone they looked slow, 0.216
+against 0.276 at the median, but a savestate holds some fifty, born on a few frames of one moment's
+wave, and that one's wave was moving fast: run on each savestate's own two buffers, the emitter's
+formula gives each one's median within 0.03 - 0.246 for that one, 0.191 to 0.232 for the other five
+at rest. So the bench gathers its newborns over the runs, and pools the console's over the six.
 
 **The noise's drift was the emitter's count.** For as long as the emitter was modelled, the
 particles moved too fast late in life - 0.369 in xy against 0.262 - and spread twice as far in

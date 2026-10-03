@@ -191,6 +191,11 @@ The implementation never copied the clearing, and stays as it is.
 
 ## Superseded readings
 
+- The newborns were taken to be slow, 0.216 against 0.276 at the median, measured against the
+  resting savestate's alone: its fifty were born on a fast wave, and pooled over the six savestates
+  at rest the console's are the page's - see [Against the
+  console](implementation.md#against-the-console).
+
 - [The parameter block](parameter-block.md#the-parameter-block-read-out-of-a-savestate) is the
   task's whole 2304-byte transfer. That replaces an earlier reading, that the task DMAs three
   768-byte structures and takes its force from the head of the third: that head is zero in every

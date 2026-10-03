@@ -59,9 +59,6 @@ Also missing:
   `PARTICLES_SPE.mnu` factor on - see [What's New's
   board](docs/particles/scene-events.md#whats-news-board). The board's side, and the factor's
   animation, are traced.
-- Why the newborns are slower than the pool's, 0.216 against 0.276, where the wave they are born
-  on moves as fast as the console's - see [Against the
-  console](docs/particles/implementation.md#against-the-console).
 - `proc_iridescent` exactly. It is a file of the firmware's resources, not generated at run time, so
   the implementation stands in for it with [the
   fit](docs/particles/shaders.md#the-iridescent-texture).
