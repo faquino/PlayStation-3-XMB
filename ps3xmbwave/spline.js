@@ -1,8 +1,8 @@
 'use strict';
 // Spline layer renderer: draws the backdrop (`backdrop.js`), at the moment the scene hands it, and the wave
-// `wave-reverse.js` builds each frame, into the targets of `postprocess.js`, which lays them out on the screen. Consumes
-// `SPLINE_SETTINGS` + `PS3WaveReverse` + `PS3Backdrop` + `PS3PostProcess`; `index.html` hands its `surface` to
-// `particles.js`.
+// `wave-reverse.js` builds each frame, into the targets of `postprocess.js`, which lays them out on the screen under the
+// scene's fade. Consumes `SPLINE_SETTINGS` + `PS3WaveReverse` + `PS3Backdrop` + `PS3PostProcess`; `index.html` hands its
+// `surface` to `particles.js`.
 
 (function () {
   function compile(gl, src, type) {
@@ -204,9 +204,34 @@
     let lastTime = null;
     let lastSequence = 'none';
 
-    // `moment` is the moment the scene last handed the backdrop (`xmbBackdropMoment`), and `sequence` the boot sequence
-    // playing: the XMB's start resets the lines, as the cold boot's handlers do (0x1b05c).
-    function render(timeSec, moment, sequence) {
+    // The renderer's fade (0x4fe2c), which event 0 starts with the particles' (0x1afdc): three animations, one a
+    // channel, from where each stands towards the grey sent, over its seconds, eased by a smoothstep (0x4fb8c, 0x5334c,
+    // 0x453ac). Each frame moves them on by the frame's time before anything is drawn (0x56f1c), and BACKGROUND.mnu's
+    // four colours reach the composite multiplied by them, so the backdrop and the wave's light fade as one. Every grey
+    // sent is grey, so one level stands for the three. The console's animations start at black (0x4fb54) until the XMB
+    // first sends event 0; the page's stand at the scene's brightness from its first frame, as if the XMB had been
+    // running.
+    const fade = { value: 1, from: 1, to: 1, time: 0, duration: 0, serial: null };
+    function fadeFrame(sent, dtSec) {
+      if (sent && sent.serial !== fade.serial) {
+        fade.serial = sent.serial;
+        fade.from = fade.value;
+        fade.to = sent.target;
+        fade.time = 0;
+        fade.duration = sent.seconds;
+      }
+      fade.time += dtSec;
+      if (fade.time >= fade.duration) fade.value = fade.to;
+      else {
+        const u = fade.time / fade.duration;
+        fade.value = fade.from + (fade.to - fade.from) * u * u * (3 - 2 * u);
+      }
+    }
+
+    // `moment` is the moment the scene last handed the backdrop (`xmbBackdropMoment`), `sequence` the boot sequence
+    // playing - the XMB's start resets the lines, as the cold boot's handlers do (0x1b05c) - and `sent` the fade the
+    // scene last sent (`xmbSceneFade`).
+    function render(timeSec, moment, sequence, sent) {
       const dtSec = lastTime === null ? 0 : Math.max(0, timeSec - lastTime);
       lastTime = timeSec;
       if (sequence !== undefined && sequence !== lastSequence) {
@@ -216,6 +241,7 @@
       surface.aspect = canvas.width / Math.max(1, canvas.height);
       wave.update(settings, dtSec, surface.aspect);
       window.__PS3_WAVE_STATE = wave.state;
+      fadeFrame(sent, dtSec);
 
       // A hidden page can report an empty canvas, which has nothing to draw into.
       if (!canvas.width || !canvas.height) return;
@@ -247,7 +273,7 @@
       });
 
       // The composite, the tone curve and the glare, into the canvas.
-      post.present(settings, canvas.width, canvas.height);
+      post.present(settings, canvas.width, canvas.height, fade.value);
     }
 
     // The mesh is rewritten in place every frame, so the surface always holds what was drawn.

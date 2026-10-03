@@ -41,10 +41,10 @@ What `ps3xmbwave/` ports as verified and what it models, file by file;
 | File | Verified | Modelled |
 |---|---|---|
 | `wave-reverse.js` | The lines, from their 60 Hz steps to the grid the task receives; the lattice; the deformation, the matrix and the B-spline surface, into the 128 × 128 mesh `spline.elf` writes; its texture coordinates and index buffer. Each checked against the savestates. | The lines' start, made as the console's was - run at a `TIMESTEP` of 7.4 up to its clock, the first and last lines averaged - with the console's mean place and velocity; at most four steps a frame; the deformation divides exactly. |
-| `spline.js` | `lines1.vpo` and `lines1.fpo`, re-authored, the additive blend and `_Encode`. The lines start afresh as the XMB's start begins. | `_Stripes` and `_FresLUT`, fitted. |
-| `postprocess.js` | `LinesController`, the preexpose tables, `GlareSourcePre`, the levels, `Gaussian`, `AccGlare` and `ToneApplyDisplay`, re-authored; their uniforms from the sets, checked against the captures. | The wave's buffer read bilinearly, not through a convolution; the glare's levels added in one pass; its textures clamped to their edge, as RPCS3 runs them. |
+| `spline.js` | `lines1.vpo` and `lines1.fpo`, re-authored, the additive blend and `_Encode`. The lines start afresh as the XMB's start begins. The renderer's fade. | `_Stripes` and `_FresLUT`, fitted. The fade's start, at the scene's brightness. |
+| `postprocess.js` | `LinesController`, the preexpose tables, `GlareSourcePre`, the levels, `Gaussian`, `AccGlare` and `ToneApplyDisplay`, re-authored; their uniforms from the sets, checked against the captures, the four colours times the scene's fade. | The wave's buffer read bilinearly, not through a convolution; the glare's levels added in one pass; its textures clamped to their edge, as RPCS3 runs them. |
 | `spline-settings.js` | `LINE1.mnu`'s, `HDR.mnu`'s and `BACKGROUND.mnu`'s parameters under their own names, with the base set's values. | |
-| `scene-themes.js` | Every set's `LINE1.mnu`, `HDR.mnu` and `BACKGROUND.mnu`, as their differences from the base, put in as the particles' sets are: the day cycle, the boot sequences, the music. The cold boot's ramp, checked against the captures. | The blends' windows on the page's seconds. |
+| `scene-themes.js` | Every set's `LINE1.mnu`, `HDR.mnu` and `BACKGROUND.mnu`, as their differences from the base, put in as the particles' sets are: the day cycle, the boot sequences, the music. The cold boot's ramp, checked against the captures. The scene's fade, sent to the wave and the particles alike. | The blends' windows on the page's seconds. |
 
 ## Still missing
 
@@ -74,8 +74,11 @@ wave on screen:
   step](docs/wave/lines.md#a-step) and [The time](docs/wave/ffd.md#the-time). No savestate has run
   that long since a cold boot. Also what, beyond the cold boot's ramp of `PERTURBATION`, keeps a run
   from the reset from landing on a savestate - see [From the start](docs/wave/lines.md#from-the-start).
-- **The fade.** How the wave's renderer uses `_Color` (`0x4fe2c`) - see [The particles'
-  fade](docs/particles/scene-events.md#the-particles-fade).
+
+- **The parameters' ranges.** The scene holds every parameter to the range it registers, and
+  `LINE1.mnu`'s and `HDR.mnu`'s are not read: the welcome sets' `HDR.mnu`, a `WHITE LEVEL` of 1000
+  and a `GLARE LEVEL` of 100, may lie outside theirs - see [How one set blends into
+  another](docs/particles/day-cycle.md#how-one-set-blends-into-another).
 
 ## Keeping these notes
 

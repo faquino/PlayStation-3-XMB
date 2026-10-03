@@ -53,7 +53,7 @@ the particle object animates, at B+0x1340 and B+0x1350, which read (1, 1, 1) and
 savestate:
 
 - `_Color` is the scene's fade: to black when another module takes the screen, and to the
-  brightness Theme Settings set - see [The particles' fade](scene-events.md#the-particles-fade).
+  brightness Theme Settings set - see [The fade](scene-events.md#the-fade).
 - `_Gamma` is set at once by the scene's update (`0x14578`, through `0x1b128` and `0x2b618`,
   with a duration of zero) whenever the value it picks changes: the first word of `paf`'s
   variable `59df89eb` when the word 12 bytes into it is above 0.05, and of `paf`'s `6fd42f46`

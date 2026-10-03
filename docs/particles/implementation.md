@@ -46,11 +46,14 @@ on each frame that passes its draw, simply keeps it that way.
   closed, as events 11 would take it; closed is the default, as in every capture. Headless,
   opening and closing the board, and reopening it halfway down, the factor stays within 1e-15
   of the firmware's curve, and each frame's parameters carry the factor of the frame before.
-- **The particles' fade.** `_Color` runs the scene's fade: `themeBrightness` stands for Theme
-  Settings' Brightness, and `xmbBackground` for the XMB's background given away and taken back,
-  over `backgroundFadeMs`, the page's choice where the console's callers use 0 to 1000 ms.
-  Headless it stays within 1e-15 of the firmware's curve, and in the browser the particles'
-  light scales with it, to nothing when hidden. The wave does not fade: that part is not ported.
+- **The fade.** `scene-themes.js` sends the scene's fade (`xmbSceneFade`): `themeBrightness`
+  stands for Theme Settings' Brightness, and `xmbBackground` for the XMB's background given away
+  and taken back, over `backgroundFadeMs`, the page's choice where the console's callers use 0 to
+  1000 ms. `_Color` and the wave's renderer each run it, as the console's do - see [The
+  fade](scene-events.md#the-fade). Headless both land on the firmware's curve to the bit, fades
+  started halfway through others included, and in the browser the particles' light, the backdrop
+  and the wave dim with it, to black when hidden. At -3 the capture of 11:38 on 3 October reads
+  `_Color` (0.55, 0.55, 0.55, 0), as the page does.
 - **Boot sequences.** `sequence` plays the XMB's start, a game's launch or another content's,
   on the particles and the wave, as [What puts each set in](parameter-sets.md#what-puts-each-set-in)
   reads them: each step blends from wherever the parameters stand, the cold boot's first 4
@@ -67,7 +70,7 @@ on each frame that passes its draw, simply keeps it that way.
     start afresh too, as the console's do - see [The start](../wave/lines.md#the-start); the
     backdrop keeps its settings.
 - **The music and the scene's clock.** `musicPlayback` plays [the music's way in and
-  out](parameter-sets.md#the-music-set) on the particles and the wave, and `themeColor` stands for Theme
+  out](music.md) on the particles and the wave, and `themeColor` stands for Theme
   Settings' Colour, which [stops the scene's
   clock](day-cycle.md#theme-settings-colour-stops-the-clock) for the `auto` theme and, through
   `xmbSceneDate`, the backdrop's Auto gradient. Headless, each step lands on the firmware's sets.

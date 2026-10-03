@@ -24,7 +24,14 @@ and what is modelled. This is the detail.
 - the sets: `scene-themes.js` holds every override's `LINE1.mnu`, `HDR.mnu` and `BACKGROUND.mnu`
   and writes them into the wave's settings as it writes the particles' - the day cycle, the boot
   sequences, the music - see [Parameter sets](../particles/parameter-sets.md); and the XMB's start
-  resets the lines, as the cold boot's handlers do - see [The start](lines.md#the-start).
+  resets the lines, as the cold boot's handlers do - see [The start](lines.md#the-start);
+- the scene's fade: `spline.js` runs the renderer's, which `scene-themes.js` sends with the
+  particles', and `postprocess.js` multiplies the composite's four colours by it - see [The
+  fade](../particles/scene-events.md#the-fade). Headless, it lands on the firmware's curve to the
+  bit. At Theme Settings' Brightness -3 the page's four colours are those of the capture of 11:38
+  on 3 October to 5e-7, and its backdrop the screenshot's to a level; at -5 the night's scene goes
+  nearly black, the tone curve taking 1/16 off what is left of the light. No capture has caught a
+  fade on its way, nor the background given away.
 
 Each piece was checked against the savestates, fed what the console held: the surface gives the
 newer wave buffer from the local store's grid to 3e-5; the matrix rebuilds `b300` to 1e-5 from the
@@ -67,8 +74,10 @@ another](../particles/day-cycle.md#how-one-set-blends-into-another) - and, throu
   textures - see the [backdrop notes](../../BACKGROUND_REVERSE_ENGINEER.md).
 - **The sets' clock.** The blends run on the page's seconds, and blend mode 1's frames at 60 a
   second - see [How one set blends into
-  another](../particles/day-cycle.md#how-one-set-blends-into-another). The fade, `_Color`, is not
-  ported.
+  another](../particles/day-cycle.md#how-one-set-blends-into-another).
+- **The fade's start.** The console's renderer starts its fade at black, until the XMB first sends
+  event 0; the page's stands at the scene's brightness from its first frame, as if the XMB had been
+  running, and the XMB's start leaves it where it is.
 
 ## Against the console
 

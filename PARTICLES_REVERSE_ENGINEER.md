@@ -18,8 +18,9 @@ index. Read it first, then only the topics the task needs - see
 |---|---|
 | [`firmware.md`](docs/particles/firmware.md) | `lines.qrc`, `particles.elf`, the `.mnu` parameters, the PPU modules, and why the scene is `custom_render_plugin` |
 | [`parameter-sets.md`](docs/particles/parameter-sets.md) | The override sets, what puts each one in (the boot sequences, the music), and how to tell them apart in a capture |
+| [`music.md`](docs/particles/music.md) | `music_1`, the music player's set: what it changes across the scene, how it comes in and goes out, and the clock it holds meanwhile |
 | [`day-cycle.md`](docs/particles/day-cycle.md) | The day's schedule, how one set blends into another, and the scene's clock, which Theme Settings' Colour stops |
-| [`scene-events.md`](docs/particles/scene-events.md) | Who sends the scene its events; `PARTICLES_SPE.mnu`'s two factors, the fade on `_Color`, What's New's board |
+| [`scene-events.md`](docs/particles/scene-events.md) | Who sends the scene its events; `PARTICLES_SPE.mnu`'s two factors, the scene's fade on `_Color` and the wave's renderer, What's New's board |
 | [`shaders.md`](docs/particles/shaders.md) | The two passes: Cg interfaces, run-time uniforms, the decompiled programs, the iridescent texture, the camera |
 | [`spu-task.md`](docs/particles/spu-task.md) | `particles.elf`'s update step by step, the record it walks, the free-slot list, the vertex records |
 | [`parameter-block.md`](docs/particles/parameter-block.md) | The 2304-byte block: its layout, how `0x31494` fills it, its two copies, the PPU's parameters with `PARTICLES_SPE.mnu` added |
@@ -38,7 +39,7 @@ What `ps3xmbwave/` ports as verified and what it models, file by file;
 |---|---|---|
 | `particles-reverse.js` | The update task, steps 1 to 8. The pool layout, free marker, life bounds and camera. The parameter block: its layout, the values at every offset, and how the PPU fills it, the flow grid and the noise included. The emitter and its random numbers, on the vertices of the wave `wave-reverse.js` builds. The controller's response: the D-pad's turn and kicks, the motion, the shake detectors. `PARTICLES_SPE.mnu`, as the PPU applies it, and its first factor's animation. The particles' fade, `_Color`. The icons' layout on screen, measured. | How the icons move; how often the XMB repeats a held direction; the pool's first orientations, uniform as the console's are after many generations. |
 | `particles.js` | Both passes, re-authored from the decompiled programs, fed with the `.mnu` values [`shaders.md`](docs/particles/shaders.md) maps to uniforms, `PARTICLES_SPE.mnu` applied. `color_control` as the programs use it, and `_Color` from the system's fade. | `_Gamma` held at 1, its value in every savestate. The iridescent texture comes from the fit. |
-| `scene-themes.js` | The nine distinct theme sets, as their differences from the base, and every set's `LINE1.mnu` for the wave. The boot sequences: which set each step puts in, when, and over how long. The music, and Theme Settings' Colour. [The day's schedule](docs/particles/day-cycle.md) and every blend's curve. | The clock's tick, taken at once; the blends' windows on the page's seconds - see [How one set blends into another](docs/particles/day-cycle.md#how-one-set-blends-into-another). |
+| `scene-themes.js` | The nine distinct theme sets, as their differences from the base, and every set's `LINE1.mnu` for the wave. The boot sequences: which set each step puts in, when, and over how long. The music, and Theme Settings' Colour. The scene's fade, sent to the particles and the wave alike. [The day's schedule](docs/particles/day-cycle.md) and every blend's curve. | The clock's tick, taken at once; the blends' windows on the page's seconds - see [How one set blends into another](docs/particles/day-cycle.md#how-one-set-blends-into-another). |
 | `xmb-input.js` | What it hands over: steps with the XMB's four directions, and the four sensors in the PPU's units. | The rest: the mouse and keyboard stand in for the controller. |
 
 ## Still missing
@@ -58,8 +59,9 @@ Also missing:
   `PARTICLES_SPE.mnu` factor on - see [What's New's
   board](docs/particles/scene-events.md#whats-news-board). The board's side, and the factor's
   animation, are traced.
-- How the wave's renderer uses the fade `_Color` is sent with (`0x4fe2c`), so the wave can
-  fade too - see [The particles' fade](docs/particles/scene-events.md#the-particles-fade).
+- The ranges the scene holds `PARTICLES.mnu`'s, `LINE1.mnu`'s and `HDR.mnu`'s parameters to as it
+  blends them: only `BACKGROUND.mnu`'s were read, where `DAYSPREAD`'s default lies below its own -
+  see [How one set blends into another](docs/particles/day-cycle.md#how-one-set-blends-into-another).
 - Why the newborns are slower than the pool's, 0.216 against 0.276, where the wave they are born
   on moves as fast as the console's - see [Against the
   console](docs/particles/implementation.md#against-the-console).

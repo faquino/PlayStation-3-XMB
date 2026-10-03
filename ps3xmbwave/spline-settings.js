@@ -72,13 +72,14 @@ window.SPLINE_SETTINGS = {
   colour4Red: 0.92487,
   colour4Green: 0.922603,
   colour4Blue: 0.922933,
-  // BACKGROUND.mnu's backdrop: the base file leaves these out, so the code's defaults stand for them.
+  // BACKGROUND.mnu's backdrop: the base file leaves these out, so the code's defaults stand for them. DAYSPREAD's, 0,
+  // lies below its range of 1 to 3, which the scene holds it to (`scene-themes.js`), so it reads as 1.
   nightBlend: 1,
   night2dayBegin: 4,
   night2dayEnd: 6,
   day2nightBegin: 18,
   day2nightEnd: 20,
-  dayspread: 3,
+  dayspread: 0,
   nightWhitBias: 0.5,
   colourShader: 0,
 };
@@ -409,9 +410,9 @@ window.SPLINE_SETTINGS_META = {
       'BACKGROUND.mnu: DAY2NIGHT END',
   },
   dayspread: {
-    min: 0, max: 6, step: 0.01,
+    min: 0, max: 3, step: 0.01,
     help: "How fast the backdrop's day clock runs at midnight, against its slowest at noon: _DayTime is a cubic of the " +
-      "time of day with this slope at both ends.\n" +
+      'time of day with this slope at both ends. The scene holds it to 1 to 3, so its default, 0, reads as 1.\n' +
       'BACKGROUND.mnu: DAYSPREAD',
   },
   nightWhitBias: {

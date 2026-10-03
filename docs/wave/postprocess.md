@@ -36,14 +36,20 @@ before to a level or two of 255 wherever the backdrop shows, and the same golden
 wave - see the [backdrop notes](../../BACKGROUND_REVERSE_ENGINEER.md). Under the music, whose glare is
 the strongest of the sets, the top of the screen in the screenshots of 23:34 and 23:44 on 23
 September is the page's to 3 levels on average, the rest being the glare of a wave that is not the
-console's of the moment. The backdrop and the wave both do: the composite lays them together, and
+console's of the moment. At Theme Settings' Brightness -3, the fade's 0.55 going through the tone
+curve with the rest, the screenshot of 11:37 on 3 October is the page's to a level wherever only
+the backdrop shows. The backdrop and the wave both do: the composite lays them together, and
 the glare is drawn out of the two and added back over the whole screen.
 
 ## The composite
 
 `LinesController.vpo` draws a grid of 64 × 32 vertices over the screen, u from the left and v from the
 bottom, and hands the fragment program two gradients made of `BACKGROUND.mnu`'s four colours, which
-reach it as `c[464]` to `c[467]` (in the music's captures, the set's own values to the digit):
+reach it as `c[464]` to `c[467]`, each times the scene's fade and with 1 for its fourth component
+(`0x4fec8` to `0x50000`, from the composite's draw, `0x57d00`) - see [The
+fade](../particles/scene-events.md#the-fade). At Theme Settings' Brightness Normal the fade stands
+at 1, so the captures hold the set's own values, in the music's to the digit; the one taken at -3
+holds them times 0.55, which the page gives to 5e-7:
 
 | `BACKGROUND.mnu` | Register | Program | Where |
 |---|---|---|---|

@@ -91,12 +91,12 @@ window.PARTICLE_SETTINGS = {
   // Music playing in the XMB: the scene goes to the music set over 5.5 s and holds it whatever the hour; when it
   // stops, to the base set over 5.5 s and then back to the theme (`scene-themes.js`)
   musicPlayback: 'stopped',
-  // Theme Settings > Background > Brightness, Normal to -5: the particles drawn at 1 - 0.15 per step, faded to over 1 s
+  // Theme Settings > Background > Brightness, Normal to -5: the scene drawn at 1 - 0.15 per step, faded to over 1 s
   themeBrightness: '0',
   // Theme Settings > Colour, Original or a month: a month stops the scene's clock at noon on its 1st, for the Auto
   // theme and the backdrop's Auto gradient alike
   themeColor: '0',
-  // The XMB's background given away, as a video, the browser or the Store take it: the particles fade to black over
+  // The XMB's background given away, as a video, the browser or the Store take it: the scene fades to black over
   // backgroundFadeMs, and back to the brightness when it is taken back
   xmbBackground: 'shown',
   backgroundFadeMs: 200, // the firmware's callers use 0 to 1000
@@ -504,8 +504,8 @@ window.PARTICLE_SETTINGS_META = {
       { value: '0', label: 'Normal' }, { value: '1', label: '-1' }, { value: '2', label: '-2' },
       { value: '3', label: '-3' }, { value: '4', label: '-4' }, { value: '5', label: '-5' },
     ],
-    help: "Theme Settings' Brightness: each step below Normal takes another 15% off the particles' brightness, " +
-      'fading over 1 s.\n' +
+    help: "Theme Settings' Brightness: each step below Normal takes another 15% off the scene's brightness - the " +
+      "particles', the backdrop's and the wave's - fading over 1 s.\n" +
       'Console state: Theme Settings',
   },
   themeColor: {
@@ -525,12 +525,12 @@ window.PARTICLE_SETTINGS_META = {
   xmbBackground: {
     type: 'select', options: [{ value: 'shown', label: 'Shown' }, { value: 'hidden', label: 'Hidden' }],
     help: 'Hidden stands for another module taking the screen, as a video, the browser or the Store do: the ' +
-      'particles fade to black over Background Fade Ms. Shown brings them back.\n' +
+      'whole scene fades to black over Background Fade Ms. Shown brings it back.\n' +
       "Console state: the XMB's background",
   },
   backgroundFadeMs: {
     min: 0, max: 1000, step: 10,
-    help: "How long the particles take to fade out, or back in, when the XMB's background is hidden or shown.\n" +
+    help: "How long the scene takes to fade out, or back in, when the XMB's background is hidden or shown.\n" +
       "Page setting: the console's callers use 0 to 1000 ms",
   },
   flowStrength: {

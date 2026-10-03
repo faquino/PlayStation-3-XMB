@@ -8,6 +8,10 @@
   const SHADER_FADE = 2;
   // _DayTime under COLOUR SHADER 1: the time of day times a thousand over 24 (0x92e64).
   const MUSIC_CLOCK = 1000 / 24;
+  // DAYSPREAD as the backdrop gets it (+0x2ec, which starts at 1, 0x584b4): the scene holds the parameter to its range
+  // (0x1dd78), so its default, 0, reaches the backdrop as 1.
+  const DAYSPREAD_MIN = 1;
+  const DAYSPREAD_MAX = 3;
 
   // The scene's smoothstep (0x3e980, and 0x453ac for _Alpha).
   function smoothstep(edge0, edge1, x) {
@@ -37,7 +41,7 @@
   // NIGHT2DAY's up and DAY2NIGHT's down (in hours); _NightBrightness is NIGHT WHIT BIAS.
   function uniforms(settings, date, shader) {
     const t = (date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600) / 24;
-    const s = settings.dayspread;
+    const s = Math.min(DAYSPREAD_MAX, Math.max(DAYSPREAD_MIN, settings.dayspread));
     const hermite = -2 * t * t * t + 3 * t * t + s * (2 * t * t * t - 3 * t * t + t);
     const up = smoothstep(settings.night2dayBegin / 24, settings.night2dayEnd / 24, t);
     const down = smoothstep(settings.day2nightBegin / 24, settings.day2nightEnd / 24, t);

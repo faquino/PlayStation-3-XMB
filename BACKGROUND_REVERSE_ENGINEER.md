@@ -43,7 +43,7 @@ What `ps3xmbwave/` ports as verified and what it models, file by file;
 |---|---|---|
 | `backdrop.js` | `back_colours0` and `back_colours1`, re-authored, to float precision; their uniforms from the time of day, the date and `BACKGROUND.mnu`, as `0x52ad8` works them out, against every capture and savestate; the ease from a copy of the backdrop, as `0x52ef0` runs it; with the passes after the wave, RPCS3's screenshots to a level or two, and under the music to three. | The page's first frame, taken as it is. |
 | `background-months.js` | | The 24 month textures as cubic fits, from 0.4 to 3.2 levels of 255 off them (rms). |
-| `scene-themes.js` | `BACKGROUND.mnu`'s parameters in each set, the code's defaults where a set leaves them out, `COLOUR SHADER` put in at once; the moments the backdrop is handed - the clock's ticks, what holds them, the XMB's start's 10:00 over 7.5 seconds. | The ticks on the page's whole seconds. |
+| `scene-themes.js` | `BACKGROUND.mnu`'s parameters in each set, the code's defaults where a set leaves them out, `DAYSPREAD` held to its range, `COLOUR SHADER` put in at once - the music's way in and out included; the moments the backdrop is handed - the clock's ticks, what holds them, the XMB's start's 10:00 over 7.5 seconds. | The ticks on the page's whole seconds. |
 | `background-gradients-day.js`, `-night.js` | | The presets other than `auto`: each month as one linear gradient fitted to its texture by the `dds/` tool, drawn as it is. |
 
 ## Still missing
@@ -51,9 +51,6 @@ What `ps3xmbwave/` ports as verified and what it models, file by file;
 The implementation models all of these. They are listed roughly by how much each one changes the
 backdrop on screen:
 
-- **The music's way out.** That `COLOUR SHADER` goes back to 0 as the base set goes in, at the
-  start of its crossfade, is read from the code its way in shares, which a capture shows - see
-  [`COLOUR SHADER`](docs/background/firmware.md#colour-shader). No capture caught the way out.
 - **The copy the ease starts from.** That `0x52784` copies the backdrop as it stands is read from
   the code's shape; no capture caught a frame with that copy in it - see
   [`_Alpha`](docs/background/uniforms.md#_alpha).

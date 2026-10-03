@@ -2,7 +2,7 @@
 // The scene's parameter sets: how each firmware override/<set>/PARTICLES.mnu, LINE1.mnu, HDR.mnu and BACKGROUND.mnu
 // differs from the base one, and the blend that walks the day, the boot sequences, the music and the scene's clock,
 // which put them into the particles' and the wave's settings. Read at load by `particles-settings.js`, applied from
-// `index.html`, which also hands the backdrop (`spline.js`) the clock.
+// `index.html`, which also hands the backdrop (`spline.js`) the clock and both layers the scene's fade.
 
 // The particle side. Some numbered sets repeat there: welcome_2's particles equal welcome_1's, coldboot2's equal
 // coldboot1's, and gameboot4 is gameboot3 with `global alpha` 0, like black is music with it - so the repeats are
@@ -204,6 +204,16 @@ window.PARTICLE_THEME_OPTIONS = [
   // 15% of the way into the set's crossfade.
   const WHOLE = { colourShader: true };
 
+  // The settings whose parameter a set can take outside its range, which the scene holds it to whenever it sets it
+  // (0x1dd78, which every blend calls): DAYSPREAD, registered with a default of 0 below its range of 1 to 3 (0x23a54),
+  // so the sets that leave it out - the base, the music's, black - hold it at 1, as a capture of the music's way out
+  // reads. A blend runs from the value held towards the set's own and holds each step.
+  const RANGES = { dayspread: [1, 3] };
+  function held(name, value) {
+    const range = RANGES[name];
+    return range ? Math.min(range[1], Math.max(range[0], value)) : value;
+  }
+
   // A layer of the scene: its sets, the settings they write, and its own state - the firmware defaults, taken before
   // the first write; what the theme or the sequence last wrote into each setting and what it would write now, which
   // differ only where a setting was locked when they moved it; and where each stood as the last change of set and
@@ -267,8 +277,9 @@ window.PARTICLE_THEME_OPTIONS = [
   // Writes a value the theme or the sequence has for a setting, if it moves the setting: one it leaves where it was
   // keeps whatever it holds, a value set by hand included, and one locked in the layer's `keep` is left alone either
   // way. Returns true when it wrote.
-  function put(layer, name, value) {
+  function put(layer, name, raw) {
     const L = layer.state;
+    const value = held(name, raw);
     L.aim[name] = value;
     if (layer.keep && layer.keep.has(name)) return false;
     if (name in L.written && L.written[name] === value) return false;
@@ -385,6 +396,37 @@ window.PARTICLE_THEME_OPTIONS = [
     if (!playing) return false;
     return playing.name !== 'coldboot' || now - playing.start < BOOT_CLOCK_HOLD;
   }
+
+  // Event 0 of the scene's interface, as the XMB sends it and the scene's handler (0x15330) turns it into the grey the
+  // scene fades to and how long it takes, which one call hands the particles' _Color and the wave's renderer alike
+  // (0x1afdc). Theme Settings' Brightness (sub-event 7) sets the scene's brightness to 1 - BRIGHTNESS_STEP x its
+  // level, 0 to BRIGHTNESS_LEVEL_MAX, and fades to it over BRIGHTNESS_SEC; the background given away (sub-event 3)
+  // fades to black, and taken back (sub-event 2) to the brightness, over the milliseconds sent with it, which
+  // `backgroundFadeMs` stands for. Returns the fade last sent, with a count of them, or null before the first.
+  const BRIGHTNESS_STEP = 0.15;
+  const BRIGHTNESS_LEVEL_MAX = 5;
+  const BRIGHTNESS_SEC = 1;
+  let sent = null;
+  let brightness = 1; // the scene's, 1 until Theme Settings sets it (0x4050, 0xa03bc)
+  let brightnessLevel = 0;
+  let backgroundHidden = false;
+  window.xmbSceneFade = function xmbSceneFade(scene) {
+    function send(target, seconds) {
+      sent = { target: target, seconds: seconds, serial: sent ? sent.serial + 1 : 0 };
+    }
+    const level = Math.max(0, Math.min(BRIGHTNESS_LEVEL_MAX, Math.round(Number(scene.themeBrightness) || 0)));
+    if (level !== brightnessLevel) {
+      brightnessLevel = level;
+      brightness = 1 - BRIGHTNESS_STEP * level;
+      send(brightness, BRIGHTNESS_SEC);
+    }
+    const hidden = scene.xmbBackground === 'hidden';
+    if (hidden !== backgroundHidden) {
+      backgroundHidden = hidden;
+      send(hidden ? 0 : brightness, Math.max(0, Number(scene.backgroundFadeMs) || 0) / 1000);
+    }
+    return sent;
+  };
 
   // What the theme asks for now: music_1 while the music is in, the base while it goes out, and otherwise what
   // `theme` gives at the moment the scene's clock shows.

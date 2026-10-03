@@ -14,8 +14,8 @@ t is the time of day, 0 at midnight to 1, clamped to that range (`+0x1d0` of the
 
 - **`_NightTime`** is 2400 × fract(t + 0.5): a hundred times the hours since noon.
 - **`_DayTime`** is 2400 × f(t), f a cubic through 0 at midnight and 1 at the next with `DAYSPREAD`
-  for its slope at both ends (`0x52a28`, a Hermite curve): f(t) = 3t² - 2t³ + `DAYSPREAD` (t - 2t² +
-  t³). So it runs fast through the night and slowly about noon: under the day's sets, `DAYSPREAD`
+  for its slope at both ends (`0x52a28`, a Hermite curve): f(t) = 3t² - 2t³ + `DAYSPREAD` (t - 3t² +
+  2t³). So it runs fast through the night and slowly about noon: under the day's sets, `DAYSPREAD`
   2.68, it passes 600 at 02:48 and 1800 at 21:12, and goes from 1104 at 08:07 to 1348 at 16:54.
 
 Both are 2400 times 0 to 1, so [the program](program.md)'s windows, 600 to 1800, are fractions of
@@ -25,8 +25,9 @@ known to.
 
 Under `COLOUR SHADER` 1 (`back_colours1`, the music's), `_DayTime` is t × 1000 / 24 instead
 (`0x92e64`), and nothing else is read. The music holds the scene's clock, so it stays where the music
-came in: 0.52662, 00:18:12, through the four captures taken during one track, and 0.836227,
-00:28:54, through the three that caught the next coming in.
+came in: 0.52662, 00:18:12, through the four captures taken during one track, 0.836227, 00:28:54,
+through the three that caught the next coming in, and 0.493092, 11:50:03 on 3 October, in the one
+taken 3.42 seconds into the music's way out, 20 seconds later.
 
 ## The day and the night
 
@@ -37,9 +38,13 @@ came in: 0.52662, 00:18:12, through the four captures taken during one track, an
   0.5343 at 20:02 to within the minute their times are known to.
 - **`_NightBrightness`** is `NIGHT WHIT BIAS`, 0.486059 under the day's sets.
 
-The base `BACKGROUND.mnu` carries none of these, so the code's defaults stand for them: `NIGHT BLEND`
-1, the ramps 04:00 to 06:00 and 18:00 to 20:00, `DAYSPREAD` 3, `NIGHT WHIT BIAS` 0.5 (from
-`0x23844` on). The sets that carry none either, the music's, `black` and `gameboot2`, keep those.
+The base `BACKGROUND.mnu` carries none of these, so the code's defaults stand for them (from
+`0x23844` on): `NIGHT BLEND` 1, the ramps 04:00 to 06:00 and 18:00 to 20:00, `NIGHT WHIT BIAS` 0.5,
+and `DAYSPREAD` 0 - below its range, 1 to 3, which the scene holds it to as it sets it (`0x1dd78`),
+so it reads 1 and f(t) is t itself; the backdrop's own copy starts at 1 too (`0x584b4`). The sets
+that carry none either, the music's, `black` and `gameboot2`, keep those: the capture of the
+music's way out reads `_DayTime` 2400 t and `_NightBrightness` 0.5, where the day's sets had them
+at the Hermite of 2.68 and 0.486.
 
 ## The months
 
@@ -86,4 +91,6 @@ at 60 frames a second, n a whole number: 20/27 is the smoothstep of 2/3, 0.104 o
 output eased in over a second, which is why the screenshots match the program's output without
 `_Alpha` in it. While the music holds the clock no tick comes, and `_Alpha` stays 1; as the music
 came in, the capture of 00:28:55 caught the change of program's 2-second ease 0.574 seconds in, at
-0.199624.
+0.199624. On its way out the program goes back as the music stops: the screenshot of 11:50:20 on
+3 October, under a second in, has `back_colours0`'s amber easing in, and the capture 3 seconds
+later has the ease over, `_Alpha` 1, under the base's colours 68% of the way in.

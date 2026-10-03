@@ -21,8 +21,10 @@
   // - the tone curve x (1 + x / W^2) / (1 + x), W being WHITE LEVEL, at EXPOSURE times the light;
   // - each channel's Gaussian, exp(-k^2 / 2 RAD^2) normalised over |k| <= floor(3 RAD - 1), at most 7 texels;
   // - the six levels' weights, GLARE LEVEL^2 SUM POW^l / (1 + SUM POW + ... + SUM POW^5), l = 0 the finest;
-  // - _GlareWeight, 1 in every set.
-  function uniforms(settings) {
+  // - _GlareWeight, 1 in every set;
+  // - BACKGROUND.mnu's four colours times the renderer's fade, `fade`, as each frame sets them (0x4fec8 to 0x50000).
+  function uniforms(settings, fade) {
+    const f = fade === undefined ? 1 : fade;
     const white = settings.whiteLevel;
     const gauss = [];
     ['gaussianRadR', 'gaussianRadG', 'gaussianRadB'].forEach(function (name, channel) {
@@ -50,7 +52,7 @@
       levels,
       glareWeight: 1,
       colours: [1, 2, 3, 4].map(function (i) {
-        return [settings['colour' + i + 'Red'], settings['colour' + i + 'Green'], settings['colour' + i + 'Blue']];
+        return ['Red', 'Green', 'Blue'].map(function (c) { return settings['colour' + i + c] * f; });
       }),
     };
   }
@@ -340,10 +342,11 @@
       gl.colorMask(true, true, true, true);
     }
 
-    // Runs the passes and leaves the result in the canvas, at `width` x `height`, for the particles to draw over.
-    function present(settings, width, height) {
+    // Runs the passes and leaves the result in the canvas, at `width` x `height`, for the particles to draw over, with
+    // the colours dimmed by the renderer's fade, `fade`.
+    function present(settings, width, height, fade) {
       resize(width, height);
-      const u = uniforms(settings);
+      const u = uniforms(settings, fade);
       gl.disable(gl.BLEND);
       gl.disable(gl.DEPTH_TEST);
       gl.bindVertexArray(quad);

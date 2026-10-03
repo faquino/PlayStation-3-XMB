@@ -63,14 +63,11 @@
     sizeMiddle: 0.0218883, globalAlpha: -0.555603, // the second's
   };
   const SPE_EVENT_SEC = 2;
-  // _Color, which both passes multiply their colour by: event 0 of the scene's interface fades it (0x1afdc) to the
-  // scene's brightness (sub-event 2) or to black (sub-event 3) over the milliseconds it carries, and sub-event 7 sets
-  // that brightness to 1 - BRIGHTNESS_STEP x Theme Settings' Brightness, 0 to BRIGHTNESS_LEVEL_MAX, fading to it over
-  // BRIGHTNESS_SEC. A fade runs from where _Color stands with the factors' smoothstep (0x2b658, 0x2c1f8), and one of no
-  // time lands on the next frame. The same call fades the wave's renderer (0x4fe2c), which is not ported.
-  const BRIGHTNESS_STEP = 0.15;
-  const BRIGHTNESS_LEVEL_MAX = 5;
-  const BRIGHTNESS_SEC = 1;
+  // _Color, which both passes multiply their colour by: event 0 of the scene's interface fades it (0x1afdc) to the grey
+  // it sends, over the seconds it sends - the scene's brightness, which Theme Settings' Brightness sets, or black, as
+  // `scene-themes.js` hands them on (`xmbSceneFade`). A fade runs from where _Color stands with the factors'
+  // smoothstep (0x2b658, 0x2c1f8), and one of no time lands on the next frame. The same call fades the wave's renderer
+  // (0x4fe2c), which `spline.js` runs.
   // The emitter, 0x30b80, draws from the wave's vertices: 128 lines of 128, as the captures' wave draw lays them out.
   const MESH_N = 128; // vertices along a line, column 0 at the right edge
   const MESH_M = 128; // lines
@@ -338,11 +335,8 @@
     // started from and is going, and how long it has run.
     const spe = { value: 0, from: 0, to: 0, time: SPE_EVENT_SEC };
     // _Color's fade (the particle object's +0xd0, written to B+0x1340 every frame), kept as one grey level since every
-    // target is grey; the scene's brightness (0xa03bc, 1 until Theme Settings sets it) and the level it came from; and
-    // whether the XMB's background is given away.
-    const colorFade = {
-      value: 1, from: 1, to: 1, time: 0, duration: 0, running: false, brightness: 1, level: 0, hidden: false,
-    };
+    // target is grey, and the count of the fade it last started.
+    const colorFade = { value: 1, from: 1, to: 1, time: 0, duration: 0, running: false, serial: null };
 
     const stats = {
       count: 0, emitted: 0, died: 0, steps: 0, level: 0, noiseScale: 0, fieldAngle: 0, eventFactor: 0, color: 1,
@@ -790,29 +784,16 @@
       spe.value = spe.from + (spe.to - spe.from) * u * u * (3 - 2 * u);
     }
 
-    // Event 0 (0x15330): a fade starts again from where _Color stands, towards `target`, over `sec`.
-    function startColorFade(target, sec) {
+    // Event 0 (0x1afdc): a fade sent since the last frame (`fade`, as `xmbSceneFade` hands it on) starts again from
+    // where _Color stands, towards its grey, over its seconds.
+    function colorEvent(fade) {
+      if (!fade || fade.serial === colorFade.serial) return;
+      colorFade.serial = fade.serial;
       colorFade.from = colorFade.value;
-      colorFade.to = target;
+      colorFade.to = fade.target;
       colorFade.time = 0;
-      colorFade.duration = sec;
+      colorFade.duration = fade.seconds;
       colorFade.running = true;
-    }
-
-    // What the settings ask of the scene, as the XMB sends it: Theme Settings' Brightness (sub-event 7), and the
-    // background given away or taken back (sub-events 3 and 2), over `backgroundFadeMs`.
-    function colorEvents(settings) {
-      const level = clampIndex(Math.round(Number(settings.themeBrightness) || 0), BRIGHTNESS_LEVEL_MAX);
-      if (level !== colorFade.level) {
-        colorFade.level = level;
-        colorFade.brightness = 1 - BRIGHTNESS_STEP * level;
-        startColorFade(colorFade.brightness, BRIGHTNESS_SEC);
-      }
-      const hidden = settings.xmbBackground === 'hidden';
-      if (hidden !== colorFade.hidden) {
-        colorFade.hidden = hidden;
-        startColorFade(hidden ? 0 : colorFade.brightness, Math.max(0, Number(settings.backgroundFadeMs) || 0) / 1000);
-      }
     }
 
     // 0x31494 moves the fade on by the frame's time before the frame is drawn.
@@ -883,11 +864,12 @@
     // Advances the system to the wave's current frame. `aspect` is the canvas aspect the camera will use. The
     // parameters it runs on, and the renderer draws with, are the settings with PARTICLES_SPE.mnu applied for the
     // console's video output (`videoOutput`, the frame's height) and for What's New's board (`whatsNewBoard`), whose
-    // opening and closing send event 11. `themeBrightness` and `xmbBackground` fade the colour it is drawn with.
-    function update(settings, surface, input, timeSec, dtSec, aspect) {
+    // opening and closing send event 11. `fade`, the scene's event 0 as `xmbSceneFade` hands it on, fades the colour it
+    // is drawn with.
+    function update(settings, surface, input, timeSec, dtSec, aspect, fade) {
       const height = Number(settings.videoOutput) || 1080;
       speEvent(settings.whatsNewBoard === 'open' ? 1 : 0);
-      colorEvents(settings);
+      colorEvent(fade);
       if (settings.sequence !== sequence) {
         sequence = settings.sequence;
         if (sequence === 'coldboot') rebuildPool();

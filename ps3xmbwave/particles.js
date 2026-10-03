@@ -380,11 +380,12 @@
       gl.uniform1i(u.uIridescent, 0);
     }
 
-    function render(waveTimeSec, dtSec) {
+    // `fade` is the scene's fade as `xmbSceneFade` last sent it, which the system's _Color runs.
+    function render(waveTimeSec, dtSec, fade) {
       // A hidden page can report an empty canvas; emitting then would put every particle on the axis.
       if (!canvas.width || !canvas.height) return;
       const aspect = canvas.width / canvas.height;
-      system.update(settings, surface, input, waveTimeSec, dtSec, aspect);
+      system.update(settings, surface, input, waveTimeSec, dtSec, aspect, fade);
       window.__PS3_PARTICLES_STATE = system.stats;
       const count = system.count;
       if (!count) return;

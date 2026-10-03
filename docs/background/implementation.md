@@ -19,14 +19,21 @@ wave](../wave/postprocess.md):
   music holds it; Theme Settings' Colour's noon on the 1st of its month; and 10:00 of the day over
   7.5 seconds as the XMB's start begins;
 - `BACKGROUND.mnu`'s parameters as settings, which `scene-themes.js` moves with the rest of each set,
-  `COLOUR SHADER` at once, as a whole number, a change of it easing in over 2 seconds.
+  `COLOUR SHADER` at once, as a whole number, a change of it easing in over 2 seconds;
+- the scene's fade, Theme Settings' Brightness or the background given away, which dims the
+  backdrop in the composite with the wave's light - see [The
+  fade](../particles/scene-events.md#the-fade).
 
 Fed the console's own wave mesh, the page's frame at 22:00 on 24 September is RPCS3's screenshot of
 that moment, its backdrop to a level or two of 255 and its wave with the same golden fringes; at
 17:09 on 23 September its backdrop is the screenshot's to two levels, five in the top left corner.
 Under the music, with the page's own wave, the top of the screen is the screenshots' of 23:34 and
 23:44 on 23 September to 3 levels on average and 9 at most, what is left being the glare of a wave
-that is not the console's of the moment.
+that is not the console's of the moment. At Theme Settings' Brightness -3, at 11:37 on 3 October,
+the page's backdrop is the screenshot's wherever it shows alone, to a level on average and 3 at
+most, over 445 patches; without the fade it would be 72 to 91 levels brighter in red. Under a
+second into the music's way out, at 11:50:20 on 3 October, the top of the screen is the
+screenshot's to 6 levels (rms), the program's ease and the colours' crossfade both under way.
 
 The other presets, a month's gradient or the RGB sliders, draw that gradient into the same buffer as
 they are, and the passes after the wave go over them all the same.

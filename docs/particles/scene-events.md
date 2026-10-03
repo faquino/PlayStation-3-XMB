@@ -40,8 +40,8 @@ and every place they fetch the scene's interface is accounted for.
 - event 0 is the menu. Sub-event 9 is the D-pad step: `explore_plugin`, the XMB's menu, sends it
   whenever the focus moves (`0x554e4`, through the interface it keeps at `0x2deec0`, from the
   focus handlers `0x592c8`, `0x5c908` and `0x5dc80`), and `xmb_plugin` sends it too (`0x2638`)
-  - see [The controller](controller.md#the-controller). Sub-events 2, 3 and 7 are the particles' fade - see
-  [The particles' fade](#the-particles-fade) - and 6 and 4 are Theme Settings' Colour and Date and
+  - see [The controller](controller.md#the-controller). Sub-events 2, 3 and 7 are the scene's fade - see
+  [The fade](#the-fade) - and 6 and 4 are Theme Settings' Colour and Date and
   Time Settings, which set the moment the day cycle shows - see
   [Theme Settings' Colour stops the clock](day-cycle.md#theme-settings-colour-stops-the-clock);
 - event 1 is the cold boot (`page_coldboot`, `anim_coldboot2`, the cold-boot sounds), which
@@ -59,23 +59,20 @@ and every place they fetch the scene's interface is accounted for.
 The music visualizer, `soundvisualizer_plugin`, drives the scene through the interface's first
 two functions (`0xe690`, `0xe4b8`) rather than through the handler.
 
-## The particles' fade
+## The fade
 
-**Verified.** `_Color`, which both passes multiply their colour by, is an animation of the
-particle object (`+0xd0`, written to B+0x1340 every frame by `0x31494`) that event 0 of the
-scene's interface starts through `0x1afdc`:
+**Verified.** Event 0 of the scene's interface fades the whole scene: one call (`0x1afdc`) starts
+the particles' fade and the wave's renderer's alike, towards the same grey over the same time.
 
 - sub-event 3 takes it to black and sub-event 2 back to the scene's brightness, each over the
-  time its argument carries, in milliseconds;
+  time its argument carries, in milliseconds, and each holds the scene's clock until that time has
+  run - see [Theme Settings' Colour stops the
+  clock](day-cycle.md#theme-settings-colour-stops-the-clock);
 - sub-event 7 sets the brightness to 1 - 0.15 × its argument, 0 to 5, and fades to it over 1
   second. It is Theme Settings' Brightness, whose six labels are Normal and -1 to -5:
   `sysconf_plugin` sends it as the setting changes (`0x11110`) and keeps it in the registry
   (key 0x60), and `system_plugin` sends it as it applies the theme (`0x88f4`, `0x9340`). The
   scene has `system_plugin` dim the wallpaper by the same brightness too (`0x6b08`).
-
-A fade runs from where `_Color` stands to (b, b, b, 0) or to zero with the factors' smoothstep
-(`0x2b658`, `0x2c1f8`) on the frame's time, and one of no time lands on the next frame. The
-scene starts at brightness 1 (`0x4050`), and the three savestates read (1, 1, 1, 0).
 
 `system_plugin` sends sub-events 3 and 2 from two functions of its interface, +0x1c (`0x6db4`)
 and +0x20 (`0x852c`), which also hide or show the theme's background pages. Their callers are
@@ -84,8 +81,22 @@ the modules that take the screen: the video player (200 ms), the web browser and
 What's New's board (200 ms out, back at once) and others at 100 ms. When the theme's wallpaper
 goes, `system_plugin` sends 3 with no time and then 2.
 
-The same call fades the wave's renderer, the `lib/moyou/lines*` programs (`0x4fe2c`), through
-three animations of its own; how the wave uses them is not followed.
+**The particles.** `_Color`, which both passes multiply their colour by, is an animation of the
+particle object (`+0xd0`, written to B+0x1340 every frame by `0x31494`). A fade runs from where
+`_Color` stands to (b, b, b, 0) or to zero with the factors' smoothstep (`0x2b658`, `0x2c1f8`) on
+the frame's time, and one of no time lands on the next frame. The scene starts at brightness 1
+(`0x4050`), and the three savestates read (1, 1, 1, 0).
+
+**The wave and the backdrop.** The wave's renderer, the object that draws the backdrop and the
+passes after the wave, keeps three animations of its own, one a channel (`+0x270`, `+0x290` and
+`+0x2b0`, which `0x4fe2c` starts through `0x4fb8c`). Each runs from where it stands to the grey
+sent, with the same smoothstep (`0x453ac`), and one of no time lands at once. Each frame moves
+them on by the frame's time and keeps them as a colour (`+0x260`, `0x56f1c`) before the backdrop
+is drawn, and `BACKGROUND.mnu`'s four colours reach the composite multiplied by it (`0x4fec8` to
+`0x50000`) - see [The composite](../wave/postprocess.md#the-composite). So the backdrop and the
+wave's light fade with the particles, ahead of the tone curve. The animations start at black
+(`0x4fb54`). Every capture taken at Normal has them at 1, and the one taken at -3, at 11:38 on 3
+October, has them and `_Color` at 0.55.
 
 ## What's New's board
 

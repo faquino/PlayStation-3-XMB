@@ -65,7 +65,10 @@ the passes after the wave run on the sets blended by the factor `BACKGROUND.mnu`
 wave](../wave/postprocess.md#what-hdrmnu-drives). A parameter a set's file leaves out takes the base file's value,
 and one the base file leaves out too the code's default: so `BACKGROUND.mnu`'s day and night
 parameters, which only the day's sets and a few others carry - see [What the uniforms
-read](../background/uniforms.md#the-day-and-the-night).
+read](../background/uniforms.md#the-day-and-the-night). Each blend then holds the parameter to the
+range `0x225a4` registered with its default (`0x1dd78`, which the blend calls): of `BACKGROUND.mnu`'s
+parameters only `DAYSPREAD` has a value outside it, its default, so a blend towards it stops at the
+range's end. The ranges of the other files' parameters are not read.
 
 A set put in at once resets each parameter to its default and hands its values over as where the
 blend starts rather than as targets (`0x5245c`), which mode 1 does not read. **`coldboot1` takes
@@ -113,10 +116,10 @@ the moment:
 - the cold boot, from `BootBG1` or `BootBG2` until `ShowGUI` lets go at 5.5 seconds;
 - a game's or another content's boot, events 2 and 3;
 - a moment Date and Time Settings is showing - sub-event 4, below;
-- a fade of sub-event 2 or 3, until a fade back has run its time: sub-event 2 sets a timer for it,
-  whose callback (`0x2e60`) lets go;
+- a fade of sub-event 2 or 3, until it has run its time: each starts the same timer for its
+  milliseconds (`0x15ad4`), whose callback (`0x2e60`) lets go;
 - the music, event 4, while its set is in or on its way out - see [The music
-  set](parameter-sets.md#the-music-set);
+  set](music.md);
 - the first five seconds after the start-up, which the timer counts down (`+0x20`, set to 5).
 
 The cold boot's own handlers read the clock whatever the colour (`BootBG2`, `NormalBG` and
