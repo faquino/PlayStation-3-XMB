@@ -44,7 +44,7 @@ What `ps3xmbwave/` ports as verified and what it models, file by file;
 | `spline.js` | `lines1.vpo` and `lines1.fpo`, re-authored, the additive blend and `_Encode`. The lines start afresh as the XMB's start begins. The renderer's fade. | `_Stripes` and `_FresLUT`, fitted. The fade's start, at the scene's brightness. |
 | `postprocess.js` | `LinesController`, the preexpose tables, `GlareSourcePre`, the levels, `Gaussian`, `AccGlare` and `ToneApplyDisplay`, re-authored; their uniforms from the sets, checked against the captures, the four colours times the scene's fade. | The wave's buffer read bilinearly, not through a convolution; the glare's levels added in one pass; its textures clamped to their edge, as RPCS3 runs them. |
 | `spline-settings.js` | `LINE1.mnu`'s, `HDR.mnu`'s and `BACKGROUND.mnu`'s parameters under their own names, with the base set's values. | |
-| `scene-themes.js` | Every set's `LINE1.mnu`, `HDR.mnu` and `BACKGROUND.mnu`, as their differences from the base, put in as the particles' sets are: the day cycle, the boot sequences, the music. The cold boot's ramp, checked against the captures. The scene's fade, sent to the wave and the particles alike. | The blends' windows on the page's seconds. |
+| `scene-themes.js` | Every set's `LINE1.mnu`, `HDR.mnu` and `BACKGROUND.mnu`, as their differences from the base, put in as the particles' sets are: the day cycle, the boot sequences, the music. The cold boot's ramp, and its end on the clock's first tick after `ShowGUI`, checked against the captures. The scene's fade, sent to the wave and the particles alike. | The blends' windows on the page's seconds. |
 
 ## Still missing
 
@@ -64,8 +64,8 @@ wave on screen:
 - **The glare's edges on the RSX.** Its textures are set to CLAMP, which RPCS3 runs as
   clamp-to-edge and the page follows; the RSX's own blends the edge with the border colour, which
   would dim the glare along the screen's edges - see [The glare](docs/wave/postprocess.md#the-glare).
-- **The blends' clock.** Under RPCS3 the sets' blends ran 2.4 to 2.7 times ahead of the lines'
-  steps, where the code moves both by the frame's time - see [How one set blends into
+- **The music's blend clock.** Under RPCS3 the music's blend ran ahead of the lines' steps as it
+  came in, where the code moves both by the same frame's time - see [How one set blends into
   another](docs/particles/day-cycle.md#how-one-set-blends-into-another).
 - **A run from the reset.** What, beyond the cold boot's ramp of `PERTURBATION`, keeps a run from
   the reset from landing on a savestate - see [From the start](docs/wave/lines.md#from-the-start).

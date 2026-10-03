@@ -65,7 +65,9 @@ So:
   seconds - see [Theme Settings' Colour stops the
   clock](day-cycle.md#theme-settings-colour-stops-the-clock); how the two combine runs in `qglbase`.
   The cold boot then takes it to `coldboot1` at once and, 4 seconds in, over 7.5 seconds into the
-  cycle - the opening the captures show, since `coldboot1` and `coldboot2` carry the same
+  cycle, which the clock's first tick after `ShowGUI` cuts short, putting the cycle's set in over a
+  second - see [How one set blends into another](day-cycle.md#how-one-set-blends-into-another).
+  That is the opening the captures show, since `coldboot1` and `coldboot2` carry the same
   `PARTICLES.mnu`. Event 10's code names `black` too.
 - **Launching a game** takes the particles to `gameboot2` in a quarter of a second and, half a
   second in, to `gameboot3` over 1.25 seconds - `delta time` 0.08, nine times the base - until the

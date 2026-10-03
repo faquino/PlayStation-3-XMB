@@ -156,15 +156,17 @@ window.PARTICLE_THEME_OPTIONS = [
   const SEQUENCES = {
     // anim_coldboot2, which event 1 starts. BootBG2 at 0 starts the wave's lines afresh, which `spline.js` does as the
     // sequence starts, puts coldboot1 in at once and coldboot2 under mode 1; NormalBG2 at 4 s puts mode 2 back and the
-    // cycle's set in over 7.5 s. The scene starts in black, and coldboot1 is black too for the particles bar `emit vel
-    // mul`.
+    // cycle's set in over 7.5 s. Those 7.5 s are never run out: ShowGUI lets go of the scene's clock at 5.5 s, and its
+    // next tick stops the sequence and puts the cycle's set in over a second from where the parameters stand (0x11600,
+    // 0x39d6c), so the sequence ends on that tick (`onTick`). The scene starts in black, and coldboot1 is black too for
+    // the particles bar `emit vel mul`.
     coldboot: {
       steps: [
         { at: 0, set: 'coldboot', seconds: 0 },
         { at: 0, set: 'coldboot2', approach: 0.01 },
         { at: 4, set: 'theme', seconds: 7.5 },
       ],
-      end: 11.5,
+      onTick: true,
       next: 'none',
     },
     // anim_gameboot, event 2: BG2 at 0, gameboot2 over 0.25 s; BG3 at 0.5 s, gameboot3 over 1.25 s; the game takes
@@ -183,7 +185,8 @@ window.PARTICLE_THEME_OPTIONS = [
     },
   };
   const FRAME_HZ = 60;
-  // ShowGUI, 5.5 s into the XMB's start, lets go of the scene's clock, which the start holds (0x11c58).
+  // ShowGUI, 5.5 s into the XMB's start, lets go of the scene's clock, which the start holds (0x11c58); the clock's
+  // next tick ends the start.
   const BOOT_CLOCK_HOLD = 5.5;
   // As it begins, the XMB's start hands the backdrop 10:00 of the day, over 7.5 s (BootBG2, 0x110dc).
   const BOOT_HOUR = 10;
@@ -474,6 +477,13 @@ window.PARTICLE_THEME_OPTIONS = [
     }
   }
 
+  // When the sequence playing is over: at its `end`, or, for the XMB's start, on the scene clock's first tick once
+  // ShowGUI has let go of it - the tick `xmbBackdropMoment` hands the backdrop the moment on, at a whole second.
+  function sequenceEnd(p) {
+    const seq = SEQUENCES[p.name];
+    return seq.onTick ? Math.ceil(p.start + BOOT_CLOCK_HOLD) : p.start + seq.end;
+  }
+
   // Plays the sequence `scene.sequence` names, and hands over to the next one, or to the theme, when it is over.
   // Returns true when it wrote, the hand-over into `scene.sequence` included.
   function playSequence(scene, layers, date, now) {
@@ -488,7 +498,7 @@ window.PARTICLE_THEME_OPTIONS = [
         appliedPair = null; // the theme writes again when the sequence is over
       }
       if (!playing) return wrote;
-      if (now - playing.start < SEQUENCES[playing.name].end) break;
+      if (now < sequenceEnd(playing)) break;
       scene.sequence = SEQUENCES[playing.name].next;
       wrote = true;
     }

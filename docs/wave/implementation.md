@@ -100,8 +100,11 @@ every 2 seconds for 10 more. The two captures that caught the music coming in ar
 lines from a start of one's own, and fed the console's, read out of its module into `re-work/`,
 the page's wave lands on every source's band to the hundredth - middle, height, its four quarters'
 heights and depth - up to a lattice time of 6, some 50 seconds after the cold boot, and on the
-pooled figures at rest from there on: a median depth of 8.69 against 8.65, and 0.00064 a frame on
-screen against 0.00064. What is left below is the start's.
+pooled figures at rest from there on: a median depth of 8.67 against 8.65, and 0.00064 a frame on
+screen against 0.00064. The two captures of the XMB's start taken after `ShowGUI` land to the
+thousandth, once the clock's first tick ends the start there - see [How one set blends into
+another](../particles/day-cycle.md#how-one-set-blends-into-another). What is left below is the
+start's.
 
 At rest under the day cycle, the console's 10 captures and 8 savestates - 26 frames, and the 8
 pairs the savestates hold for its motion - against 108 frames of the page's. On screen, each figure
@@ -109,37 +112,37 @@ is worked out per frame and given as its range over the frames:
 
 | On screen | `wave-reverse.js` | Console |
 |---|---|---|
-| Share of the mesh on screen | 0.56 to 0.63 | 0.56 to 0.61 |
-| Middle of the band (median y) | -0.395 to 0.222 | -0.191 to 0.166 |
-| Height of the band (5th to 95th percentile of y) | 0.263 to 0.642 | 0.312 to 0.652 |
-| Rise, the right quarter's middle less the left's | -0.383 to 0.477 | -0.416 to 0.406 |
-| Left quarter: middle, height | -0.47 to 0.24, 0.18 to 0.46 | -0.30 to 0.24, 0.27 to 0.54 |
-| Centre-left quarter | -0.51 to 0.31, 0.20 to 0.40 | -0.28 to 0.27, 0.20 to 0.43 |
-| Centre-right quarter | -0.46 to 0.33, 0.20 to 0.48 | -0.16 to 0.23, 0.25 to 0.43 |
-| Right quarter | -0.27 to 0.35, 0.20 to 0.46 | -0.20 to 0.23, 0.22 to 0.39 |
-| Reach of the mesh in x, left / right | -2.41 to -1.59 / 1.52 to 2.01 | -3.21 to -1.91 / 1.43 to 1.88 |
+| Share of the mesh on screen | 0.57 to 0.62 | 0.56 to 0.61 |
+| Middle of the band (median y) | -0.385 to 0.222 | -0.191 to 0.166 |
+| Height of the band (5th to 95th percentile of y) | 0.264 to 0.662 | 0.312 to 0.652 |
+| Rise, the right quarter's middle less the left's | -0.384 to 0.522 | -0.416 to 0.406 |
+| Left quarter: middle, height | -0.46 to 0.24, 0.17 to 0.46 | -0.30 to 0.24, 0.27 to 0.54 |
+| Centre-left quarter | -0.45 to 0.31, 0.20 to 0.39 | -0.28 to 0.27, 0.20 to 0.43 |
+| Centre-right quarter | -0.41 to 0.33, 0.20 to 0.42 | -0.16 to 0.23, 0.25 to 0.43 |
+| Right quarter | -0.23 to 0.36, 0.20 to 0.43 | -0.20 to 0.23, 0.22 to 0.39 |
+| Reach of the mesh in x, left / right | -2.30 to -1.59 / 1.51 to 1.95 | -3.21 to -1.91 / 1.43 to 1.88 |
 
 In space and in motion, each figure is pooled over every frame, or every pair of frames:
 
 | Pooled (percentiles) | `wave-reverse.js` | Console |
 |---|---|---|
-| View depth on screen, 5th / 50th / 95th | 7.48 / 8.56 / 9.68 | 7.45 / 8.65 / 9.95 |
-| On screen, NDC per frame, 50th / 95th | 0.00063 / 0.00120 | 0.00064 / 0.00119 |
-| Share of that sideways, median | 0.39 | 0.39 |
+| View depth on screen, 5th / 50th / 95th | 7.50 / 8.56 / 9.70 | 7.45 / 8.65 / 9.95 |
+| On screen, NDC per frame, 50th / 95th | 0.00064 / 0.00120 | 0.00064 / 0.00119 |
+| Share of that sideways, median | 0.38 | 0.39 |
 | In space, per frame, 50th / 95th | 0.0033 / 0.0062 | 0.0032 / 0.0060 |
-| The same over `delta time`, the emitter's units | 0.372 / 0.701 | 0.365 / 0.678 |
+| The same over `delta time`, the emitter's units | 0.372 / 0.703 | 0.365 / 0.678 |
 
 With a track playing, under `music_1`, the console's 5 captures and a savestate, 7 frames, against
 36 of the page's:
 
 | Under `music_1` | `wave-reverse.js` | Console |
 |---|---|---|
-| Middle of the band (median y) | -0.004 to 0.395 | 0.075 to 0.376 |
-| Height of the band | 0.265 to 0.581 | 0.333 to 0.600 |
-| Rise | -0.183 to 0.384 | -0.150 to 0.416 |
-| Reach of the mesh in x, left / right | -2.80 to -1.93 / 1.47 to 1.77 | -4.36 to -2.16 / 1.39 to 1.86 |
-| View depth on screen, 5th / 50th / 95th | 6.51 / 8.06 / 9.88 | 6.22 / 8.20 / 10.53 |
-| In space, per frame, 50th / 95th | 0.0054 / 0.0099 | 0.0045 / 0.0079 |
+| Middle of the band (median y) | -0.016 to 0.403 | 0.075 to 0.376 |
+| Height of the band | 0.242 to 0.590 | 0.333 to 0.600 |
+| Rise | -0.207 to 0.399 | -0.150 to 0.416 |
+| Reach of the mesh in x, left / right | -2.88 to -2.11 / 1.42 to 1.78 | -4.36 to -2.16 / 1.39 to 1.86 |
+| View depth on screen, 5th / 50th / 95th | 6.47 / 8.06 / 9.81 | 6.22 / 8.20 / 10.53 |
+| In space, per frame, 50th / 95th | 0.0054 / 0.0100 | 0.0045 / 0.0079 |
 
 At the XMB's start, capture by capture, at the same lattice time - 0.138 to 0.902, 69 to 451
 steps after the reset:
@@ -150,13 +153,13 @@ steps after the reset:
 | console | 0.64 | -0.103 | 0.456 | -0.306 | 9.25 |
 | 18:21:07, page | 0.60 | 0.016 | 0.345 | -0.159 | 8.83 |
 | console | 0.60 | -0.022 | 0.358 | -0.205 | 9.11 |
-| 18:22:52, page | 0.61 | 0.029 | 0.365 | 0.170 | 8.67 |
+| 18:22:52, page | 0.60 | 0.027 | 0.362 | 0.173 | 8.62 |
 | console | 0.60 | -0.012 | 0.363 | 0.139 | 9.05 |
 | 19:34:37, page | 0.63 | -0.045 | 0.419 | -0.281 | 8.98 |
 | console | 0.63 | -0.105 | 0.459 | -0.308 | 9.24 |
 | 19:34:45, page | 0.60 | 0.024 | 0.318 | -0.114 | 8.82 |
 | console | 0.60 | -0.012 | 0.337 | -0.159 | 9.11 |
-| 19:34:54, page | 0.60 | 0.022 | 0.391 | 0.227 | 8.62 |
+| 19:34:54, page | 0.60 | 0.020 | 0.387 | 0.228 | 8.57 |
 | console | 0.60 | -0.019 | 0.387 | 0.189 | 9.02 |
 
 Known differences, all of them the start's:
@@ -168,7 +171,7 @@ Known differences, all of them the start's:
   console's state's mean place and velocity line by line onto the made start brings the band's
   height back, but strains the springs across the lines, and the wave then moves 15% too fast at
   rest.
-- **Its far end reaches less far to the left on screen**, -2.41 at most against -3.21.
+- **Its far end reaches less far to the left on screen**, -2.30 at most against -3.21.
 - **Under the music it moves faster than the console's**, 0.0054 a frame against 0.0045. The page
   puts the music on as its start ends, where the console's had run its lines for minutes under the
   cycle first; the console's own start gives the same, 0.0056.

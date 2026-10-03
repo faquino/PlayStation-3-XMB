@@ -84,18 +84,29 @@ hold at once all the same, measured.** Mode 1 moves a parameter by (target - whe
 with 0.99^n of the way to `coldboot2`'s still to go: n is 61 and 184 in one boot, 64 and 220 in
 another, whole numbers to within 0.001 and the same for the three, and `BACKGROUND.mnu`'s colours
 give the same factor. In the capture of 18:22:52 they agree again, on `NormalBG2` having come 228
-frames in and on its smoothstep being 96.286 per cent of the way to the cycle's set.
+frames in, and on the parameters being 96.286 per cent of the way from there to the cycle's set.
 
-**The windows' clock is not settled.** The layer's clock moves on by the frame's time
-(`0x3a06c`), the same time the scene hands the wave's lines through the layer's update
-(`0x14820`), and the lines step 60 times a second of it - so a 7.5-second blend should last 450
-of their steps. Under RPCS3 it does not. The lattice's time, which counts the lines' steps - see
-[The time](../wave/ffd.md#the-time) - puts the capture of 18:22:52 406 steps after the reset, where
-the blend's progress needs about 650; and the two captures that caught the music coming in are 90
-steps apart, where the 5.5-second smoothstep moved through 245 frames' worth. Both blends ran 2.4
-to 2.7 times ahead of the lines. In the cold boot's first 4 seconds the two agree instead: the
-lines stepped 73 and 205 times by frames 61 and 184, as frames of a fiftieth to a fifty-fifth of
-a second give. `ps3xmbwave/` keeps both on the page's seconds.
+**The clock's first tick ends the XMB's start.** `NormalBG2`'s 7.5 seconds are never run out:
+once `ShowGUI` lets go of the scene's clock at 5.5 seconds, its next tick puts the cycle's set in
+over a second (`0x11c58`, `0x11600`), and `0x39d6c`, which does it for each of the scene's layers,
+stops the sequence playing, sets the layer's clock to 0 and opens the second's window from where
+the parameters stand (`0x38158`, `0x38304`). The two boot captures taken after `ShowGUI` agree:
+at 18:22:52, 405 of the lines' steps after the reset, 96.3 per cent is where a tick at 5.87
+seconds leaves the parameters, and at 19:34:54, 451 steps in, they are on the cycle's set, where
+`NormalBG2`'s smoothstep alone would have them a third and not half of the way. From the
+console's own start the page draws both to the thousandth - see [Against the
+console](../wave/implementation.md#against-the-console).
+
+**And the clocks keep step.** Every frame the scene hands a layer's update and the layer's clock
+the same frame time, in one call (`0x14820`, and `0x143c4` for the layers in its list, then
+`0x3a06c`), and the renderer passes it on unchanged to the lines' accumulator and the backdrop's
+ease (`0x27d64`, `0x56f1c`, `0x53778`, `0x52ef0`). Under RPCS3 at rest that time is 1/60 of a
+second exactly: the lines of all nine savestates hold their last frame's time × 60 as 1.0000001,
+and every resting capture's backdrop `_Alpha` is the smoothstep of a whole number of sixtieths of
+its ease. What is not settled is the music coming in under RPCS3: between its two captures the
+lines stepped about 90 times while the 5.5-second blend moved 4.07 seconds, and the particles
+trail the backdrop there by some 0.05 seconds of the blend, a frame's worth if its frames ran that
+long, where on the way out they trail by 1/60. `ps3xmbwave/` keeps both on the page's seconds.
 
 ## Theme Settings' Colour stops the clock
 

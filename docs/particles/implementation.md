@@ -58,8 +58,8 @@ on each frame that passes its draw, simply keeps it that way.
   on the particles and the wave, as [What puts each set in](parameter-sets.md#what-puts-each-set-in)
   reads them: each step blends from wherever the parameters stand, the cold boot's first 4
   seconds by mode 1's 1% a frame, which leaves the particles where `coldboot1` put them, and the
-  start hands over to the theme at 11.5 seconds, once its blend into the cycle is done. What is
-  modelled:
+  start hands over to the theme on the clock's first tick after `ShowGUI`, which puts the cycle's
+  set in over a second, as the console's does. What is modelled:
   - mode 1's frames, taken at 60 a second;
   - what follows a launch: the content takes the screen, and the page brings the XMB back
     through its start at once, as the console does when the content quits;
@@ -79,7 +79,7 @@ on each frame that passes its draw, simply keeps it that way.
   - the backdrop: that `0x10900`'s moment is what `_MonthTime` and `_NightDayBlend` read, which
     puts it on the month's own daytime gradient, at once;
   - what holds the clock: only the music and a sequence, not a boot's tail, the fades or the first
-    five seconds; and the XMB's start takes a colour in at 11.5 seconds, not after `ShowGUI`.
+    five seconds.
 - **Flow grid.** Ported: 32 × 16 cells of signed bytes, sampled the way the task samples them,
   decayed by 0.98 a frame, and written by every icon that moves - see
   [The flow grid](flow-grid.md#the-flow-grid). At rest it stays empty, as the console's does. What is
