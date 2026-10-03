@@ -10,8 +10,11 @@ and what is modelled. This is the detail.
 
 - the lines - see [The lines](lines.md): the 60 Hz steps, springs, noise, integration and ends,
   the accumulator, and the shaping of what the task receives;
-- the lattice, from `ffd_shader1`'s formula at ten times the clock the frame began with - see
-  [The lattice](ffd.md);
+- the lattice, from `ffd_shader1`'s formula at ten times the clock the frame began with, and its
+  crossing over as the clock goes back to 0, every 14 minutes at night's `TIMESTEP` - see [The
+  lattice](ffd.md). Without it the page's wave jumped from one shape to another in a frame, its
+  vertices 95 pixels on average at 1920 × 1080; with it they move 1.1 pixels a frame on average at
+  most through the 200 frames, against 0.9 before them;
 - the deformation, the matrix and the surface, into 128 × 128 vertices in clip space with their
   normals, laid out as `spline.elf` writes them - see [The SPU task](spu-task.md);
 - the mesh's texture coordinates and its index buffer - see [The mesh](output.md#the-mesh);
@@ -58,6 +61,8 @@ another](../particles/day-cycle.md#how-one-set-blends-into-another) - and, throu
   minutes. A start made under the day cycle's values, as the page's was before, keeps its lines
   long and slow: a third under the console's speed for minutes after the reset.
 - **At most four steps a frame.** The console runs as many as the frame's time gives.
+- **The crossing over's frames.** The console takes the old lattice's share down by 0.005 each
+  frame it draws; the page does at 60 frames a second, whatever its own rate.
 - **The deformation divides exactly.** The SPU's reciprocal estimate is about 1e-4 off - see [The
   deformation](spu-task.md#the-deformation).
 - **The textures are fitted.** The firmware's are left out of the repository. `_Stripes`' rows are

@@ -11,12 +11,18 @@ the program's live `_Time`, gives every one of the lattice's 539 points to 5e-5.
 
 Every frame capture draws, before the wave:
 
-- draw 2, `ffd_shader1.fpo`, a quad over the target;
-- draw 3, `ffd_alpha_blend.fpo`, which mixes two textures, `_TexA` and `_TexB`, by `_Alpha` (not
-  followed).
+- draw 2, `ffd_shader1.fpo`, a quad over a 128 × 1 target: the lattice at the time;
+- draw 3, `ffd_alpha_blend.fpo`, which writes `_TexA` + (`_TexB` - `_TexA`) × `_Alpha` into the
+  target the PPU reads back, `_TexA` being draw 2's lattice and `_TexB` the one [the crossing
+  over](#the-crossing-over) leaves behind.
 
-`LINE1.mnu`'s `FFD SHADER` picks among `ffd_shader0` to `ffd_shader3` (inferred from the name).
-Every set in the firmware has it at 1, and the other three are not in RPCS3's cache.
+`_Alpha` is 0 while no crossing over runs, so draw 3 passes draw 2's lattice through. It reads 0
+in every capture.
+
+`LINE1.mnu`'s `FFD SHADER` picks the program from a table of four (`0xa0f28`, the index held to
+3), which the renderer's set-up fills with `ffd_shader0` to `ffd_shader3` in that order and loads
+`ffd_alpha_blend` beside (`0x570f8`). Every set has it at 1, so the other three never run, and
+RPCS3's cache holds none of them. All four take `_Time` and `_UVW` and nothing else.
 
 ## The program
 
@@ -48,5 +54,37 @@ volume reach its edges, and puts the count, 539, in the block's next word.
 reads 0.438606 and `_Time` 4.38406, ten times the clock a step back, and the lattice in the task's
 local store is the program's output a step before that, at 4.38206 - the target being read back a
 frame late (inferred). Each step adds `TIMESTEP` × 0.001 to T, 0.12 a second at night's `TIMESTEP`
-of 2. The lines' clock wrapping at 10 should take T back to 0 at 100, about every 14 minutes (not
-checked).
+of 2. The clock goes back to 0 past 10, so T goes back to 0 past 100, about every 14 minutes at
+that `TIMESTEP`. The lattice does not jump when it does: it crosses over.
+
+## The crossing over
+
+**Verified** in the code. The lattice is drawn by an object of its own, at the lines object's
++0x00 - see [The object](lines.md#the-object). Its +0x0c is the program drawn now and +0x10 the
+one crossed over from, +0x14 the old lattice's share, +0x18 a flag, and +0xb4 and +0xb8 the time
+the lattice is drawn at and the old time.
+
+Each frame, after the lines' steps, `0x4c4e4` hands `0x4a220` ten times the clock:
+
+1. the old time moves on as far as the new one has, and the new time becomes the one handed over;
+2. the program draws the lattice at the new time;
+3. while the share is above 0, the old program draws it again at the old time into a second
+   target, and the share loses 0.005;
+4. `ffd_alpha_blend` mixes the two, `_Alpha` being the smoothstep of the share before it lost its
+   step, 3s² - 2s³.
+
+Setting the lines' clock (`0x4b6a4`) sets the lattice's time too, and starts a crossing over
+(`0x47af0`): the old time takes the time the lattice was last drawn at, the new one the clock's
+value, the share 1, and the old program is the one drawn now. So when the clock goes back to 0,
+the lattice is drawn at both times, the old one carrying on past 100, and moves from the one to
+the other over 200 frames, 3.3 seconds at 60 frames a second. A change of `FFD SHADER` does the
+same between two programs (`0x480ec`, from the parameter's copy at `0x2a204`), and one that comes
+during a crossing over keeps the mix as it stands and crosses over from that, the flag set.
+
+The reset (`0x4e624`) sets the clock twice, to a time that goes with its state and then to 0,
+and then calls the crossing over off: the share and both times to 0 (`0x4eae0`). Nothing crosses
+over as the lines start afresh, and the state's time goes nowhere.
+
+Every savestate agrees, its object read beside its lines: the share is 0, the program 1, the new
+time ten times the clock and the old time equal to it, as only a run that has not passed 10 since
+the reset leaves them - one that had would leave the old time 100 ahead.

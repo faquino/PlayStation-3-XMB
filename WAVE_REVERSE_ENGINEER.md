@@ -40,7 +40,7 @@ What `ps3xmbwave/` ports as verified and what it models, file by file;
 
 | File | Verified | Modelled |
 |---|---|---|
-| `wave-reverse.js` | The lines, from their 60 Hz steps to the grid the task receives; the lattice; the deformation, the matrix and the B-spline surface, into the 128 × 128 mesh `spline.elf` writes; its texture coordinates and index buffer. Each checked against the savestates. | The lines' start, made as the console's was - run at a `TIMESTEP` of 7.4 up to its clock, the first and last lines averaged - with the console's mean place and velocity; at most four steps a frame; the deformation divides exactly. |
+| `wave-reverse.js` | The lines, from their 60 Hz steps to the grid the task receives; the lattice, and its crossing over as the clock goes back to 0; the deformation, the matrix and the B-spline surface, into the 128 × 128 mesh `spline.elf` writes; its texture coordinates and index buffer. Each checked against the savestates. | The lines' start, made as the console's was - run at a `TIMESTEP` of 7.4 up to its clock, the first and last lines averaged - with the console's mean place and velocity; at most four steps a frame; the crossing over's frames at 60 a second; the deformation divides exactly. |
 | `spline.js` | `lines1.vpo` and `lines1.fpo`, re-authored, the additive blend and `_Encode`. The lines start afresh as the XMB's start begins. The renderer's fade. | `_Stripes` and `_FresLUT`, fitted. The fade's start, at the scene's brightness. |
 | `postprocess.js` | `LinesController`, the preexpose tables, `GlareSourcePre`, the levels, `Gaussian`, `AccGlare` and `ToneApplyDisplay`, re-authored; their uniforms from the sets, checked against the captures, the four colours times the scene's fade. | The wave's buffer read bilinearly, not through a convolution; the glare's levels added in one pass; its textures clamped to their edge, as RPCS3 runs them. |
 | `spline-settings.js` | `LINE1.mnu`'s, `HDR.mnu`'s and `BACKGROUND.mnu`'s parameters under their own names, with the base set's values. | |
@@ -67,13 +67,8 @@ wave on screen:
 - **The blends' clock.** Under RPCS3 the sets' blends ran 2.4 to 2.7 times ahead of the lines'
   steps, where the code moves both by the frame's time - see [How one set blends into
   another](docs/particles/day-cycle.md#how-one-set-blends-into-another).
-- **The FFD's other programs.** `ffd_alpha_blend.fpo`, drawn every frame after `ffd_shader1`,
-  and `ffd_shader0`, 2 and 3, which no set picks - see [The draws](docs/wave/ffd.md#the-draws).
-- **The clock's wrap.** What `0x47af0` does when the lines' clock passes 10 and starts again,
-  about every 14 minutes at night's `TIMESTEP`, and with the time a reset hands it - see [A
-  step](docs/wave/lines.md#a-step) and [The time](docs/wave/ffd.md#the-time). No savestate has run
-  that long since a cold boot. Also what, beyond the cold boot's ramp of `PERTURBATION`, keeps a run
-  from the reset from landing on a savestate - see [From the start](docs/wave/lines.md#from-the-start).
+- **A run from the reset.** What, beyond the cold boot's ramp of `PERTURBATION`, keeps a run from
+  the reset from landing on a savestate - see [From the start](docs/wave/lines.md#from-the-start).
 
 
 ## Keeping these notes

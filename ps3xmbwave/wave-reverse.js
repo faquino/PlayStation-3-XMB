@@ -11,6 +11,7 @@
   const COUNT = N * N;
   const STEP_HZ = 60; // the accumulator gains the frame's time x 60, and a step runs per whole unit (0x4f814)
   const MAX_STEPS_PER_FRAME = 4; // not the console's: a long frame here would otherwise run its steps all at once
+  const FRAME_HZ = 60; // not the console's: what it does once each frame it draws, the page does 60 times a second
   const CLOCK_RATE = 0.0001; // the clock gains TIMESTEP x 0.0001 a step (0x4bed0)...
   const CLOCK_WRAP = 10; // ...and goes back to 0 past 10 (0x4b6a4)
   const SMOOTHING = 0.1; // the smoothed clock moves a tenth of the way to the clock each step (0x4bce4)
@@ -26,7 +27,11 @@
   const LATTICE = [8, 4, 4]; // ffd_shader1's control points, at X = i/8, Y = j/4, Z = k/4 (0x493c4)
   const LX = 11; // and as the task receives them, each axis's ends repeated: 11 x 7 x 7 (0x47b1c)
   const LYZ = 7;
-  const LATTICE_TIME = 10; // _Time is ten times the lines' clock as the frame begins
+  const LATTICE_TIME = 10; // _Time is ten times the lines' clock as the frame begins (0x4c4e4)
+  // As the clock goes back to 0 the lattice crosses over (0x47af0, 0x4a220): it is drawn at the new time and at the
+  // old one carried on, and ffd_alpha_blend.fpo mixes the two by the smoothstep of the old one's share, which starts
+  // at 1 and loses 0.005 a frame.
+  const CROSS_STEP = 0.005;
   const CELL_LIMIT = 0.999; // spline.elf keeps the normalised point inside the lattice (0x3f7fbe76)
 
   // The camera the particles use too: eye at (0, 0, 2) looking down -z (_Modelview, _ModelviewProjection).
@@ -73,7 +78,30 @@
       prev: new Float32Array(COUNT * 4), // A2, the points before the last step
       v: new Float32Array(COUNT * 4), // A6, their velocities
       clock: 0, smoothed: 0, counter: 0, acc: 0,
+      // the FFD object at +0x00: the time the lattice was last drawn at (+0xb4), the old time carried on (+0xb8) and
+      // the old lattice's share (+0x14)
+      ffd: { time: 0, from: 0, share: 0 },
     };
+  }
+
+  // Setting the clock (0x4b6a4) sets the lattice's time too, which starts its crossing over (0x47af0): the old time is
+  // the one it was last drawn at.
+  function setClock(lines, value) {
+    lines.clock = value;
+    lines.ffd.from = lines.ffd.time;
+    lines.ffd.time = value;
+    lines.ffd.share = 1;
+  }
+
+  // The lattice's frame (0x4a220): the old time moves on as far as the new one has, and while the old lattice has a
+  // share, it goes into the mix through a smoothstep, then loses its step. Returns the old lattice's weight.
+  function crossFrame(ffd, T, dtSec) {
+    ffd.from += T - ffd.time;
+    ffd.time = T;
+    const a = ffd.share;
+    if (a <= 0) return 0;
+    ffd.share = Math.max(0, a - CROSS_STEP * Math.max(dtSec, 0) * FRAME_HZ);
+    return a * a * (3 - 2 * a);
   }
 
   // Each spring pulls i towards j by its stretch, and j back.
@@ -93,7 +121,7 @@
     lines.prev.set(p);
     const dt = s.timestep * CLOCK_RATE;
     lines.clock += dt;
-    if (lines.clock > CLOCK_WRAP) lines.clock = 0;
+    if (lines.clock > CLOCK_WRAP) setClock(lines, 0);
     const near = s.length, far = s.length * FAR_LENGTH;
     const k = s.tension, kFar = s.tension * FAR_TENSION;
     for (let r = 0; r < N; r++) {
@@ -348,6 +376,7 @@
     const control = new Float32Array(COUNT * 4); // the grid as spline.elf leaves it, in clip space
     const latticeCtrl = new Float64Array(LATTICE[0] * LATTICE[1] * LATTICE[2] * 3);
     const lattice = new Float64Array(LX * LYZ * LYZ * 3);
+    const latticeOld = new Float64Array(LX * LYZ * LYZ * 3);
     const weights = new Float64Array(16);
     const matrix = new Float64Array(16);
     const rowPos = new Float64Array(N * MESH * 4);
@@ -392,18 +421,22 @@
       }
     })();
 
-    // The reset (0x4e624): the points and velocities from the start, the clocks, the accumulator and the noise to 0.
+    // The reset (0x4e624): the points and velocities from the start, the clocks, the accumulator and the noise to 0,
+    // and the lattice's crossing over, which setting the clock starts, called off, its times at 0.
     function reset() {
       lines.p.set(start.p);
       lines.prev.set(start.p);
       lines.v.set(start.v);
       lines.clock = lines.smoothed = lines.counter = lines.acc = 0;
+      lines.ffd.time = lines.ffd.from = lines.ffd.share = 0;
     }
     reset();
 
-    // One frame: the lines step, the lattice is drawn at the clock the frame began with, and the task's work follows.
+    // One frame: the lines step, the lattice is drawn at the clock the frame began with - crossing over from the old
+    // one while it has a share - and the task's work follows.
     function update(settings, dtSec, aspect) {
       const T = LATTICE_TIME * lines.clock;
+      const old = crossFrame(lines.ffd, T, dtSec);
       lines.acc = Math.min(lines.acc + Math.max(dtSec, 0) * STEP_HZ, MAX_STEPS_PER_FRAME + 1);
       while (lines.acc > 1) {
         step(lines, settings);
@@ -412,6 +445,10 @@
       }
       receive(lines, settings.ffdParam1, received);
       buildLattice(T, settings, latticeCtrl, lattice);
+      if (old > 0) {
+        buildLattice(lines.ffd.from, settings, latticeCtrl, latticeOld);
+        for (let i = 0; i < lattice.length; i++) lattice[i] += (latticeOld[i] - lattice[i]) * old;
+      }
       deform(received, lattice, settings, deformed, weights);
       buildMatrix(settings, aspect, matrix);
       transform(matrix, deformed, control);

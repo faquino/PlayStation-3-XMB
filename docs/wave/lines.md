@@ -12,7 +12,7 @@ behind a descriptor of 0x30 bytes - a count, 361, then a pointer:
 
 | Offset | Holds |
 |---|---|
-| +0x00 | another object, whose +0xac holds `FFD PARAM 1`'s value - see [What the task receives](#what-the-task-receives) |
+| +0x00 | the object that draws the lattice, whose +0xac holds `FFD PARAM 1`'s value - see [What the task receives](#what-the-task-receives) and [The crossing over](ffd.md#the-crossing-over) |
 | +0x2c, +0x30 | 19 and 19, the points per line and the lines |
 | +0x40 | A0, the grid the task receives |
 | +0xa0 | A2, the points as they were before the last step |
@@ -34,8 +34,12 @@ A0 to the state's points, with w = 1, and A6 to its velocities, with w = 0; A2 a
 of the points; the clock, the smoothed clock, the accumulator and the noise's counter go to 0. The
 scene only ever asks for the second state (`0x50da8`): 361 points at `0x97c18`, then 361
 velocities at `0x98d04`, three floats each. The other two, at `0x95a40` and `0x99df0`, go unused.
-Before zeroing the clock, `0x4e624` hands `0x47af0` a time that goes with the state, 98.62 for the
-second, which it keeps in the object at +0x00 (+0xb4) and nothing below reads.
+`0x4e624` first sets the clock to a time that goes with the state, 98.62 for the second (76.41 and
+90.54 for the others), then, the state in, to 0, and calls off the lattice's crossing over that
+setting the clock starts, so that time goes nowhere - see [The crossing
+over](ffd.md#the-crossing-over). The module still holds the format the states were written out
+in: a C header with a `line…_time`, the grid's size, and the points and velocities as
+`control…_pos[]` and `control…_vel[]` (`0x905b0` to `0x906f8`).
 
 **The second state is these lines, run.** The ends of lines 1 to 17 are where [the
 ends](#a-step) put them at a smoothed clock of 4.37234, to 1e-5. Lines 0 and 18 are one line, their
@@ -74,8 +78,11 @@ add up to.
 `0x4bed0`, in this order. Every point has unit mass; v is its velocity in A6, p its place in A3.
 
 1. A2 takes a copy of A3.
-2. **The clock** gains `TIMESTEP` × 0.0001. Past 10 it is set back to 0 (`0x4b6a4`), which also
-   calls `0x47af0` on the object at +0x00 (not followed).
+2. **The clock** gains `TIMESTEP` × 0.0001. Past 10 it is set back to 0 (`0x4b6a4`), and the
+   lattice crosses over from the time it had reached - see [The crossing
+   over](ffd.md#the-crossing-over). The smoothed clock is not set back: it follows the clock as
+   ever, a tenth of the way a step, so over the next 50 steps or so the ends run back through ten
+   units of their sines, jumping about at first.
 3. **Springs.** Each point i is tied to the points one and two before it along its line, and to
    the points one and two lines before it in its column. For each such point j, with
    d = p_j - p_i, the force f = d / |d| × (|d| - L) × k goes into v_i, and out of v_j. One apart, L
