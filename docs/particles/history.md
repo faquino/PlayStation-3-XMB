@@ -191,6 +191,11 @@ The implementation never copied the clearing, and stays as it is.
 
 ## Superseded readings
 
+- Fewer particles were taken to be drawn than the console's, 1337 to 1353 against 1437 and 1417,
+  and put down to the bench's wave being its first 30 seconds. The bench measured one moment, the
+  end of a run under night's set, where the count, which follows the wave's reach, was low; at
+  the captures' own moments, in their scene, the page draws as many - see [Against the
+  console](implementation.md#against-the-console).
 - The newborns were taken to be slow, 0.216 against 0.276 at the median, measured against the
   resting savestate's alone: its fifty were born on a fast wave, and pooled over the six savestates
   at rest the console's are the page's - see [Against the

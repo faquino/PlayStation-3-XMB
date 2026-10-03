@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 // Headless bench for the particle system: runs the simulation over the wave wave-reverse.js builds, under night's
-// LINE1.mnu (scene-themes.js) as the resting savestate was, and prints what its pool and its drawn particles look
-// like, beside the same measurements read off the console.
+// LINE1.mnu (scene-themes.js) as the resting savestate was, and prints what its pool looks like; then, for each of the
+// two RSX frames, plays the scene from the cold boot to the moment the frame was taken, under the sets the console
+// ran then, and prints what it draws there - each beside the same measurements read off the console.
 //
 // The console's column is not a target to hit exactly - the pool is one moment of one savestate, its newborns those of
 // six, and the captures are two frames - but a change to the simulation should move it towards them and must not move
@@ -38,12 +39,19 @@ const CONSOLE = {
   young: { n: 312, depth: '7.08 / 8.42 / 9.86', vz: '-0.0064 / -0.0001 / +0.0067', vxy: '0.098 / 0.224 / 0.348' },
   old: { depth: '7.41 / 8.40 / 9.32', vz: '-0.2501 / -0.0014 / +0.2337', vxy: '0.081 / 0.262 / 0.517' },
   noiseCorr: '+0.128 / +0.111 / +0.193 (ctl +0.043)',
-  onScreen: '1437, 1417',
-  opaque: '92%, 92%',
-  depth: '8.92, 8.49',
-  outside: '0.096, 0.114',
-  outside99: '0.38, 0.39',
 };
+
+// The two RSX frames, taken 50 and 96 seconds after one cold boot - their lattice times, ffd_shader1's _Time - under
+// the day cycle's set of the hour: what their particle draw holds, projected as drawnMetrics projects the page's.
+// Which particles are on screen moves with the wave's reach to the left, where nearly all the others are, so each is
+// matched at its own moment rather than against the end of a run.
+const CAPTURES = [
+  { taken: '2026-09-21 20:18:50', time: 6.058, onScreen: '1437', opaque: '92%', depth: '8.92', outside: '0.096',
+    outside99: '0.38' },
+  { taken: '2026-09-21 20:19:48', time: 11.536, onScreen: '1417', opaque: '92%', depth: '8.49', outside: '0.114',
+    outside99: '0.39' },
+];
+const T_PER_SECOND = 0.12; // the lattice's time at TIMESTEP 2, the cold boot's and the day cycle's
 
 function loadModules() {
   globalThis.window = globalThis;
@@ -125,6 +133,34 @@ function simulate(seconds, seed) {
     if (t > YOUNG_AFTER && frame % YOUNG_EVERY === 0) youngRecords(sys, young);
   }
   return { sys, mesh: wave.mesh, t, young };
+}
+
+function parseTaken(taken) {
+  const m = /^(\d+)-(\d+)-(\d+) (\d+):(\d+):(\d+)$/.exec(taken);
+  return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime();
+}
+
+// The scene from a cold boot to a capture's moment: the XMB's start, then the day cycle at the hour, the date running
+// so that the lattice reaches the capture's time when the capture was taken, as tools/bench/wave.js plays each source.
+// The particle settings are the scene, as in index.html, and scene-themes.js is evaluated afresh, a scene of its own.
+function atCapture(capture, seed, sceneThemes, defaults) {
+  (0, eval)(sceneThemes);
+  const S = Object.assign({}, defaults.wave);
+  const PS = Object.assign({}, defaults.particles,
+    { theme: 'auto', sequence: 'coldboot', musicPlayback: 'stopped', themeColor: '0' });
+  const wave = window.PS3WaveReverse.createWave();
+  const surface = { settings: S, wave, mesh: wave.mesh, aspect: ASPECT };
+  const sys = window.PS3ParticlesReverse.createSystem({ capacity: 2049, seed });
+  const start = parseTaken(capture.taken) - (capture.time / T_PER_SECOND) * 1000;
+  let t = 0;
+  for (let frame = 0; frame < 400 * STEP_HZ; frame++) {
+    window.applySceneThemes(PS, { particles: { settings: PS }, wave: { settings: S } }, new Date(start + t * 1000));
+    t += 1 / STEP_HZ;
+    wave.update(S, 1 / STEP_HZ, ASPECT);
+    sys.update(PS, surface, null, t, 1 / STEP_HZ, ASPECT);
+    if (wave.state.latticeTime >= capture.time) break;
+  }
+  return { sys, mesh: wave.mesh };
 }
 
 // The pool in the task's own record layout, split by how much life each particle has spent.
@@ -239,22 +275,29 @@ function main() {
   const seed = opt('seed', NaN);
 
   loadModules();
+  const defaults = { wave: Object.assign({}, window.SPLINE_SETTINGS), particles: Object.assign({}, window.PARTICLE_SETTINGS) };
+  const sceneThemes = fs.readFileSync(path.join(DIR, 'scene-themes.js'), 'utf8');
   const started = Date.now();
   const pools = [];
-  const drawn = [];
   const young = [];
   let last = null;
   for (let r = 0; r < runs; r++) {
     const run = simulate(seconds, Number.isNaN(seed) ? undefined : seed + r);
     pools.push(poolMetrics(run.sys));
-    drawn.push(drawnMetrics(run));
     young.push(...run.young);
     last = pools[pools.length - 1];
   }
-  console.log(runs + ' run(s) of ' + seconds + 's over night\'s wave, ' + ((Date.now() - started) / 1000).toFixed(1)
-    + ' s wall clock\n');
+  const drawn = CAPTURES.map((capture) => {
+    const out = [];
+    for (let r = 0; r < runs; r++) {
+      out.push(drawnMetrics(atCapture(capture, Number.isNaN(seed) ? undefined : seed + r, sceneThemes, defaults)));
+    }
+    return out;
+  });
+  console.log(runs + ' run(s) of ' + seconds + 's over night\'s wave, and of the scene up to each capture, '
+    + ((Date.now() - started) / 1000).toFixed(1) + ' s wall clock\n');
 
-  const row = (label, sim, ref) => console.log('  ' + String(label).padEnd(44) + String(sim).padEnd(34) + ref);
+  const row = (label, sim, ref) => console.log('  ' + String(label).padEnd(46) + String(sim).padEnd(38) + ref);
   console.log('The pool (percentiles are 5th / 50th / 95th)');
   row('', 'simulation', 'console');
   row('Alive', collect(pools.map((p) => p.alive), 0) + ' of 2049', CONSOLE.alive);
@@ -286,15 +329,19 @@ function main() {
     row('the console', CONSOLE.old.vxy, CONSOLE.old.vz);
   }
 
-  console.log('\nWhat is drawn');
-  row('', 'simulation', 'captures');
-  row('On screen', collect(drawn.map((d) => d.onScreen), 0), CONSOLE.onScreen);
-  row('Opacity exactly 1', collect(drawn.map((d) => d.opaque), 1) + '%', CONSOLE.opaque);
-  row('View depth, median', collect(drawn.map((d) => d.depth), 2), CONSOLE.depth);
-  row('Outside the wave band, 90th percentile (NDC)', collect(drawn.map((d) => d.outside), 3), CONSOLE.outside);
-  row('Same, 99th percentile', collect(drawn.map((d) => d.outside99), 3), CONSOLE.outside99);
-  row('The wave\'s own depth on screen, 5th to 95th', collect(drawn.map((d) => d.waveBand), 2),
-    '2.50 (the wave bench)');
+  console.log('\nWhat is drawn, at each capture\'s moment: the scene from the cold boot to its lattice time');
+  row('', 'simulation', 'capture');
+  CAPTURES.forEach((capture, k) => {
+    const d = drawn[k];
+    console.log('  -- ' + capture.taken.slice(11) + ', lattice time ' + capture.time);
+    row('On screen', collect(d.map((m) => m.onScreen), 0), capture.onScreen);
+    row('Opacity exactly 1', collect(d.map((m) => m.opaque), 1) + '%', capture.opaque);
+    row('View depth, median', collect(d.map((m) => m.depth), 2), capture.depth);
+    row('Outside the wave band, 90th percentile (NDC)', collect(d.map((m) => m.outside), 3), capture.outside);
+    row('Same, 99th percentile', collect(d.map((m) => m.outside99), 3), capture.outside99);
+    row('The wave\'s own depth on screen, 5th to 95th', collect(d.map((m) => m.waveBand), 2),
+      '2.50 (the wave bench)');
+  });
 }
 
 main();

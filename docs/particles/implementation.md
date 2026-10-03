@@ -140,8 +140,8 @@ on each frame that passes its draw, simply keeps it that way.
 
 `tools/bench/particles.js` runs the simulation over the wave `wave-reverse.js` builds, under night's
 `LINE1.mnu` as the resting savestate was, and prints this. Three 30-second runs, seeds 1 to 3. The
-pool's column is the resting savestate's, its newborns those of the six savestates taken at rest
-pooled, and the drawn column the two frame captures':
+pool's column is the resting savestate's, and its newborns those of the six savestates taken at rest
+pooled:
 
 | The pool | Simulation | Console |
 |---|---|---|
@@ -154,17 +154,26 @@ pooled, and the drawn column the two frame captures':
 | Late in life, velocity z | -0.2351 / -0.0109 / 0.2365 | -0.2501 / -0.0014 / 0.2337 |
 | Late in life, speed in xy | 0.064 / 0.254 / 0.493 | 0.081 / 0.262 / 0.517 |
 
-| What is drawn | Simulation | Capture 1 | Capture 2 |
-|---|---|---|---|
-| On screen | 1337 to 1353 | 1437 | 1417 |
-| Opacity exactly 1 | 91.9 to 93.2% | 92% | 92% |
-| View depth, median | 8.32 to 8.35 | 8.92 | 8.49 |
-| Distance outside the wave band, 90th percentile (NDC) | 0.126 to 0.157 | 0.096 | 0.114 |
-| Same, 99th percentile | 0.347 to 0.397 | 0.38 | 0.39 |
+What is drawn is matched to the two frame captures, taken 50 and 96 seconds after one cold boot:
+for each, the bench plays the scene from the cold boot - the XMB's start, then the day cycle at the
+hour - to the capture's lattice time, with seeds 1 to 3, and measures that frame as the capture's
+is measured, every particle's centre projected through the camera:
 
-Known difference: **fewer are drawn,** 1337 to 1353 against 1437 and 1417, and a little nearer:
-the bench's wave is its first 30 seconds from the start, when its lines draw in - see [What it
-models](../wave/implementation.md#what-it-models).
+| What is drawn | 20:18:50, page | Capture | 20:19:48, page | Capture |
+|---|---|---|---|---|
+| On screen | 1423 to 1464 | 1437 | 1400 to 1437 | 1417 |
+| Opacity exactly 1 | 91.3 to 93.6% | 92% | 91.2 to 92.0% | 92% |
+| View depth, median | 8.80 to 8.84 | 8.92 | 8.80 to 8.86 | 8.49 |
+| Distance outside the wave band, 90th percentile (NDC) | 0.098 to 0.109 | 0.096 | 0.062 to 0.103 | 0.114 |
+| Same, 99th percentile | 0.351 to 0.380 | 0.38 | 0.315 to 0.378 | 0.39 |
+
+**As many are drawn.** Nearly every particle off the screen is off one of its sides - 527 to the
+left and 64 to the right in the first capture, 506 and 118 in the second - so how many are on it
+follows the wave's reach, moment by moment: under night's set the page's count runs from about
+1290 to 1460 nine frames in ten, over minutes. Matched at the captures' own moments, it lands on
+theirs. What is left is the depth: the second capture's particles sit 0.3 nearer than the page's,
+and the wave's own depth on screen is 2.09 and 2.37 at the two moments against 2.50 at rest, the
+start's - see [What it models](../wave/implementation.md#what-it-models).
 
 **The newborns are the console's.** Against the resting savestate's alone they looked slow, 0.216
 against 0.276 at the median, but a savestate holds some fifty, born on a few frames of one moment's

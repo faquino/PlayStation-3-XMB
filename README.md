@@ -30,7 +30,7 @@ While this is inspired by the official PlayStation 3 XMB background wave design,
 ## Reality check (what still needs work)
 
 - The backdrop is the console's programs: the months', over fits of its textures, which stay out of the repository, and the music's, which needs none.
-- Sparkles run the console's own update task now, and a headless bench (`tools/bench/particles.js`) compares their pool with one read out of a savestate. What is left is the PPU side that feeds it - the emitter and the flow field are still modelled - and they drift about twice as fast as the console's late in life.
+- Sparkles run the console's own update task, fed by the PPU side as traced - the emitter, the flow grid's rule, the controller - and a headless bench (`tools/bench/particles.js`) compares their pool with one read out of a savestate and what they draw with two frame captures, each at its own moment. What is left is the XMB's side: how its icons move, which writes the flow grid, and when it sends a step.
 - The wave's geometry is the console's own now, checked piece by piece against savestates, and so are the passes the console runs after it - the composite with the backdrop, the tone curve and the glare: fed the console's own mesh, the page draws RPCS3's screenshot of the moment. What is left is the very first minutes after a start: the console starts its lines from a state baked into its firmware, so the page makes one the same way, which keeps the console's pace but not its exact course.
 
 ## Local Development
