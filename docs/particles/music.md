@@ -20,7 +20,7 @@ four files, and all four differ from the base:
 | `PARTICLES.mnu` | the three values above |
 | `LINE1.mnu` | 11 of 35: the wave rises and comes forward (`POS Y` -1.08844 to 0, `POS Z` -6.40287 to -5.2), turns (`ANG Y` 0.0867576 to 0.796751, `ANG ROT` 18.1208 to 13.1208), slows (`TIMESTEP` 4 to 3.72102), and its free-form deformation is rescaled |
 | `HDR.mnu` | 10 of 17: `EXPOSURE` 1.05 to 1.51, `GLARE LEVEL` 1.10245 to 2.46, `GLARE THRESH` 0.738857 to 0.260814, wider Gaussian radii - the whole image blooms harder, which is why the wave reads as lit more strongly |
-| `BACKGROUND.mnu` | all 14: the backdrop fades to black at the bottom (colour 2) and the wave's light goes magenta at the right (colour 4, 0.5, 0, 0.5), `FOVY` 71.846 to 83.2002, and `COLOUR SHADER` 0 to 1 |
+| `BACKGROUND.mnu` | all 14: the backdrop fades to black at the bottom (colour 2) and the wave's light goes magenta at the right (colour 4, 0.5, 0, 0.5), `FOVY` 71.846 to 83.2002, which nothing reads - see [`COLOUR SHADER`](../background/firmware.md#colour-shader) - and `COLOUR SHADER` 0 to 1 |
 
 **The GPU side of that table, from four frame captures taken with a track playing.** All four
 read a live `_Glare` of 0.201367, the set's own value and steady across the 47 seconds they

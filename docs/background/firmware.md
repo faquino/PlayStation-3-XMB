@@ -31,7 +31,10 @@ music and on the welcome screens, from no texture - see [The
 programs](program.md#back_colours1-the-musics) - and `back_colours2.fpo` (2 instructions, `_Alpha`)
 is one no set picks.
 
-`BACKGROUND.mnu` holds four colours, a `FOVY` of 71.846 and a `COLOUR SHADER` flag. The colours are
+`BACKGROUND.mnu` holds four colours, a `FOVY` of 71.846 and a `COLOUR SHADER` flag. `FOVY` moves
+nothing: registered with a default of 53, the camera's own field of view, it is turned into radians
+as it changes and handed to a function that returns at once (`0x219b0`, `0x23ed4`), and nothing else
+reads it - so the music's 83.2 changes nothing on screen. The colours are
 not corners: the composite after the wave multiplies the backdrop by a gradient from colour 2 at
 the bottom of the screen to colour 1 at the top, both white in the day's sets, and the wave's light
 by one from colour 3 at the left to colour 4 at the right - see [The

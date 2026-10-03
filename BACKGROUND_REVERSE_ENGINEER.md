@@ -54,7 +54,6 @@ backdrop on screen:
 - **The copy the ease starts from.** That `0x52784` copies the backdrop as it stands is read from
   the code's shape; no capture caught a frame with that copy in it - see
   [`_Alpha`](docs/background/uniforms.md#_alpha).
-- What `FOVY` does: neither program takes a field of view.
 
 ## Keeping these notes
 

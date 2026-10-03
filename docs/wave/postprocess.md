@@ -149,4 +149,5 @@ blended sets, the page's uniforms give those of seven captures to 5e-5, through 
 night, the cold boot and the music. The flags (`ENABLED`, `TEX SIZE`, `TEX MAX MIP`, `GLARE`, `GLARE_ONLY`, `TONEBEFORE`,
 `BLUR`) are the same in every set but the two welcome ones, and their effect is not followed;
 `DITHER` and `GAMMA`, in music's and the welcome's files, change neither the noise (0 to 7 under
-the music too) nor any uniform a program uses.
+the music too) nor any uniform a program uses - and `HDR.mnu` registers no `GAMMA`, so the scene
+does not read it.

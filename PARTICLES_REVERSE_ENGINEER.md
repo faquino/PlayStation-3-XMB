@@ -59,9 +59,6 @@ Also missing:
   `PARTICLES_SPE.mnu` factor on - see [What's New's
   board](docs/particles/scene-events.md#whats-news-board). The board's side, and the factor's
   animation, are traced.
-- The ranges the scene holds `PARTICLES.mnu`'s, `LINE1.mnu`'s and `HDR.mnu`'s parameters to as it
-  blends them: only `BACKGROUND.mnu`'s were read, where `DAYSPREAD`'s default lies below its own -
-  see [How one set blends into another](docs/particles/day-cycle.md#how-one-set-blends-into-another).
 - Why the newborns are slower than the pool's, 0.216 against 0.276, where the wave they are born
   on moves as fast as the console's - see [Against the
   console](docs/particles/implementation.md#against-the-console).

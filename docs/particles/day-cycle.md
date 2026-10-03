@@ -66,9 +66,14 @@ wave](../wave/postprocess.md#what-hdrmnu-drives). A parameter a set's file leave
 and one the base file leaves out too the code's default: so `BACKGROUND.mnu`'s day and night
 parameters, which only the day's sets and a few others carry - see [What the uniforms
 read](../background/uniforms.md#the-day-and-the-night). Each blend then holds the parameter to the
-range `0x225a4` registered with its default (`0x1dd78`, which the blend calls): of `BACKGROUND.mnu`'s
-parameters only `DAYSPREAD` has a value outside it, its default, so a blend towards it stops at the
-range's end. The ranges of the other files' parameters are not read.
+range it was registered with beside its default (`0x225a4` and `0x22a50` register the floats,
+`0x1dd78`, which the blend calls, holds them). Of the six files' parameters, only `DAYSPREAD` can be
+put outside its range, by a set that leaves it out: its default, 0, lies below its 1 to 3, so a
+blend towards it stops at 1. Every value the base and override files carry lies within its range,
+the welcome sets' `HDR.mnu` at the top of theirs (`WHITE LEVEL` 1000, `GLARE LEVEL`, `GLARE THRESH`
+and `GLARE SUM POW` 100, `GAUSSIAN RAD` 2.9), and `THINNESS`'s default, 10, above its 0 to 1, never
+counts, since the base file carries it. A name a file carries and the scene does not register -
+`GAMMA` in music's `HDR.mnu`, `NEUTRINOS X` in `gameboot2`'s `BACKGROUND.mnu` - is not read.
 
 A set put in at once resets each parameter to its default and hands its values over as where the
 blend starts rather than as targets (`0x5245c`), which mode 1 does not read. **`coldboot1` takes

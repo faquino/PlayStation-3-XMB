@@ -75,10 +75,6 @@ wave on screen:
   that long since a cold boot. Also what, beyond the cold boot's ramp of `PERTURBATION`, keeps a run
   from the reset from landing on a savestate - see [From the start](docs/wave/lines.md#from-the-start).
 
-- **The parameters' ranges.** The scene holds every parameter to the range it registers, and
-  `LINE1.mnu`'s and `HDR.mnu`'s are not read: the welcome sets' `HDR.mnu`, a `WHITE LEVEL` of 1000
-  and a `GLARE LEVEL` of 100, may lie outside theirs - see [How one set blends into
-  another](docs/particles/day-cycle.md#how-one-set-blends-into-another).
 
 ## Keeping these notes
 
