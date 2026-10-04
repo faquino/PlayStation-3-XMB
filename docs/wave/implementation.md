@@ -22,8 +22,9 @@ and what is modelled. This is the detail.
   wave's own in `_Encode`'s two channels - see [The shading](shading.md);
 - the passes after the wave, in `postprocess.js`: the backdrop drawn into its 64 × 32 buffer, the
   composite with `BACKGROUND.mnu`'s colours, the tone curve as the preexpose tables hold it, read
-  half a texel short, the noise, and the glare - its source, its six levels, the Gaussians, their
-  weights and its addition to the screen - see [The passes after the wave](postprocess.md);
+  half a texel short, the noise, drawn every frame as the console's renderer draws it from its
+  counter, and the glare - its source, its six levels, the Gaussians, their weights and its
+  addition to the screen - see [The passes after the wave](postprocess.md);
 - the sets: `scene-themes.js` holds every override's `LINE1.mnu`, `HDR.mnu` and `BACKGROUND.mnu`
   and writes them into the wave's settings as it writes the particles' - the day cycle, the boot
   sequences, the music - see [Parameter sets](../particles/parameter-sets.md); and the XMB's start
@@ -73,10 +74,12 @@ another](../particles/day-cycle.md#how-one-set-blends-into-another) - and, throu
   filter where the console's texture unit applies a convolution; `_Encode`'s fine part is 2 (n mod
   32), without the table's odd step of one; the six levels of the glare are added in one pass, not
   six, and its textures are clamped to their edge, as RPCS3 runs their CLAMP; the luminance the
-  glare's source carries, and the copy the CPU fetches, are left out; and the noise is the page's
-  own. `HDR.mnu`'s flags are not applied - only the welcome sets change
-  them. The backdrop that goes into the passes is the console's program over fits of its month
-  textures - see the [backdrop notes](../../BACKGROUND_REVERSE_ENGINEER.md).
+  glare's source carries, and the copy the CPU fetches for statistics nothing uses, are left out;
+  and `_Gamma` is held at 1, its value in every savestate, as the particles' is. The noise's counter
+  starts with the page, as the console's does with the scene. `HDR.mnu`'s flags are not applied -
+  only the welcome sets change them. The backdrop that goes into the passes is the console's
+  program over fits of its month textures - see the [backdrop
+  notes](../../BACKGROUND_REVERSE_ENGINEER.md).
 - **The sets' clock.** The blends run on the page's seconds, and blend mode 1's frames at 60 a
   second - see [How one set blends into
   another](../particles/day-cycle.md#how-one-set-blends-into-another).

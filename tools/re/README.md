@@ -168,6 +168,13 @@ it in the session, and its own is the latest, so the largest. Within a change of
 the blend had got - see [How one set blends into
 another](../../docs/particles/day-cycle.md#how-one-set-blends-into-another).
 
+**A capture's `preexpose_Noise` counts its frames.** The composite's unit 13 is drawn afresh each
+frame from a counter that starts with the scene - see [The
+noise](../../docs/wave/postprocess.md#the-noise). Read its 32 × 32 texels out of `cap.memory` at the
+unit's offset and search the frame whose fill gives them, with `postprocess.js`'s `fillNoise`: one
+frame matches in any 2²¹ (nine hours), and beside `_Time`'s steps it says how many frames the scene
+drew to get there.
+
 The cache only grows, which makes it a coverage recorder. To find the code behind a
 behaviour, copy `spu-safe-v1-tane.dat`, trigger the behaviour in RPCS3 (shake the
 controller, move across icons), then run `spu_cache.py match ... --since <the copy>`.

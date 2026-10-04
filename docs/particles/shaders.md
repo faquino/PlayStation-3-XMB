@@ -59,7 +59,8 @@ savestate:
   variable `59df89eb` when the word 12 bytes into it is above 0.05, and of `paf`'s `6fd42f46`
   otherwise. The loader patches the two in from the import table, which is why they once read
   as absolute addresses; what `paf` keeps in them is not followed. The same value goes to the
-  wave's renderer (`0x70bf8`). It is 1 in every savestate.
+  wave's HDR renderer (`0x70bf8`), whose tables multiply the composite's tone curve by it - see
+  [The preexpose tables](../wave/postprocess.md#the-preexpose-tables). It is 1 in every savestate.
 
 Vertex uniforms live in constant registers and are not in the cache. Their values come
 from the RSX frame captures below; their meaning from the decompiled vertex shader.

@@ -35,6 +35,13 @@ in its shader log that reads attributes 0, 8 and 9.
 The three values move with the parameter sets, by the same factor as the particles' - see [Themes
 blend over hours](../particles/day-cycle.md#themes-blend-over-hours).
 
+The renderer sends `FALLOFF` too, as `_Falloff` (`0x4c94c`), but `lines1.vpo` does not declare it.
+Of the three programs `SHADER` picks between, `lines0`, `lines1` and `lines2`, only `lines2.vpo`
+does, and `SHADER` is 1 in every set. A uniform its program lacks is never sent: the renderer looks
+each one up by name (`cellGcmCgGetNamedParameter`, through `qgl_base`) and sends only those the
+program uses (`0x4c5d8`). So `FALLOFF` changes nothing, and no capture's wave draw holds its value,
+by day (1.00318), by night (0.048) or between.
+
 The program passes the position and u through. Let e be the position normalised and n the normal
 normalised. The program works out:
 

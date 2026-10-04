@@ -40,6 +40,10 @@ may already be ruled out.
 - **The lines' steps behind their slower pace.** From the console's own start the steps give
   every savestate's speed and every capture's band; the pace was the start's, made then under the
   day cycle's values - see [The start](lines.md#the-start).
+- **The noise drawn once a boot, and a pair of tables for the music.** The notes had the noise
+  drawn afresh at each boot, and the music's captures binding the other pair of preexpose tables.
+  The HDR renderer draws the noise every frame and flips both to their other copy each frame, the
+  frame's parity picking the pair - see [The noise](postprocess.md#the-noise).
 - **The passes after the wave as a gain on the wave's light.** The page stood a gain of 1.5 in for
   them, set by eye against a video. They lay the wave over the backdrop and expose the two
   together, taking 1/16 off first, so a faint light only shows where the backdrop has some

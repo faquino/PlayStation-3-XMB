@@ -62,7 +62,8 @@ Also missing:
 - `proc_iridescent` exactly. It is a file of the firmware's resources, not generated at run time, so
   the implementation stands in for it with [the
   fit](docs/particles/shaders.md#the-iridescent-texture).
-- What `paf` keeps in the variables `_Gamma` comes from - see [Uniform values at run
+- What `paf` keeps in the variables `_Gamma` comes from, which scales the particles and, through the
+  wave's tone curve, the screen behind them - see [Uniform values at run
   time](docs/particles/shaders.md#uniform-values-at-run-time).
 - What starts `anim_coldboot` and who sends events 2 and 3; and why, under RPCS3, the music's blend
   ran ahead of the wave's lines as it came in, where the code hands both the same frame time - see

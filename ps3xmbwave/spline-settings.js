@@ -48,7 +48,8 @@ window.SPLINE_SETTINGS = {
   thinness: 1,
 
   // HDR.mnu, the passes after the wave, the base set. Its flags (ENABLED, TEX SIZE, TEX MAX MIP, GLARE, GLARE_ONLY,
-  // TONEBEFORE, BLUR) are left out: only the welcome sets change them.
+  // TONEBEFORE, BLUR) are left out: only the welcome sets change them. The base file leaves DITHER out, so the code's
+  // default stands for it, which the files that set it set too.
   exposure: 1.05,
   whiteLevel: 0.899181,
   glareLevel: 1.10245,
@@ -57,6 +58,7 @@ window.SPLINE_SETTINGS = {
   gaussianRadG: 1.43176,
   gaussianRadB: 1.55787,
   glareSumPow: 0.557478,
+  dither: 0.00392157,
 
   // BACKGROUND.mnu's four colours, the base set: 1 and 2 the backdrop's at the top and at the bottom of the screen, 3
   // and 4 the wave's at the left and at the right.
@@ -266,7 +268,8 @@ window.SPLINE_SETTINGS_META = {
   },
   falloff: {
     min: 0, max: 2, step: 0.01,
-    help: 'No effect: neither of the programs the wave is drawn with takes it.\n' +
+    help: "No effect: the renderer hands it to the vertex program's _Falloff, which only lines2.vpo declares, and " +
+      'every set draws the wave with lines1 (SHADER 1).\n' +
       'LINE1.mnu: FALLOFF',
   },
   spacing: {
@@ -322,6 +325,13 @@ window.SPLINE_SETTINGS_META = {
     min: 0, max: 1, step: 0.001,
     help: "What each coarser level of the glare weighs against the one before it: the higher, the wider its halo.\n" +
       'HDR.mnu: GLARE SUM POW (AccGlare _Weight)',
+  },
+  dither: {
+    min: 0, max: 0.04, step: 0.0001, decimals: 5,
+    help: 'Strength of the noise that dithers the screen, drawn afresh every frame: each texel is 255 x min(1, 8 x ' +
+      'Dither x a random number from 0 to 1), so at 1/255, in every set, it runs from 0 to 7, which the screen gets ' +
+      'as 0 to 7 eighths of a step.\n' +
+      'HDR.mnu: DITHER (preexpose_Noise)',
   },
   colour1Red: {
     min: 0, max: 1.5, step: 0.001,

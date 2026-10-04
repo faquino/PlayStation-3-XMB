@@ -13,12 +13,14 @@
   // The backdrop's own buffer, which the composite stretches over the screen.
   const BACK_W = 64;
   const BACK_H = 32;
-  // preexpose_Noise: 32 x 32 texels of white noise, 0 to 7 in all three channels, drawn afresh at each boot.
+  // preexpose_Noise: 32 x 32 texels of white noise, red, green and blue alike, drawn afresh every frame (0x71794).
   const NOISE_SIZE = 32;
 
   // HDR.mnu's and BACKGROUND.mnu's settings as the passes' uniforms, worked out the way the console's are (each read
   // back out of every frame capture; see the wave notes' postprocess.md):
-  // - the tone curve x (1 + x / W^2) / (1 + x), W being WHITE LEVEL, at EXPOSURE times the light;
+  // - the tone curve x (1 + x / W^2) / (1 + x), W being WHITE LEVEL, at EXPOSURE times the light, times _Gamma, a value
+  //   the scene picks by a system setting (0x1b128), 1 in every savestate, which the tables hold the curve times
+  //   (0x71794) and the particles take too;
   // - each channel's Gaussian, exp(-k^2 / 2 RAD^2) normalised over |k| <= floor(3 RAD - 1), at most 7 texels;
   // - the six levels' weights, GLARE LEVEL^2 SUM POW^l / (1 + SUM POW + ... + SUM POW^5), l = 0 the finest;
   // - _GlareWeight, 1 in every set;
@@ -47,6 +49,7 @@
     return {
       exposure: settings.exposure,
       whiteSqrRcp: white !== 0 ? 1 / (white * white) : 0,
+      gamma: 1,
       threshold: settings.glareThresh,
       gauss,
       levels,
@@ -57,13 +60,22 @@
     };
   }
 
-  function noiseTexels() {
-    const out = new Uint8Array(NOISE_SIZE * NOISE_SIZE * 4);
+  // Fills preexpose_Noise's texels, `out`, as the HDR renderer does each frame (0x71794), and returns its counter
+  // moved on. Texel i takes n = `count` + i + 1, the counter being 0 when the renderer is built; x = (n << 13) ^ n,
+  // h = (x (x^2 15731 + 789221) + 1376312589) & 0x7fffffff, u = (1 - h / 2^30) / 2 + 1/2, in single precision as the
+  // PPU's float unit has it, and the texel is 255 min(1, 8 DITHER u), truncated - 0 to 7 at DITHER's 1/255. Each
+  // capture's noise is one fill of it, to the texel.
+  function fillNoise(out, count, dither) {
+    const f = Math.fround;
     for (let i = 0; i < NOISE_SIZE * NOISE_SIZE; i++) {
-      const n = Math.floor(Math.random() * 8);
-      out[4 * i] = out[4 * i + 1] = out[4 * i + 2] = n;
+      const n = (count + i + 1) >>> 0;
+      const x = ((n << 13) ^ n) >>> 0;
+      const h = (Math.imul(x, Math.imul(Math.imul(x, x), 15731) + 789221) + 1376312589) & 0x7fffffff;
+      const u = f(f(f(h) * -9.313225746154785e-10 + 1) * 0.5 + 0.5);
+      const v = Math.trunc(f(Math.max(-1, Math.min(1, f(f(u * f(dither)) * 8))) * 255));
+      out[4 * i] = out[4 * i + 1] = out[4 * i + 2] = v;
     }
-    return out;
+    return (count + NOISE_SIZE * NOISE_SIZE) >>> 0;
   }
 
   function compile(gl, src, type) {
@@ -110,10 +122,11 @@
   // bottom to colour 1 at the top, plus the wave's light, read back out of _Encode's two channels a quarter of a pixel
   // up and right (_ScreenOffset) and times the horizontal gradient from colour 3 at the left to colour 4 at the right
   // (LinesController.vpo). Then the preexpose tables: each holds the tone curve at EXPOSURE times 16 i / 127 for its
-  // texel i, and is read at 8 times the light, so half a texel short of it - which takes 1/16 off the light before it
-  // is exposed, and is why faint light only shows where the backdrop already has some (verified against RPCS3's
-  // screenshots). Red, green and blue each go through the curve; alpha, the glare's mask, is (y - GLARE THRESH) y /
-  // (8 min(y, 1)) of the brightest one. Noise of up to 7/8 of a step dithers the screen it all lands on, 8 bits.
+  // texel i, times _Gamma, and is read at 8 times the light, so half a texel short of it - which takes 1/16 off the
+  // light before it is exposed, and is why faint light only shows where the backdrop already has some (verified against
+  // RPCS3's screenshots). Red, green and blue each go through the curve; alpha, the glare's mask, is (y - GLARE THRESH)
+  // y / (8 min(y, 1)) of the brightest one, y without _Gamma. Noise of up to 7/8 of a step, drawn afresh every frame,
+  // dithers the screen it all lands on, 8 bits.
   const COMPOSITE_FS = `#version 300 es
     precision highp float;
     uniform sampler2D uBack;
@@ -127,6 +140,7 @@
     uniform float uExposure;
     uniform float uWhiteSqrRcp;
     uniform float uThreshold;
+    uniform float uGamma;
     out vec4 oColor;
     vec3 tone(vec3 x) { return x * (1.0 + x * uWhiteSqrRcp) / (1.0 + x); }
     void main() {
@@ -136,7 +150,7 @@
       float light = code.r * 0.03125 + code.g * 0.5;
       vec3 lit = back + light * mix(uColour3, uColour4, uv.x);
       vec3 texel = clamp(lit * 8.0 - 0.5, 0.0, 127.0);
-      vec3 y = tone(uExposure * (16.0 / 127.0) * texel);
+      vec3 y = uGamma * tone(uExposure * (16.0 / 127.0) * texel);
       float top = tone(vec3(uExposure * (16.0 / 127.0) * max(texel.r, max(texel.g, texel.b)))).r;
       float mask = top > 0.0 ? (top - uThreshold) * top / (8.0 * min(top, 1.0)) : 0.0;
       vec3 noise = texture(uNoise, gl_FragCoord.xy / 32.0).rgb;
@@ -263,8 +277,10 @@
       gl.deleteFramebuffer(t.fbo);
     }
 
-    const noiseTex = texture(NOISE_SIZE, NOISE_SIZE, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST, gl.REPEAT,
-      noiseTexels());
+    // preexpose_Noise and its counter, which `present` moves on a fill each frame.
+    const noise = new Uint8Array(NOISE_SIZE * NOISE_SIZE * 4);
+    let noiseCount = 0;
+    const noiseTex = texture(NOISE_SIZE, NOISE_SIZE, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST, gl.REPEAT, noise);
 
     const back = target(BACK_W, BACK_H, floats);
     const glare = floats ? {
@@ -287,7 +303,7 @@
     let screen = null;
 
     const composite = program(gl, COMPOSITE_FS, ['uBack', 'uWave', 'uNoise', 'uScreen', 'uColour1', 'uColour2',
-      'uColour3', 'uColour4', 'uExposure', 'uWhiteSqrRcp', 'uThreshold']);
+      'uColour3', 'uColour4', 'uExposure', 'uWhiteSqrRcp', 'uThreshold', 'uGamma']);
     const source = program(gl, SOURCE_FS, ['uSrc']);
     const copy = program(gl, COPY_FS, ['uSrc']);
     const gaussian = program(gl, GAUSSIAN_FS, ['uSrc', 'uStep', 'uWeights']);
@@ -351,6 +367,12 @@
       gl.disable(gl.DEPTH_TEST);
       gl.bindVertexArray(quad);
 
+      // The frame's noise, as the renderer fills it before the composite reads it.
+      noiseCount = fillNoise(noise, noiseCount, settings.dither);
+      gl.bindTexture(gl.TEXTURE_2D, noiseTex);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, NOISE_SIZE, NOISE_SIZE, gl.RGBA, gl.UNSIGNED_BYTE, noise);
+
       gl.useProgram(composite.prog);
       gl.uniform1i(composite.u.uBack, 0);
       gl.uniform1i(composite.u.uWave, 1);
@@ -362,6 +384,7 @@
       gl.uniform1f(composite.u.uExposure, u.exposure);
       gl.uniform1f(composite.u.uWhiteSqrRcp, u.whiteSqrRcp);
       gl.uniform1f(composite.u.uThreshold, u.threshold);
+      gl.uniform1f(composite.u.uGamma, u.gamma);
       draw(composite, screen, [back.tex, wave.tex, noiseTex]);
 
       if (glare) {
