@@ -103,10 +103,8 @@ the same frame time, in one call (`0x14820`, and `0x143c4` for the layers in its
 ease (`0x27d64`, `0x56f1c`, `0x53778`, `0x52ef0`). Under RPCS3 at rest that time is 1/60 of a
 second exactly: the lines of all nine savestates hold their last frame's time × 60 as 1.0000001,
 and every resting capture's backdrop `_Alpha` is the smoothstep of a whole number of sixtieths of
-its ease. What is not settled is the music coming in under RPCS3: between its two captures the
-lines stepped about 90 times while the 5.5-second blend moved 4.07 seconds, and the particles
-trail the backdrop there by some 0.05 seconds of the blend, a frame's worth if its frames ran that
-long, where on the way out they trail by 1/60. `ps3xmbwave/` keeps both on the page's seconds.
+its ease. They keep step as the music comes in too, whose blend runs over 2 seconds rather than
+5.5 - see [The music set](music.md).
 
 ## Theme Settings' Colour stops the clock
 

@@ -48,16 +48,23 @@ and every place they fetch the scene's interface is accounted for.
   `vsh.elf` sends with sub-events 0 and 5 (`0xcd628`, `0xcf31c`), and `explore_plugin` and the
   XMB's columns (`explore_category_*`) with 5;
 - event 2 is a game's boot (`anim_gameboot`), event 3 another boot (`anim_otherboot`);
-- event 4 is the music, and the scene sends it to itself from two callbacks it registers
-  (`0x3184`): sub-event 2 (`0x16808`) takes in `override/music_1` unless it is in already, and
-  3 (`0x1672c`) leaves it;
+- event 4 is the music, which the scene sends itself (`0x16808`, `0x1672c`) as the music
+  player's visualizer starts and stops it, below: sub-event 2 takes in `override/music_1` unless
+  it is in already, and 3 leaves it;
 - event 10 comes from the time zone setting. `sysconf_plugin` sends sub-event 2 as the setting
   opens (`0x7fc1c`), 8 with the zone picked (`0x81ebc`), and 3 as it closes (`0x7fb88`), whose
   code names `override/black`;
 - event 11 comes from What's New's board, below, and nothing sends event 12.
 
 The music visualizer, `soundvisualizer_plugin`, drives the scene through the interface's first
-two functions (`0xe690`, `0xe4b8`) rather than through the handler.
+two functions (`0xe690`, `0xe4b8`) rather than through the handler, and through an interface its
+fourth function builds for it (`0x3408`, `0x31f8`), which holds the visualizer's callbacks and the
+scene's functions for the music. Its `+0x28` and `+0x2c` start and stop the music (`0x385c`, `0x381c`, which
+have the scene send itself event 4), and its `+0x38` hands the scene the visualizer's view
+(`0x37c8`), which the visualizer sends right after starting the music (its `0xb6c` and `0xba0`).
+The scene keeps the view (`0x9c930`, -1 until the first and again after each stop), and one that
+differs puts `override/music_1` in over 2 seconds for 0, the XMB's own scene, and `override/black`
+at once for any other (`0x16a68`) - see [The music set](music.md).
 
 ## The fade
 

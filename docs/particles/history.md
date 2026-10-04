@@ -19,6 +19,11 @@ Leads that went nowhere, kept so that nobody follows them again.
   record with scalar stores at the offsets the task reads (`+20`, `+28`, `+32`, `+36`, `+44`);
   the only match is a static constructor in `qglbase` zeroing unrelated objects.
   `custom_render_plugin` has not been searched for it yet.
+- The music's blend running ahead of the wave's lines as it came in under RPCS3. Read as the
+  5.5-second blend event 4 starts, it moved 4.07 seconds between the two captures while the lines
+  stepped 90 times, and the particles trailed the backdrop by 0.05 seconds of it. The clocks keep
+  step: the visualizer puts the set in again over 2 seconds, which makes the trail one frame and the
+  1.49 seconds between the captures the lines' 90 steps - see [The music set](music.md).
 
 ## The grid's writer
 

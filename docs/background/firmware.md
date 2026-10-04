@@ -60,7 +60,9 @@ and the scene's whole-number parameters take a set's value as the set goes in: t
 nothing (`0x1de90`). Its change reaches the backdrop as a program and a 2-second ease (`0x21a4c`,
 `0x4fdf0`), and the program decides how `_DayTime` is worked out (`0x52ad8`) - see
 [`_Alpha`](uniforms.md#_alpha). The capture of 00:28:55 on 24 September, 15% of the way into the
-music's crossfade, already draws with `back_colours1`, 0.574 seconds into its ease. On the way out
+music's crossfade, already draws with `back_colours1`, 0.574 seconds into its ease: the program
+changed as the music started, 0.09 seconds before the music player's visualizer put the set in
+again over 2 seconds - see [The music set](../particles/music.md). On the way out
 the base set puts 0 back as the music stops: the screenshot of 11:50:20 on 3 October, taken under a
 second in, already has `back_colours0`'s amber easing in, and fits the page's frame best with the
 program changed within a quarter of a second of the stop, to 6 levels (rms) where only the backdrop

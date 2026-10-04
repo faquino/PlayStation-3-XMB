@@ -81,7 +81,9 @@ another](../particles/day-cycle.md#how-one-set-blends-into-another) - and, throu
   notes](../../BACKGROUND_REVERSE_ENGINEER.md).
 - **The sets' clock.** The blends run on the page's seconds, and blend mode 1's frames at 60 a
   second - see [How one set blends into
-  another](../particles/day-cycle.md#how-one-set-blends-into-another).
+  another](../particles/day-cycle.md#how-one-set-blends-into-another). The music player's
+  visualizer calls 0.09 s after the music starts, as a capture has it - see [The music
+  set](../particles/music.md).
 - **The fade's start.** The console's renderer starts its fade at black, until the XMB first sends
   event 0; the page's stands at the scene's brightness from its first frame, as if the XMB had been
   running, and the XMB's start leaves it where it is.
@@ -139,11 +141,11 @@ With a track playing, under `music_1`, the console's 5 captures and a savestate,
 
 | Under `music_1` | `wave-reverse.js` | Console |
 |---|---|---|
-| Middle of the band (median y) | -0.016 to 0.403 | 0.075 to 0.376 |
-| Height of the band | 0.242 to 0.590 | 0.333 to 0.600 |
-| Rise | -0.207 to 0.399 | -0.150 to 0.416 |
-| Reach of the mesh in x, left / right | -2.88 to -2.11 / 1.42 to 1.78 | -4.36 to -2.16 / 1.39 to 1.86 |
-| View depth on screen, 5th / 50th / 95th | 6.47 / 8.06 / 9.81 | 6.22 / 8.20 / 10.53 |
+| Middle of the band (median y) | 0.002 to 0.394 | 0.075 to 0.376 |
+| Height of the band | 0.232 to 0.543 | 0.333 to 0.600 |
+| Rise | -0.194 to 0.393 | -0.150 to 0.416 |
+| Reach of the mesh in x, left / right | -3.04 to -2.01 / 1.43 to 1.85 | -4.36 to -2.16 / 1.39 to 1.86 |
+| View depth on screen, 5th / 50th / 95th | 6.54 / 8.12 / 9.92 | 6.22 / 8.20 / 10.53 |
 | In space, per frame, 50th / 95th | 0.0054 / 0.0100 | 0.0045 / 0.0079 |
 
 At the XMB's start, capture by capture, at the same lattice time - 0.138 to 0.902, 69 to 451
@@ -176,7 +178,7 @@ Known differences, all of them the start's:
 - **Its far end reaches less far to the left on screen**, -2.30 at most against -3.21.
 - **Under the music it moves faster than the console's**, 0.0054 a frame against 0.0045. The page
   puts the music on as its start ends, where the console's had run its lines for minutes under the
-  cycle first; the console's own start gives the same, 0.0056.
+  cycle first; the console's own start gives the same, 0.0054.
 
 The level the lines settle at is the same for both, the steps being the same: under the day
 cycle's sets, a median speed of about 5. The savestates' 5.4 to 6.2, within 2000 steps of a reset,

@@ -493,10 +493,10 @@ window.PARTICLE_SETTINGS_META = {
   },
   musicPlayback: {
     type: 'select', options: [{ value: 'stopped', label: 'Stopped' }, { value: 'playing', label: 'Playing' }],
-    help: 'Music playing in the XMB: the particles and the wave go to the music set over 5.5 s and hold it ' +
-      'whatever the hour, the wave rising and coming forward. When it stops they go to the base set ' +
-      '(PARTICLES.mnu, LINE1.mnu) over 5.5 s, then back to the theme over 1 s.\n' +
-      "Console state: the scene's music event (event 4)",
+    help: 'Music playing in the XMB, its visualizer showing the scene: the particles and the wave go to the music ' +
+      'set over 2 s and hold it whatever the hour, the wave rising and coming forward. When it stops they go to ' +
+      'the base set (PARTICLES.mnu, LINE1.mnu) over 5.5 s, then back to the theme over 1 s.\n' +
+      "Console state: the scene's music event (event 4) and the visualizer's view (soundvisualizer_plugin)",
   },
   themeBrightness: {
     type: 'select',

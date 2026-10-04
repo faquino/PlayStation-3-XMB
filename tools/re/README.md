@@ -16,6 +16,7 @@ Extracted firmware assets must never be committed.
 | `whichset.py` | Names the parameter set an RSX capture was taken under, or the pair it was crossfading and how far along, by fitting the backdrop's four corner colours against every `override/`. Reads the particles' live `glare` from the same capture. |
 | `readblock.py` | Reads the particle task's 2304-byte parameter block out of RSX captures, at the offsets the task reads it: force, drag, the field's rotation, the noise scale, and the flow grid's non-empty cells. |
 | `coverage.py` | Finds where a PPU module sits in a savestate from the return addresses its stacks keep, and lists the module's call sites among them - which functions ran - and the ones only one savestate holds. So far only `vsh.elf` leaves any. |
+| `savestate.py` | Reads a savestate's memory by the PS3's own addresses, through the bitmaps RPCS3 writes it with, and finds where a PRX's code and data were loaded, so that a module's globals and the objects they point to can be followed. |
 | `nids.py` | Computes PS3 function NIDs from names and names a module's imports. |
 | `month-fits.py` | Fits the backdrop's 24 month textures with cubics and writes `ps3xmbwave/background-months.js`, the fitted data the page draws the backdrop from. |
 
@@ -93,7 +94,23 @@ the particle pool.
 **A savestate leaves out every 128-byte line of memory that is entirely zero.** Values read
 right, but a distance measured across empty memory comes out 128 bytes short for each line left
 out - which is how the particle parameter block once read as a 768-byte structure, and how its
-force once read as zero. Measure layouts in a capture, which keeps memory whole.
+force once read as zero. Measure layouts in a capture, which keeps memory whole, or read the
+savestate through `savestate.py`. Each mapping's bytes follow a bitmap of the lines kept, one byte
+a kilobyte, and the user memory's mappings come first, in a section of their own, given their
+addresses only in the list of locations after it (`vm::save` and `serialize_memory_bytes` in
+RPCS3's `vm.cpp`). `savestate.py` reads both, so it gives the memory at any address, a line left
+out reading as zero, and the address any byte of the file holds:
+
+```bash
+python tools/re/savestate.py <savestate> module re-work/vsh-modules/custom_render_plugin.prx
+python tools/re/savestate.py <savestate> read 0x20094d10 0x20
+```
+
+A module's code and data load at addresses of their own each boot - `custom_render_plugin`'s at
+`0xba0000` and `0xc40000` in one session, `0xb80000` and `0xc20000` in another - so a global is read
+at the data's address plus its offset from the data segment's link address. That is how the scene's
+layers were read: the scene object behind the global `0x9ff40`, and each layer's blend window -
+see [The music set](../../docs/particles/music.md).
 
 Finding one's way around a savestate's local store takes one correction. Searching for 64 bytes
 of `particles.elf` at a known vaddr finds the copies of the task and gives each local store's

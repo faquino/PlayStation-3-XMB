@@ -192,12 +192,18 @@ window.PARTICLE_THEME_OPTIONS = [
   const BOOT_HOUR = 10;
   const BOOT_EASE = 7.5;
 
-  // The music: event 4, which the scene sends itself as playback starts and stops. Starting puts music_1 in over
-  // 5.5 s (0x16198). Stopping puts in the set with an empty name, the base as the name reads, over 5.5 s, and when
-  // those 5.5 s are up lets the clock go (0x15694, 0x10658); until then the clock is held (0x11c58), so the hour does
-  // not move the scene.
+  // The music: the music player's visualizer starts and stops it through an interface the scene builds for it
+  // (0x3408), whose calls have the scene send itself event 4 (0x16808, 0x1672c). Starting puts music_1 in over 5.5 s
+  // (0x16198); then the visualizer hands the scene its visualization, 0 for the XMB's own scene, and a new one puts
+  // music_1 in again over 2 s from where the parameters stand (0x37c8, 0x16a68) - VISUALIZER_DELAY after the start in
+  // the capture of the music coming in, whose backdrop changed its program that long before the 2 s began. Stopping
+  // puts in the set with an empty name, the base as the name reads, over 5.5 s, and when those 5.5 s are up lets the
+  // clock go (0x15694, 0x10658); until then the clock is held (0x11c58), so the hour does not move the scene. Stopping
+  // also forgets the visualization (0x1672c), so the next start takes the 2 s again.
   const MUSIC_IN = 5.5;
   const MUSIC_OUT = 5.5;
+  const VISUALIZER_IN = 2;
+  const VISUALIZER_DELAY = 0.09;
   // The scene's clock ticks every second and puts the moment it shows in over 1 s (0x12284), and Theme Settings'
   // Colour puts its own in over 1 s too (sub-event 6).
   const TICK = 1;
@@ -273,6 +279,8 @@ window.PARTICLE_THEME_OPTIONS = [
   let playing = null; // the sequence playing: its name, when it started, and the step it is on
   let music = 'off'; // 'in' while music_1 is in, 'out' while the base goes in after the music stops
   let musicStopped = 0; // when it stopped, in seconds
+  let visualization = -1; // the visualization the scene was last handed, -1 for none (0x9c930)
+  let visualizerAt = null; // when the visualizer's call reaches the scene, while one is on its way
   let playback = 'stopped';
   let lastColor = '0'; // the colour Theme Settings held last time
   let fade = null; // a change of set on its way: when it started, and how long it takes
@@ -451,8 +459,8 @@ window.PARTICLE_THEME_OPTIONS = [
   }
 
   // Follows the music and Theme Settings' Colour as the scene's settings name them. Music starting again while the
-  // base goes in puts music_1 back over 5.5 s, as the console's does; a colour picked while the music holds the clock
-  // comes in when it lets go.
+  // base goes in puts music_1 back, as the console's does; a colour picked while the music holds the clock comes in
+  // when it lets go.
   function followScene(scene, layers, now) {
     const wanted = scene.musicPlayback === 'playing' ? 'playing' : 'stopped';
     if (wanted !== playback) {
@@ -460,10 +468,20 @@ window.PARTICLE_THEME_OPTIONS = [
       if (wanted === 'playing' && music !== 'in') {
         music = 'in';
         startFade(layers, now, MUSIC_IN);
+        visualizerAt = now + VISUALIZER_DELAY;
       } else if (wanted === 'stopped' && music === 'in') {
         music = 'out';
         musicStopped = now;
         startFade(layers, now, MUSIC_OUT);
+        visualization = -1;
+        visualizerAt = null;
+      }
+    }
+    if (visualizerAt !== null && now >= visualizerAt) {
+      visualizerAt = null;
+      if (visualization !== 0) {
+        visualization = 0;
+        startFade(layers, now, VISUALIZER_IN);
       }
     }
     if (music === 'out' && now - musicStopped >= MUSIC_OUT) {

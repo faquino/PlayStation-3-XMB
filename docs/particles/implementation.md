@@ -76,8 +76,7 @@ on each frame that passes its draw, simply keeps it that way.
   `xmbSceneDate`, the backdrop's Auto gradient. Headless, each step lands on the firmware's sets.
   What is modelled:
   - the clock's next tick, taken at once;
-  - the backdrop: that `0x10900`'s moment is what `_MonthTime` and `_NightDayBlend` read, which
-    puts it on the month's own daytime gradient, at once;
+  - the music player's visualizer calling 0.09 s after the music starts, as a capture has it;
   - what holds the clock: only the music and a sequence, not a boot's tail, the fades or the first
     five seconds.
 - **Flow grid.** Ported: 32 × 16 cells of signed bytes, sampled the way the task samples them,
