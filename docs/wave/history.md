@@ -40,6 +40,14 @@ may already be ruled out.
 - **The lines' steps behind their slower pace.** From the console's own start the steps give
   every savestate's speed and every capture's band; the pace was the start's, made then under the
   day cycle's values - see [The start](lines.md#the-start).
+- **The music's wave dimmer than RPCS3's.** Drawn from the savestate taken 5 seconds after the
+  screenshot of 23:34:29 on 23 September, the page's band held two-thirds of the screenshot's
+  light. At the music's pace 5 seconds turn the band the other way, and that savestate's wave is
+  the faintest of the console's seven under `music_1`: drawn from each, the light the wave adds
+  over the backdrop runs 8.4 to 16.0 a pixel, and the two music screenshots, 17.1 and 18.2, sit at
+  the top of that, as the night's sit at the bottom of theirs. The 80 or so sparkles those
+  screenshots hold well below the band are not in the music captures' particle draws either, 0 to
+  2 per cent of them that far down, as in the page's.
 - **The noise drawn once a boot, and a pair of tables for the music.** The notes had the noise
   drawn afresh at each boot, and the music's captures binding the other pair of preexpose tables.
   The HDR renderer draws the noise every frame and flips both to their other copy each frame, the
