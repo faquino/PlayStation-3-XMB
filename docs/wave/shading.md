@@ -65,7 +65,8 @@ normalised. The program works out:
 
 `THINNESS` is 1 in every set, which makes x 0 / 0: the stripes are off. RPCS3 computes NaN there.
 The page reads it as 0, `_Stripes`' column at the edge of a stripe, which leaves the even light
-`_Brightness` m b times half for small m, falling to nothing as m grows (inferred).
+`_Brightness` m b times half for m up to an eighth, falling to a fiftieth at three eighths and to
+nothing past them (inferred).
 
 ## The textures
 
@@ -78,14 +79,21 @@ The page reads it as 0, `_Stripes`' column at the edge of a stripe, which leaves
   texel 270 and is not read. On the console |e · n| m runs 0.0004 / 0.034 / 0.143 (5th, 50th and
   95th percentile, the capture of 18:21), and m 0.006 / 0.075 / 0.204, so the rim light falls on
   the folds the surface turns edge-on at (inferred).
-- **`_Stripes`.** A stripe's profile, 16 texels across, one row per step of m: the first flat at
-  127, the others peaking at 170, 219 and 255, each narrower than the last. All four channels are
-  equal. Where it is made is not followed.
-- **`_Encode`.** 4096 texels over the light from 0 to 1. Through the sampler's remap the program
-  reads a fine part in red and blue, 2 (n mod 32) for texel n but 2n - 1 in the first 32 texels,
-  and one more or less here and there, from 0 to 63; and a coarse part in green and alpha,
-  4 ⌊n/32⌋ - 1 from texel 32 on, saturating at 255 from texel 2048. The composite reads the
-  buffer back as red / 32 + green / 2, so a fragment's light stops at 0.5 and the buffer's at
-  0.53, its two channels saturating at 8 bits; the fine part has room for four layers of the wave
-  to add up before it does. That keeps the light the wave adds up more precisely than 8 bits
-  would (inferred). Where the table is made is not followed.
+- **`_Stripes`.** A stripe's profile, 16 texels across, one row per step of m, which the lines
+  renderer makes at start-up (`0x4bad0`): texel c of row r is 255 min(1, (1.01 - 4 (c/15 - ½)²) ^
+  (20 (r/3)³) × (1 + r/3) / 2), cut to a whole number, in single precision but for the power,
+  taken in double. The width is powf(2, 4), set by a static initialiser (`0x14fc`). The first row
+  is flat at 127, the others peak at 170, 219 and 255, each narrower than the last, and the column
+  at a stripe's edge holds 127, 5, 0 and 0. All four channels are equal. Every capture's texture
+  is this to the byte, kept swizzled, as the RSX keeps small textures.
+- **`_Encode`.** 4096 texels over the light from 0 to 1, which the lines renderer makes at start-up
+  (`0x4b928`): texel n splits v = 128 n / 4095 into its whole part w and its fraction q (`modf`),
+  and holds a fine part, 255 q / 4, and a coarse one, 255 min(1, w / 64), both cut to whole
+  numbers, as fine, coarse, fine, coarse - every capture's table to the byte. Through the
+  sampler's remap the program reads the fine part in red and blue, 2 (n mod 32) for texel n but
+  2n - 1 in the first 32 texels, and one more or less here and there, from 0 to 63; and the coarse
+  part in green and alpha, 4 ⌊n/32⌋ - 1 from texel 32 on, saturating at 255 from texel 2048. The
+  composite reads the buffer back as red / 32 + green / 2, so a fragment's light stops at 0.5 and
+  the buffer's at 0.53, its two channels saturating at 8 bits; the fine part has room for four
+  layers of the wave to add up before it does. That keeps the light the wave adds up more
+  precisely than 8 bits would (inferred).

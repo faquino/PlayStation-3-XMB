@@ -60,7 +60,7 @@ Depth testing is never enabled. The wave's vertices arrive in clip space, alread
 
 Its constants come from traced addresses, each commented with it, and are not free parameters; reconcile with the wave notes before changing them. Its parameters are `LINE1.mnu`'s, which the scene's sets move as they move the particles' (`scene-themes.js`), and `reset()` puts the lines back to their start, as the XMB's start does. What is modelled is marked: the lines' start (the console's is a baked snapshot in its module, which is firmware data, so the module makes its own by running the lines), at most four steps a frame, the crossing over's frames at 60 a second, and the deformation's exact division. `window.__PS3_WAVE_STATE` holds its counters for console inspection.
 
-`spline.js` draws the mesh with `lines1.vpo` and `lines1.fpo` re-authored in GLSL, blending additively, and writes the light as `_Encode` holds it, a fine part in red and a coarse one in green. Its two textures are generated at start-up from fits to the firmware's (`_Stripes`' rows, `_FresLUT`'s curve).
+`spline.js` draws the mesh with `lines1.vpo` and `lines1.fpo` re-authored in GLSL, blending additively, and writes the light as `_Encode` holds it, a fine part in red and a coarse one in green. Its three textures are generated at start-up: `_Stripes` and `_Encode` as the console's lines renderer makes them, to the byte, and `_FresLUT` from a fit to the firmware's file.
 
 ### The backdrop
 

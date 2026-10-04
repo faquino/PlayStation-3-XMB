@@ -200,8 +200,10 @@ Three things to know when reading a frame:
   patched once a frame and not for one patched between draws.
 - **Render targets read as zeros.** RPCS3 keeps them on the GPU and does not write them back, so a
   capture says what a pass draws, never what it drew. What the CPU uploads reads as it was: the
-  wave's `_Encode` and the composite's preexpose tables and noise came out of `cap.memory`, at the
-  offsets the texture registers give.
+  wave's `_Stripes` and `_Encode` and the composite's preexpose tables and noise came out of
+  `cap.memory`, at the offsets the texture registers give. A texture `frame` does not call linear
+  is swizzled: the texel at (x, y) sits at the offset whose bits interleave x's and y's from the
+  lowest, x first, until the shorter runs out - which is how `_Stripes`' 16 × 4 lie.
 - **`Copy`, `GlareSource` and `back_colours_cpy` are one program**, the same microcode; `frame`
   names the first it finds.
 

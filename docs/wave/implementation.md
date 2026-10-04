@@ -19,7 +19,8 @@ and what is modelled. This is the detail.
   normals, laid out as `spline.elf` writes them - see [The SPU task](spu-task.md);
 - the mesh's texture coordinates and its index buffer - see [The mesh](output.md#the-mesh);
 - `lines1.vpo` and `lines1.fpo`, re-authored, with the additive blend, into a buffer of the
-  wave's own in `_Encode`'s two channels - see [The shading](shading.md);
+  wave's own in `_Encode`'s two channels, and `_Stripes` and `_Encode` as the console makes them,
+  every capture's to the byte - see [The shading](shading.md);
 - the passes after the wave, in `postprocess.js`: the backdrop drawn into its 64 × 32 buffer, the
   composite with `BACKGROUND.mnu`'s colours, the tone curve as the preexpose tables hold it, read
   half a texel short, the noise, drawn every frame as the console's renderer draws it from its
@@ -66,19 +67,17 @@ another](../particles/day-cycle.md#how-one-set-blends-into-another) - and, throu
   frame it draws; the page does at 60 frames a second, whatever its own rate.
 - **The deformation divides exactly.** The SPU's reciprocal estimate is about 1e-4 off - see [The
   deformation](spu-task.md#the-deformation).
-- **The textures are fitted.** The firmware's are left out of the repository. `_Stripes`' rows are
-  peak × (1 - (d / reach)²)^power, d being the distance from the stripe's middle; `_FresLUT`'s red
-  is a curve through 19 points, within 1.6% of the file's. At `THINNESS` 1 the stripe coordinate,
-  0 / 0 on the console, is read as 0.
+- **`_FresLUT` is fitted.** Its file is the firmware's and stays out of the repository: its red is
+  a curve through 19 points, within 1.6% of the file's. At `THINNESS` 1 the stripe coordinate, 0 /
+  0 on the console, is read as 0.
 - **The passes after the wave, in their details.** The wave's buffer is read through a bilinear
-  filter where the console's texture unit applies a convolution; `_Encode`'s fine part is 2 (n mod
-  32), without the table's odd step of one; the six levels of the glare are added in one pass, not
-  six, and its textures are clamped to their edge, as RPCS3 runs their CLAMP; the luminance the
-  glare's source carries, and the copy the CPU fetches for statistics nothing uses, are left out;
-  and `_Gamma` is held at 1, its value in every savestate, as the particles' is. The noise's counter
-  starts with the page, as the console's does with the scene. `HDR.mnu`'s flags are not applied -
-  only the welcome sets change them. The backdrop that goes into the passes is the console's
-  program over fits of its month textures - see the [backdrop
+  filter where the console's texture unit applies a convolution; the six levels of the glare are
+  added in one pass, not six, and its textures are clamped to their edge, as RPCS3 runs their
+  CLAMP; the luminance the glare's source carries, and the copy the CPU fetches for statistics
+  nothing uses, are left out; and `_Gamma` is held at 1, its value in every savestate, as the
+  particles' is. The noise's counter starts with the page, as the console's does with the scene.
+  `HDR.mnu`'s flags are not applied - only the welcome sets change them. The backdrop that goes
+  into the passes is the console's program over fits of its month textures - see the [backdrop
   notes](../../BACKGROUND_REVERSE_ENGINEER.md).
 - **The sets' clock.** The blends run on the page's seconds, and blend mode 1's frames at 60 a
   second - see [How one set blends into

@@ -46,23 +46,42 @@
     return Math.max(0, Math.min(1, v));
   }
 
-  // The wave's two textures, generated here: the firmware's are left out of the repository.
-  // _Stripes, 16 x 4, one stripe's profile across its period, sharper row by row up the cell's size on screen (the
-  // console makes it at run time; these are fitted to it): the first row flat at a half, the others
-  // peak x (1 - ((x - 0.5) / reach)^2)^power. Only the column at x = 0 is read while THINNESS is 1.
-  const STRIPE_ROWS = [null, [0.672, 0.48, 0.8], [0.87, 0.36, 3], [0.933, 0.23, 3]];
+  // The wave's three textures, generated here: _Stripes and _Encode as the scene's lines renderer makes them at
+  // start-up, both in the PPU's single precision and every capture's to the byte; _FresLUT from a fit, its file being
+  // the firmware's and left out of the repository.
+  // _Stripes, 16 x 4 (powf(2, 4), 0xa0f58), one stripe's profile across its period, row r for a step of the cell's
+  // size on screen (0x4bad0): texel c of it is 255 min(1, (1.01 - 4 (c / 15 - 1/2)^2)^(20 (r / 3)^3) (1 + r / 3) / 2),
+  // truncated, the power taken in double precision - the first row flat at 127, the others peaking at 170, 219 and 255,
+  // each narrower than the last. Only the column at x = 0 is read while THINNESS is 1: 127, 5, 0, 0.
+  const STRIPES_W = 16;
   function stripeTexels() {
-    const out = new Uint8Array(16 * 4);
-    for (let row = 0; row < 4; row++) {
-      for (let i = 0; i < 16; i++) {
-        let value = 0.498;
-        if (STRIPE_ROWS[row]) {
-          const [peak, reach, power] = STRIPE_ROWS[row];
-          const d = Math.abs((i + 0.5) / 16 - 0.5) / reach;
-          value = d < 1 ? peak * Math.pow(1 - d * d, power) : 0;
-        }
-        out[16 * row + i] = Math.round(255 * value);
+    const f = Math.fround;
+    const out = new Uint8Array(STRIPES_W * 4);
+    for (let r = 0; r < 4; r++) {
+      const r3 = f(r / 3);
+      const power = f(f(f(r3 * 20) * r3) * r3);
+      const scale = f(r3 * 0.5 + 0.5);
+      for (let c = 0; c < STRIPES_W; c++) {
+        const x = f(f(c / (STRIPES_W - 1)) - 0.5);
+        const base = f(-4 * x * x + f(1.01));
+        out[STRIPES_W * r + c] = Math.trunc(f(Math.min(1, f(Math.pow(base, power) * scale)) * 255));
       }
+    }
+    return out;
+  }
+  // _Encode, 4096 texels over the light from 0 to 1 (0x4b928): texel n splits v = 128 n / 4095 into its whole part w
+  // and its fraction q, and holds a fine part, 255 q / 4, and a coarse one, 255 min(1, w / 64), both truncated - 2n - 1
+  // and 0 in the first 32 texels, then near 2 (n mod 32) and 4 floor(n / 32) - 1, the coarse part at 255 from texel
+  // 2048. Laid out here 64 x 64, red the fine part and green the coarse, as the program writes them.
+  const ENCODE_SIDE = 64;
+  function encodeTexels() {
+    const f = Math.fround;
+    const out = new Uint8Array(ENCODE_SIDE * ENCODE_SIDE * 2);
+    for (let n = 0; n < ENCODE_SIDE * ENCODE_SIDE; n++) {
+      const v = f(f(f(n / 4095) * 32) * 4);
+      const w = Math.floor(v);
+      out[2 * n] = Math.trunc(Math.min(255, f(f((v - w) * 0.25) * 255)));
+      out[2 * n + 1] = Math.trunc(Math.min(255, f(f(w * 0.015625) * 255)));
     }
     return out;
   }
@@ -110,10 +129,9 @@
 
     // lines1.vpo and lines1.fpo, re-authored from RPCS3's decompilation. The vertex program takes the position as it
     // comes, already in clip space, and works out m, the cell's size on screen; the fragment program reads the
-    // stripes and the fresnel table with it, and writes the light as _Encode holds it - 4096 texels over the light
-    // from 0 to 1, read from the nearest: red the fine part, 2 (n mod 32), green the coarse one, 4 floor(n / 32) - 1
-    // up to 255, a light of 0.5. The console's table runs 2n - 1 in its first 32 texels, as here, and strays from
-    // 2 (n mod 32) by one here and there, a 1/8160 of light, which is left out. The composite reads it back.
+    // stripes and the fresnel table with it, and writes the light as _Encode holds it, read from the nearest of its
+    // 4096 texels over the light from 0 to 1 - its coarse part saturating at a light of 0.5. The composite reads it
+    // back.
     const waveProg = link(
       gl,
       `#version 300 es
@@ -141,6 +159,7 @@
        in vec4 vParams;
        uniform sampler2D uStripes;
        uniform sampler2D uFresLut;
+       uniform highp sampler2D uEncode;
        uniform float uSpacing;
        uniform float uThinness;
        out vec4 oColor;
@@ -151,12 +170,8 @@
          float stripe = texture(uStripes, vec2(x, vCoord.y)).r;
          vec2 fres = texture(uFresLut, vParams.zw).rg;
          float light = (fres.x * vParams.x + fres.y * vParams.y * stripe) * vParams.w;
-         float n = clamp(floor(light * 4096.0), 0.0, 4095.0);
-         float block = floor(n / 32.0);
-         float step = n - block * 32.0;
-         float fine = block == 0.0 ? max(0.0, 2.0 * step - 1.0) : 2.0 * step;
-         float coarse = block == 0.0 ? 0.0 : min(255.0, 4.0 * block - 1.0);
-         oColor = vec4(fine / 255.0, coarse / 255.0, 0.0, 0.0);
+         int n = int(clamp(floor(light * 4096.0), 0.0, 4095.0));
+         oColor = vec4(texelFetch(uEncode, ivec2(n % 64, n / 64), 0).rg, 0.0, 0.0);
        }`
     );
 
@@ -185,8 +200,9 @@
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, wave.indices, gl.STATIC_DRAW);
     gl.bindVertexArray(null);
 
-    const stripesTex = createTexture(gl, gl.RED, 16, 4, stripeTexels(), gl.REPEAT);
+    const stripesTex = createTexture(gl, gl.RED, STRIPES_W, 4, stripeTexels(), gl.REPEAT);
     const fresLutTex = createTexture(gl, gl.RG, 512, 1, fresnelTexels(), gl.CLAMP_TO_EDGE);
+    const encodeTex = createTexture(gl, gl.RG, ENCODE_SIDE, ENCODE_SIDE, encodeTexels(), gl.CLAMP_TO_EDGE);
 
     const waveU = {
       mipmapBias: uloc(gl, waveProg, 'uMipmapBias'),
@@ -194,6 +210,7 @@
       fresnel: uloc(gl, waveProg, 'uFresnel'),
       stripes: uloc(gl, waveProg, 'uStripes'),
       fresLut: uloc(gl, waveProg, 'uFresLut'),
+      encode: uloc(gl, waveProg, 'uEncode'),
       spacing: uloc(gl, waveProg, 'uSpacing'),
       thinness: uloc(gl, waveProg, 'uThinness'),
     };
@@ -262,6 +279,9 @@
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, fresLutTex);
         gl.uniform1i(waveU.fresLut, 1);
+        gl.activeTexture(gl.TEXTURE2);
+        gl.bindTexture(gl.TEXTURE_2D, encodeTex);
+        gl.uniform1i(waveU.encode, 2);
         gl.activeTexture(gl.TEXTURE0);
         gl.uniform1f(waveU.mipmapBias, settings.mipmapBias);
         gl.uniform1f(waveU.brightness, settings.brightness);
