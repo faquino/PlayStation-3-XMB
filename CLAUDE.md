@@ -12,10 +12,12 @@ WebGL2 recreation of the PlayStation 3 XMB background wave ("spline") and sparkl
 npm install          # only needed for the dev server / deploy tooling
 npm run start        # serve the whole repo at http://localhost:8000
 npm run dev          # same, opens a browser
-npm run deploy       # gh-pages, publishes ps3xmbwave/ as the site root
+npm run deploy       # upstream's gh-pages branch, which this fork's Pages does not serve
 ```
 
 Entry points once served: `/ps3xmbwave/` (active), `/dds/` (gradient extraction tool), `/old-research/` (archived guesswork-era implementation).
+
+The published site is `ps3xmbwave/` alone: `.github/workflows/pages.yml` uploads it as the root of https://faquino.github.io/PlayStation-3-XMB/ on every push to `main` that touches it (Settings → Pages takes its source from GitHub Actions).
 
 Each of the three folders also has its own `docker-compose.yml` (nginx, read-only mount) if you want them served independently: `ps3xmbwave` → 9913, `dds` → 9919, `old-research` → 9828.
 

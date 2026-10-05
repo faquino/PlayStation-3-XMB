@@ -1,8 +1,10 @@
 # PlayStation 3 XMB Waves Recreation
 
+> Fork of [linkev/PlayStation-3-XMB](https://github.com/linkev/PlayStation-3-XMB). Issues opened here are about this fork; the original project keeps its own.
+
 ## Click the image for a demo!
 
-[![Demo of PlayStation 3 XMB Waves Recreation](demo.png)](https://linkev.github.io/PlayStation-3-XMB)
+[![Demo of PlayStation 3 XMB Waves Recreation](demo.png)](https://faquino.github.io/PlayStation-3-XMB/)
 
 ## About the project
 
@@ -37,7 +39,7 @@ While this is inspired by the official PlayStation 3 XMB background wave design,
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/linkev/PlayStation-3-XMB.git
+git clone https://github.com/faquino/PlayStation-3-XMB.git
 cd PlayStation-3-XMB
 ```
 
@@ -108,7 +110,7 @@ This project is open source and available under the [MIT License](LICENSE).
 
 ## Support
 
-### [Open an issue on GitHub!](https://github.com/linkev/Playstation-3-XMB/issues)
+### [Open an issue on GitHub!](https://github.com/faquino/PlayStation-3-XMB/issues)
 
 ## TODO
 

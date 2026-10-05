@@ -13,7 +13,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/linkev/PlayStation-3-XMB.git"
+    "url": "git+https://github.com/faquino/PlayStation-3-XMB.git"
   },
   "keywords": [
     "playstation",
@@ -31,9 +31,9 @@
   "author": "linkev",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/linkev/PlayStation-3-XMB/issues"
+    "url": "https://github.com/faquino/PlayStation-3-XMB/issues"
   },
-  "homepage": "https://linkev.github.io/PlayStation-3-XMB",
+  "homepage": "https://faquino.github.io/PlayStation-3-XMB/",
   "devDependencies": {
     "eslint": "^10.0.0",
     "gh-pages": "^6.3.0",
